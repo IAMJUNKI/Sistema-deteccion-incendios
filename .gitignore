@@ -1,0 +1,129 @@
+# =============================================================================
+# Sistema de Predicción de Incendios Forestales — .gitignore
+# =============================================================================
+
+# ─── Entornos Python / Conda ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+conda-env/
+.conda/
+
+# ─── Distribución / Packaging ─────────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+MANIFEST
+
+# ─── Jupyter Notebooks ────────────────────────────────────────────────────────
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+.tox/
+.pytest_cache/
+.coverage
+htmlcov/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# ─── Type Checking ────────────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+
+# ─── Linters / Formatters ─────────────────────────────────────────────────────
+.ruff_cache/
+
+# ─── IDEs y Editores ──────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Variables de entorno / Secretos ─────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# ─── Datos pesados — NO subir al repositorio ─────────────────────────────────
+# Regla general: los datos se gestionan localmente o en almacenamiento externo.
+# Usar DVC o documentar en docs/ dónde descargarlos.
+
+# Formatos geoespaciales / raster
+*.nc          # NetCDF (ERA5, Copernicus)
+*.nc4
+*.hdf
+*.h5
+*.grib
+*.grib2
+*.tif
+*.tiff
+*.geotiff
+*.img
+
+# Formatos vectoriales grandes
+data/raw/*.shp
+data/raw/*.shx
+data/raw/*.dbf
+data/raw/*.prj
+data/raw/*.cpg
+data/raw/*.sbn
+data/raw/*.sbx
+
+# Formatos tabulares grandes
+*.parquet
+*.feather
+*.arrow
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# ─── Modelos serializados (pueden ser pesados) ────────────────────────────────
+data/models/*
+!data/models/.gitkeep
+*.pkl
+*.pickle
+
+# ─── Outputs y artefactos temporales ─────────────────────────────────────────
+outputs/
+figures/
+reports/
+*.html
+*.pdf
+!docs/*.pdf
+
+# ─── Streamlit ────────────────────────────────────────────────────────────────
+.streamlit/secrets.toml
+
+# ─── Sistema operativo ────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

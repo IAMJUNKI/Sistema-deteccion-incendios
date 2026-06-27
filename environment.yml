@@ -1,0 +1,75 @@
+name: incendios-forestales
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # ─── Python ────────────────────────────────────────────────────────────────
+  - python=3.11
+
+  # ─── Jupyter ───────────────────────────────────────────────────────────────
+  - jupyterlab>=4.0
+  - ipykernel
+  - ipywidgets
+
+  # ─── Geoespacial (GDAL y dependencias nativas via conda-forge) ────────────
+  - gdal>=3.7
+  - geopandas>=0.14
+  - rasterio>=1.3
+  - rioxarray>=0.15
+  - shapely>=2.0
+  - pyproj>=3.6
+  - fiona>=1.9
+  - h3-py>=3.7        # Sistema de celdas hexagonales Uber H3 (alternativa a rejilla regular)
+  - pyogrio           # Backend rápido de I/O para GeoDataFrame
+
+  # ─── Procesamiento de datos espaciotemporales ─────────────────────────────
+  - xarray>=2023.0
+  - netcdf4>=1.6
+  - cftime
+  - zarr
+
+  # ─── Ciencia de datos y ML ─────────────────────────────────────────────────
+  - numpy>=1.24
+  - pandas>=2.0
+  - scipy>=1.11
+  - scikit-learn>=1.3
+  - xgboost>=2.0
+  - lightgbm>=4.0
+  - imbalanced-learn  # Para manejo de clases desbalanceadas
+
+  # ─── Explicabilidad del modelo ─────────────────────────────────────────────
+  - shap>=0.43
+
+  # ─── Visualización ─────────────────────────────────────────────────────────
+  - matplotlib>=3.7
+  - seaborn>=0.12
+  - plotly>=5.17
+  - folium>=0.14
+  - pydeck>=0.8
+
+  # ─── WebApp ────────────────────────────────────────────────────────────────
+  - streamlit>=1.28
+
+  # ─── Gestión de configuración y entorno ───────────────────────────────────
+  - python-dotenv>=1.0
+
+  # ─── Calidad de código ─────────────────────────────────────────────────────
+  - ruff             # Linter y formateador rápido
+  - pre-commit
+
+  # ─── Testing ───────────────────────────────────────────────────────────────
+  - pytest>=7.4
+  - pytest-cov
+
+  # ─── Utilidades ────────────────────────────────────────────────────────────
+  - requests>=2.31
+  - tqdm>=4.66
+  - joblib>=1.3
+
+  # ─── Dependencias adicionales via pip (no disponibles en conda-forge) ──────
+  - pip
+  - pip:
+    - cdsapi>=0.6.1          # Cliente oficial Copernicus CDS (ERA5)
+    - pyarrow>=13.0          # Soporte Parquet
+    - streamlit-folium>=0.16  # Integración Folium en Streamlit
