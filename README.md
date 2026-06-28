@@ -228,7 +228,7 @@ Editar `.env` y completar las claves de API necesarias:
 
 - **NASA FIRMS MAP KEY** → [Registrarse aquí](https://firms.modaps.eosdis.nasa.gov/api/area/)
 - **Copernicus CDS API KEY** → [Registrarse aquí](https://cds.climate.copernicus.eu/user/register)
-- **AEMET API KEY** → [Registrarse aquí](https://opendata.aemet.es/centrodedescargas/altaUsuarios) *(solo necesaria para Fase 5)*
+- **AEMET API KEY** → [Registrarse aquí](https://opendata.aemet.es/centrodedescargas/altaUsuarios?) *(solo necesaria para Fase 5)*
 
 ### 4. Instalar el paquete en modo desarrollo
 
@@ -374,6 +374,12 @@ Usamos [Conventional Commits](https://www.conventionalcommits.org/):
 
 Trabajo Fin de Máster — Máster en Big Data e Inteligencia Artificial.
 
+Diego Junquera
+Miquel Jimenez
+Alfonso García
+Raúl Utrilla
+Enrique Bravo
+Santiago Mateos
 ---
 
 *Para dudas sobre el proyecto, abre un issue en el repositorio o consulta la documentación en `knowledge/`.*

@@ -22,6 +22,9 @@ La Fase 2 descarga y procesa el histórico de incendios (NASA FIRMS) y meteorolo
 1. Registrarse en: https://firms.modaps.eosdis.nasa.gov/api/area/
 2. Guardar la clave como `NASA_FIRMS_MAP_KEY` en `.env`.
 
+> ⚠️ **Límite de la API de NASA FIRMS:** La clave `MAP_KEY` tiene un límite de **5.000 transacciones por intervalo de 10 minutos** (las peticiones de varios días pueden contar como múltiples peticiones). 
+> **Regla del proyecto:** Descargar los datos históricos una sola vez por años/meses y guardarlos localmente en `data/raw/firms/` (formato `.parquet`). Nunca hacer peticiones repetidas a la API en bucles de entrenamiento.
+
 ### Descarga vía API (recomendado para automatización)
 
 ```python
