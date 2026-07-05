@@ -83,6 +83,8 @@ secrets/
 *.tiff
 *.geotiff
 *.img
+*.gpkg         # GeoPackage (CORINE Land Cover, etc.)
+
 
 # Formatos vectoriales grandes
 data/raw/*.shp
@@ -101,6 +103,7 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/processed/grid/*.parquet  # Permitir subir las rejillas base geoespaciales a GitHub
 
 # ─── Modelos serializados (pueden ser pesados) ────────────────────────────────
 data/models/*

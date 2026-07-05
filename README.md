@@ -244,6 +244,45 @@ python -c "import src; print('✅ Entorno configurado correctamente')"
 
 ---
 
+## 🏃 Ejecución y Uso (Fase 1)
+
+Una vez completada la instalación, puedes generar y visualizar los grids geoespaciales base del proyecto.
+
+### 1. Preprocesar y Recortar CORINE Land Cover (CLC)
+Si has descargado los archivos de CORINE España del CNIG (en formato `.gpkg`), guárdalos en `data/raw/corine/clc_espana_2018.gpkg` (o `clc_espana_2012.gpkg`) y ejecuta el recorte para generar los rasters de Galicia:
+
+```bash
+# Recortar y rasterizar versión 2012
+python -m src.geospatial.preprocesar_corine --gpkg data/raw/corine/clc_espana_2012.gpkg --output data/raw/corine/clc_galicia_2012.tif
+
+# Recortar y rasterizar versión 2018
+python -m src.geospatial.preprocesar_corine --gpkg data/raw/corine/clc_espana_2018.gpkg --output data/raw/corine/clc_galicia.tif
+```
+
+### 2. Ejecutar el Pipeline Geoespacial
+Genera los archivos Parquet definitivos de la rejilla de 1 km² de Galicia cruzados con Copernicus DEM y CORINE:
+
+```bash
+# Generar rejilla 2012 (entrenamiento 2013-2018)
+AWS_NO_SIGN_REQUEST=YES AWS_PROFILE="" python -m src.geospatial.pipeline --corine data/raw/corine/clc_galicia_2012.tif --output data/processed/grid/galicia_grid_1km_2012.parquet
+
+# Generar rejilla 2018 (entrenamiento 2019-2024)
+AWS_NO_SIGN_REQUEST=YES AWS_PROFILE="" python -m src.geospatial.pipeline --corine data/raw/corine/clc_galicia.tif --output data/processed/grid/galicia_grid_1km_2018.parquet
+```
+
+### 3. Visualizar e Inspeccionar los Grids Generados
+Puedes inspeccionar rápidamente estadísticas, tipos de datos y mapear los grids espaciales por pantalla:
+
+```bash
+# Ver estadísticas de la rejilla 2018 por consola
+python -m src.geospatial.visualizar_grid --input data/processed/grid/galicia_grid_1km_2018.parquet
+
+# Abrir el mapa visual interactivo de combustibles de 2012
+python -m src.geospatial.visualizar_grid --input data/processed/grid/galicia_grid_1km_2012.parquet --plot
+```
+
+---
+
 ## 🗺️ Fases del Proyecto
 
 El proyecto se estructura en **5 fases secuenciales**:
@@ -360,7 +399,7 @@ Usamos [Conventional Commits](https://www.conventionalcommits.org/):
 
 - [x] Configuración inicial del repositorio
 - [x] Documentación del alcance (knowledge/)
-- [ ] **Fase 1** — Rejilla geoespacial + DEM + CORINE
+- [x] **Fase 1** — Rejilla geoespacial + DEM + CORINE
 - [ ] **Fase 2** — Ingesta NASA FIRMS + ERA5 + construcción del target
 - [ ] **Fase 3** — Feature engineering + dataset maestro
 - [ ] **Fase 4** — Entrenamiento XGBoost/LightGBM + calibración
