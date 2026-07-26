@@ -8,7 +8,7 @@
 
 ## 1. 🎯 Resumen Ejecutivo
 
-Llegamos a la reunión con el repositorio **100% unificado, estructurado y funcional**. Se han integrado los avances dispersos en un pipeline modular en `src/`, probado empíricamente sobre la serie histórica completa de Galicia (2019-2023, más de **56 millones de registros**).
+Se han integrado los avances dispersos en un pipeline modular en `src/`, probado empíricamente sobre la serie histórica completa de Galicia (2019-2023, más de **56 millones de registros**).
 
 ---
 
@@ -92,6 +92,24 @@ A primera vista, las cifras aparentes del **Dataset Completo** parecen superiore
 
 #### 3. Valor Operativo en Producción
 En un centro de mando de protección civil a las 08:00 AM en un día de tormenta invernal, nadie consulta el mapa de riesgo porque se sabe que es cero por definición física. El usuario real consulta el sistema en **primavera/verano/días secos**. Por ello, el modelo debe estar optimizado y evaluado sobre la distribución del **diferencial de riesgo en días secos ($P < 5\text{ mm}$)**.
+
+---
+
+### 3.3 Tabla de Casos Emblemáticos de Acierto en Alerta Temprana (Verificación Retrospectiva Agosto 2023)
+
+Prueba empírica de cómo el modelo predijo con 24 horas de antelación ($T-1$) la vulnerabilidad extrema en las celdas donde ocurrieron incendios reales:
+
+| Fecha de Ignición | Celda Afectada | Percentil de Riesgo | Probabilidad Predicha | Nivel de Alerta Asignado |
+| :--- | :--- | :--- | :--- | :--- |
+| **2023-08-23** | **Celda 6818** | **`99.5%`** | **`21.62%`** | **🔥 Top 0.5% Riesgo Extremo** |
+| **2023-08-30** | **Celda 29366** | **`97.9%`** | **`4.82%`** | **🚨 Alerta Urgente (Top 2%)** |
+| **2023-08-30** | **Celda 29481** | **`95.8%`** | **`3.34%`** | **🚨 Alerta Urgente (Top 4%)** |
+| **2023-08-30** | **Celda 29365** | **`95.4%`** | **`3.15%`** | **🚨 Alerta Urgente (Top 5%)** |
+| **2023-08-08** | **Celda 7255** | **`92.8%`** | **`1.73%`** | **🟠 Riesgo Alto (Top 7%)** |
+| **2023-08-24** | **Celda 24714** | **`92.0%`** | **`10.02%`** | **🟠 Riesgo Alto (Top 8%)** |
+| **2023-08-17** | **Celda 29642** | **`91.1%`** | **`3.36%`** | **🟠 Riesgo Alto (Top 9%)** |
+
+* **Percentil Medio de Riesgo Asignado a Fuegos Reales en Agosto 2023: `84.5%`**
 
 ---
 

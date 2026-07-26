@@ -123,5 +123,14 @@
 > 1. **Resolución Espacial de Alta Definición ($1\text{ km} \times 1\text{ km}$ frente a $10\text{--}25\text{ km}$):** Los índices de AEMET y EFFIS operan sobre una cuadrícula gruesa de $100\text{ a } 625\text{ km²}$ por celda, imposibilitando la asignación eficiente de patrullas a nivel comarcal. Este proyecto predice a una resolución espacial fina de $1000\text{ m} \times 1000\text{ m}$ ($1\text{ km²}$), permitiendo delimitar masas forestales específicas e interfaces urbano-forestales vulnerables.
 > 2. **Filtrado Estricto de Falsas Alarmas ($\text{FPR} \le 5\%$ frente a $70\text{--}80\%$ de FWI):** En situaciones de ola de calor, el índice FWI tradicional clasifica en alerta roja masiva entre el $70\%$ y el $80\%$ de la superficie del noroeste peninsular, provocando la saturación de los centros de mando e inactivando la utilidad práctica de la alerta. El modelo desarrollado restringe la tasa de falsas alarmas al $\le 5\%$, aislando con nitidez el $5\%$ de celdas hiper-vulnerables mientras preserva el $95\%$ del territorio libre de alertas innecesarias.
 
+### 5.7 Arquitectura del Paradigma Híbrido en Producción (Física Determinista + Machine Learning)
+*(Justificación metodológica del filtrado hídrico y las condiciones físicas de extinción)*
+> Para resolver el dilema metodológico entre el entrenamiento puramente estadístico y la física del fuego, el sistema adopta una **arquitectura híbrida de inferencia en dos capas**:
+>
+> 1. **Capa Determinista Física (Filtros de Extinción Hídrica y Cobertura Vegetal):** En física de incendios, la ignición y propagación son imposibles cuando la humedad del combustible fino supera el umbral de extinción ($MC_{ff} > 30\%$) o cuando la celda carece de combustible vegetativo inflamable ($\text{Biomasa Forestal} < 5\%$). Por consiguiente, si $P_{\text{dia}} \ge 5.0\text{ mm}$, si $\text{Biomasa Forestal} < 5\%$ o si $RH_{\min} \ge 65\% \land P_{\text{dia}} \ge 2\text{ mm}$, la probabilidad se fija determinísticamente en $0.0000$.
+> 2. **Capa Estocástica Supervisada (LightGBM en Condición Seca):** Para las celdas en condición operativa de peligro ($P_{\text{dia}} < 5.0\text{ mm}$), el modelo **LightGBM Standard** evalúa las interacciones no lineales entre las 20 características meteorológicas y topográficas.
+>
+> Este paradigma híbrido evita la contaminación del dataset con 18.37 millones de ceros invernales triviales (que habrían diluido el gradiente de entrenamiento en ratio 1:15.000) y garantiza la eliminación de artefactos fuera de rango en producción sin degradar la precisión del modelo en época de alto riesgo.
+
 ---
 
