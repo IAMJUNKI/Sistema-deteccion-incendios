@@ -105,6 +105,22 @@ data/processed/*
 !data/processed/.gitkeep
 !data/processed/grid/*.parquet  # Permitir subir las rejillas base geoespaciales a GitHub
 
+# ─── Datasets maestros de entrenamiento — PROHIBIDO SUBIRLOS ─────────────────
+# Regla estricta del equipo: los dataset_maestro_YYYY.parquet (2019-2024) son
+# ~2,4 GB en total y NUNCA deben entrar en el repositorio. Se distribuyen fuera
+# de Git y cada persona los coloca en su DATA_ROOT local (ver .env.example).
+data/raw/dataset_maestro/
+data/raw/dataset_maestro/**
+dataset_maestro_*.parquet
+dataset_maestro_*.csv
+**/dataset_maestro_*.parquet
+
+# Otras carpetas de datos usadas históricamente por el equipo
+Datos/
+misc/Dataset/
+data/interim/
+data/external/*.parquet
+
 # ─── Modelos serializados (pueden ser pesados) ────────────────────────────────
 data/models/*
 !data/models/.gitkeep
