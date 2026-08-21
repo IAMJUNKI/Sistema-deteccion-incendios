@@ -1,215 +1,257 @@
-"""Módulo para el procesamiento de datos de cobertura del suelo (CORINE Land Cover).
+"""Agregación de CORINE Land Cover al datacube espacial de 1 km.
 
-Lee el raster de CORINE Land Cover, lo reproyecta al CRS métrico (EPSG:25829),
-mapea los 44 códigos originales a macro-clases simplificadas de combustible
-forestal y calcula la clase predominante y el porcentaje de cobertura forestal
-para cada celda de 1 km² utilizando una agregación rasterizada.
+Admite el GeoTIFF oficial CLC 2018 (índices 1--44) y rasters preprocesados
+con códigos CLC de tres dígitos. Genera proporciones en dimensiones ``(y, x)``.
 """
 
 import logging
 from pathlib import Path
-from typing import Dict, Tuple, Union
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+import xarray as xr
+from affine import Affine
 from rasterio.features import rasterize
-from rasterio.warp import Resampling, calculate_default_transform, reproject
+from rasterio.transform import array_bounds
+from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 
 logger = logging.getLogger(__name__)
 
-# Mapeo de códigos numéricos de CORINE Land Cover (CLC) a macro-clases de combustible
-CLC_FUEL_MAPPING: Dict[int, str] = {
-    # ─── 1. Zonas Artificiales (Urbano) ──────────────────────────────────────
-    111: "urbano",  # Tejido urbano continuo
-    112: "urbano",  # Tejido urbano discontinuo
-    121: "urbano",  # Zonas industriales o comerciales
-    122: "urbano",  # Redes viarias y ferroviarias y terrenos asociados
-    123: "urbano",  # Zonas portuarias
-    124: "urbano",  # Aeropuertos
-    131: "urbano",  # Zonas de extracción de materias primas
-    132: "urbano",  # Vertederos
-    133: "urbano",  # Zonas en construcción
-    141: "urbano",  # Zonas verdes urbanas
-    142: "urbano",  # Zonas deportivas y recreativas
-    # ─── 2. Zonas Agrícolas ──────────────────────────────────────────────────
-    211: "agricola",  # Tierras de labor en secano
-    212: "agricola",  # Tierras de labor en regadío
-    213: "agricola",  # Arrozeras
-    221: "agricola",  # Viñedos
-    222: "agricola",  # Frutales
-    223: "agricola",  # Olivares
-    231: "agricola",  # Praderas
-    241: "agricola",  # Cultivos anuales asociados con cultivos permanentes
-    242: "agricola",  # Sistemas agrícolas complejos
-    243: "agricola",  # Tierras ocupadas principalmente por la agricultura
-    244: "agricola",  # Superficies agroforestales
-    # ─── 3. Bosques y Zonas de Vegetación Natural (Combustible Forestal) ──────
-    311: "bosque_frondosas",  # Bosques de frondosas (ej: roble, eucalipto)
-    312: "bosque_coniferas",  # Bosques de coníferas (ej: pino)
-    313: "bosque_mixto",  # Bosques mixtos
-    321: "pastizal",  # Pastizales naturales
-    322: "matorral",  # Brezales y matorrales (matorral bajo/seco)
-    323: "matorral",  # Vegetación esclerófila (maquis, garriga)
-    324: "matorral",  # Bosque de transición (matorral alto)
-    331: "pastizal",  # Playas, dunas y arenales
-    332: "pastizal",  # Roquedo desnudo
-    333: "pastizal",  # Vegetación dispersa
-    334: "pastizal",  # Zonas quemadas (combustible muy bajo temporal)
-    335: "pastizal",  # Glaciares y nieves perpetuas
-    # ─── 4. Humedales y Masas de Agua ────────────────────────────────────────
-    411: "agua_humedal",  # Humedales interiores
-    412: "agua_humedal",  # Turberas
-    421: "agua_humedal",  # Salinas marítimas
-    422: "agua_humedal",  # Humedales intermareales
-    423: "agua_humedal",  # Marismas salinas
-    511: "agua_humedal",  # Cursos de agua
-    512: "agua_humedal",  # Masas de agua (embalses, lagos)
-    521: "agua_humedal",  # Lagunas costeras
-    522: "agua_humedal",  # Estuarios
-    523: "agua_humedal",  # Mares y océanos
+LANDCOVER_VARIABLES = [
+    "artificial",
+    "agriculture",
+    "broadleaf_forest",
+    "coniferous_forest",
+    "mixed_forest",
+    "scrub",
+    "open_spaces",
+    "wetlands",
+    "water",
+]
+LANDCOVER_METADATA = {
+    "artificial": "Artificial surfaces",
+    "agriculture": "Agricultural areas",
+    "broadleaf_forest": "Broadleaf forest",
+    "coniferous_forest": "Coniferous forest",
+    "mixed_forest": "Mixed forest",
+    "scrub": "Natural grassland, heathland, scrub and transitional woodland",
+    "open_spaces": "Open, bare, burned or snow-covered spaces",
+    "wetlands": "Wetlands",
+    "water": "Water bodies and sea",
+}
+
+# Índices de las 44 clases del GeoTIFF oficial U2018_CLC2018_V2020_20u1.tif.
+RAW_CLC_TO_LANDCOVER = {
+    **{code: "artificial" for code in range(1, 12)},
+    **{code: "agriculture" for code in range(12, 23)},
+    23: "broadleaf_forest",
+    24: "coniferous_forest",
+    25: "mixed_forest",
+    **{code: "scrub" for code in range(26, 30)},
+    **{code: "open_spaces" for code in range(30, 35)},
+    **{code: "wetlands" for code in range(35, 40)},
+    **{code: "water" for code in range(40, 45)},
+}
+CLC_CODE_TO_LANDCOVER = {
+    **{code: "artificial" for code in (111, 112, 121, 122, 123, 124, 131, 132, 133, 141, 142)},
+    **{code: "agriculture" for code in (211, 212, 213, 221, 222, 223, 231, 241, 242, 243, 244)},
+    311: "broadleaf_forest",
+    312: "coniferous_forest",
+    313: "mixed_forest",
+    **{code: "scrub" for code in (321, 322, 323, 324)},
+    **{code: "open_spaces" for code in (331, 332, 333, 334, 335)},
+    **{code: "wetlands" for code in (411, 412, 421, 422, 423)},
+    **{code: "water" for code in (511, 512, 521, 522, 523)},
+}
+COMBUSTIBLE_NAMES = {
+    "artificial": "urbano",
+    "agriculture": "agricola",
+    "broadleaf_forest": "bosque_frondosas",
+    "coniferous_forest": "bosque_coniferas",
+    "mixed_forest": "bosque_mixto",
+    "scrub": "matorral_pastizal",
+    "open_spaces": "espacios_abiertos",
+    "wetlands": "humedal",
+    "water": "agua",
 }
 
 
-def reproyectar_clc_utm(
-    ruta_clc_original: Union[str, Path],
-    crs_destino: str = "EPSG:25829",
+def cargar_corine_para_rejilla(
+    ruta_clc: str | Path,
+    gdf_grid: gpd.GeoDataFrame,
+    crs_destino: str = "EPSG:3035",
     resolucion_destino: float = 100.0,
-) -> Tuple[np.ndarray, dict]:
-    """Carga y reproyecta el raster original de CORINE Land Cover a UTM 29N.
+) -> tuple[np.ndarray, dict]:
+    """Lee solo el entorno de la malla y reproyecta si hace falta."""
+    ruta_clc = Path(ruta_clc)
+    if not ruta_clc.exists():
+        raise FileNotFoundError(f"No se encontró el archivo CORINE: {ruta_clc}")
+    if gdf_grid.empty:
+        raise ValueError("La rejilla activa no puede estar vacía.")
 
-    Args:
-        ruta_clc_original: Ruta al GeoTIFF original de CORINE.
-        crs_destino: CRS métrico de trabajo.
-        resolucion_destino: Resolución de pixel en metros para el remuestreo.
+    with rasterio.open(ruta_clc) as source:
+        if source.crs is None:
+            raise ValueError("El raster CORINE no declara CRS.")
+        grid_bounds = gdf_grid.to_crs(crs_destino).total_bounds
+        source_bounds = transform_bounds(crs_destino, source.crs, *grid_bounds, densify_pts=21)
+        inverse_transform = ~source.transform
+        col_start_float, row_start_float = inverse_transform * (
+            source_bounds[0],
+            source_bounds[3],
+        )
+        col_stop_float, row_stop_float = inverse_transform * (
+            source_bounds[2],
+            source_bounds[1],
+        )
+        col_start = max(0, int(np.floor(min(col_start_float, col_stop_float))))
+        row_start = max(0, int(np.floor(min(row_start_float, row_stop_float))))
+        col_stop = min(source.width, int(np.ceil(max(col_start_float, col_stop_float))))
+        row_stop = min(source.height, int(np.ceil(max(row_start_float, row_stop_float))))
+        if col_start >= col_stop or row_start >= row_stop:
+            raise ValueError("La rejilla no se solapa con el raster CORINE.")
+        # El GeoTIFF descargado para España está comprimido. En esta instalación
+        # de GDAL, las ventanas internas fallan silenciosamente, mientras que la
+        # lectura completa seguida de un corte NumPy es estable y reproducible.
+        array = source.read(1)[row_start:row_stop, col_start:col_stop]
+        transform = source.transform * Affine.translation(col_start, row_start)
+        profile = source.profile.copy()
+        profile.update({"height": array.shape[0], "width": array.shape[1], "transform": transform})
 
-    Returns:
-        Tuple del array reproyectado (códigos CLC) y el perfil de rasterio.
-    """
-    logger.info(
-        f"Cargando y reproyectando CORINE Land Cover desde: {ruta_clc_original}..."
+    if str(profile["crs"]) == crs_destino and np.isclose(abs(transform.a), resolucion_destino):
+        return array, profile
+
+    bounds = array_bounds(array.shape[0], array.shape[1], transform)
+    dst_transform, width, height = calculate_default_transform(
+        profile["crs"],
+        crs_destino,
+        array.shape[1],
+        array.shape[0],
+        *bounds,
+        resolution=resolucion_destino,
     )
-    ruta_clc_original = Path(ruta_clc_original)
+    nodata = profile.get("nodata")
+    destination = np.full((height, width), nodata if nodata is not None else 0, dtype=array.dtype)
+    reproject(
+        source=array,
+        destination=destination,
+        src_transform=transform,
+        src_crs=profile["crs"],
+        src_nodata=nodata,
+        dst_transform=dst_transform,
+        dst_crs=crs_destino,
+        dst_nodata=nodata if nodata is not None else 0,
+        resampling=Resampling.nearest,
+    )
+    profile.update(
+        {
+            "crs": crs_destino,
+            "height": height,
+            "width": width,
+            "transform": dst_transform,
+            "nodata": nodata if nodata is not None else 0,
+        }
+    )
+    return destination, profile
 
-    if not ruta_clc_original.exists():
-        raise FileNotFoundError(
-            f"El archivo CORINE Land Cover no existe en: {ruta_clc_original}. "
-            "Por favor, descárgalo del CNIG o del Copernicus Land Service."
+
+def _mapear_codigos_clc(clc_array: np.ndarray, nodata: float | int | None) -> np.ndarray:
+    """Convierte códigos CLC en índices de macroclase; -1 significa dato inválido."""
+    mapped = np.full(clc_array.shape, -1, dtype=np.int8)
+    valid = np.isfinite(clc_array)
+    if nodata is not None:
+        valid &= clc_array != nodata
+    codes = clc_array[valid].astype(np.int32)
+    mapping = RAW_CLC_TO_LANDCOVER if codes.size and codes.max() <= 48 else CLC_CODE_TO_LANDCOVER
+    category_index = {category: index for index, category in enumerate(LANDCOVER_VARIABLES)}
+    maximum_code = max(mapping)
+    lookup = np.full(maximum_code + 1, -1, dtype=np.int8)
+    for code, category in mapping.items():
+        lookup[code] = category_index[category]
+    in_range = valid & (clc_array >= 0) & (clc_array <= maximum_code)
+    mapped[in_range] = lookup[clc_array[in_range].astype(np.int32)]
+    return mapped
+
+
+def extraer_variables_cobertura_suelo(
+    gdf_grid: gpd.GeoDataFrame, clc_array: np.ndarray, perfil_raster: dict
+) -> pd.DataFrame:
+    """Calcula las proporciones de las nueve macroclases CORINE por celda."""
+    grid_raster = rasterize(
+        shapes=(
+            (geometry, int(cell_id))
+            for geometry, cell_id in zip(gdf_grid.geometry, gdf_grid.cell_id)
+        ),
+        out_shape=(perfil_raster["height"], perfil_raster["width"]),
+        transform=perfil_raster["transform"],
+        fill=-1,
+        dtype=np.int32,
+    )
+    mapped = _mapear_codigos_clc(clc_array, perfil_raster.get("nodata"))
+    valid = (grid_raster >= 0) & (mapped >= 0)
+    cell_ids = gdf_grid["cell_id"].to_numpy(dtype=np.int64)
+    totals = np.bincount(grid_raster[valid], minlength=int(cell_ids.max()) + 1)
+    result = pd.DataFrame({"cell_id": cell_ids})
+    for category_index, variable in enumerate(LANDCOVER_VARIABLES):
+        counts = np.bincount(
+            grid_raster[valid & (mapped == category_index)], minlength=len(totals)
         )
+        result[variable] = np.divide(
+            counts[cell_ids],
+            totals[cell_ids],
+            out=np.full(len(cell_ids), np.nan, dtype=np.float32),
+            where=totals[cell_ids] > 0,
+        ).astype(np.float32)
+    result["combustible_pct_forestal"] = (
+        result[["broadleaf_forest", "coniferous_forest", "mixed_forest"]].sum(axis=1) * 100.0
+    )
+    fractions = result[LANDCOVER_VARIABLES]
+    has_landcover = fractions.notna().any(axis=1)
+    dominant = fractions.fillna(-np.inf).idxmax(axis=1).where(has_landcover)
+    result["combustible_clase"] = dominant.map(COMBUSTIBLE_NAMES)
+    return result
 
-    with rasterio.open(ruta_clc_original) as src:
-        # Calcular transformación de destino
-        transform, width, height = calculate_default_transform(
-            src.crs,
-            crs_destino,
-            src.width,
-            src.height,
-            *src.bounds,
-            resolution=resolucion_destino,
-        )
 
-        perfil_dst = src.meta.copy()
-        perfil_dst.update(
-            {
-                "crs": crs_destino,
-                "transform": transform,
-                "width": width,
-                "height": height,
-                "nodata": 0,  # Código 0 indica "sin datos" en CLC
-            }
-        )
+def crear_datacubo_cobertura_suelo(cube: xr.Dataset, landcover: pd.DataFrame) -> xr.Dataset:
+    """Inserta las proporciones CORINE en un cubo con la malla base."""
+    if "is_galicia" not in cube:
+        raise ValueError("El cubo debe incluir la máscara is_galicia.")
+    missing = set(LANDCOVER_VARIABLES) - set(landcover.columns)
+    if missing:
+        raise ValueError(f"Faltan variables de cobertura del suelo: {sorted(missing)}")
+    output = cube.copy()
+    ny, nx = cube["is_galicia"].shape
+    cell_ids = landcover["cell_id"].to_numpy(dtype=np.int64)
+    if (cell_ids < 0).any() or (cell_ids >= ny * nx).any():
+        raise ValueError("Los cell_id no pertenecen a la malla del cubo.")
+    rows, columns = np.divmod(cell_ids, nx)
+    for variable in LANDCOVER_VARIABLES:
+        values = np.full((ny, nx), np.nan, dtype=np.float32)
+        values[rows, columns] = landcover[variable].to_numpy(dtype=np.float32)
+        output[variable] = (("y", "x"), values)
+        output[variable].attrs = {"long_name": LANDCOVER_METADATA[variable], "units": "fraction"}
+    output.attrs = {
+        "title": "Land cover variables",
+        "description": "CORINE Land Cover fractions aggregated to the 1 km spatial grid.",
+        "module": "landcover",
+        "source": "CORINE Land Cover 2018 V2020_20u1",
+        "crs": cube.attrs["crs"],
+        "spatial_resolution": cube.attrs["spatial_resolution"],
+    }
+    return output
 
-        clc_reproyectado = np.empty((height, width), dtype=np.uint16)
 
-        # Reproyectar usando el vecino más cercano (conservar códigos categóricos)
-        reproject(
-            source=rasterio.band(src, 1),
-            destination=clc_reproyectado,
-            src_transform=src.transform,
-            src_crs=src.crs,
-            dst_transform=transform,
-            dst_crs=crs_destino,
-            resampling=Resampling.nearest,
-            src_nodata=src.nodata or 0,
-            dst_nodata=0,
-        )
-
-    logger.info(f"CORINE reproyectado. Dimensiones: {clc_reproyectado.shape}")
-    return clc_reproyectado, perfil_dst
+def guardar_datacubo_cobertura_suelo(landcover: xr.Dataset, ruta_salida: str | Path) -> None:
+    """Guarda las variables de cobertura del suelo en formato NetCDF."""
+    ruta_salida = Path(ruta_salida)
+    ruta_salida.parent.mkdir(parents=True, exist_ok=True)
+    landcover.to_netcdf(ruta_salida)
 
 
 def extraer_variables_vegetacion(
     gdf_grid: gpd.GeoDataFrame, clc_array: np.ndarray, perfil_raster: dict
 ) -> pd.DataFrame:
-    """Extrae las clases de combustible predominantes y porcentaje forestal por celda.
-
-    Args:
-        gdf_grid: GeoDataFrame de la rejilla.
-        clc_array: Array del raster CLC en UTM.
-        perfil_raster: Perfil del raster de entrada.
-
-    Returns:
-        DataFrame con [cell_id, combustible_clase, combustible_pct_forestal].
-    """
-    logger.info("Agrupando clases de vegetación por celda (vectorized groupby)...")
-
-    height, width = perfil_raster["height"], perfil_raster["width"]
-    transform = perfil_raster["transform"]
-
-    # Crear lista de tuplas para la rasterización de las celdas
-    formas_celdas = ((geom, float(cell_id)) for geom, cell_id in zip(gdf_grid.geometry, gdf_grid.cell_id))
-
-    # Rasterizar los cell_ids en la resolución del raster CLC
-    grid_raster = rasterize(
-        shapes=formas_celdas,
-        out_shape=(height, width),
-        transform=transform,
-        fill=-1.0,
-        dtype=np.float32,
-    )
-
-    flat_grid = grid_raster.flatten()
-    flat_clc = clc_array.flatten()
-
-    # Filtrar pixeles activos en el grid
-    mask = flat_grid != -1.0
-    df_pixels = pd.DataFrame(
-        {
-            "cell_id": flat_grid[mask].astype(int),
-            "clc_code": flat_clc[mask].astype(int),
-        }
-    )
-
-    # Filtrar sin datos (código 0)
-    df_pixels = df_pixels[df_pixels["clc_code"] > 0]
-
-    # Mapear códigos CLC a macro-clases de combustible
-    df_pixels["combustible"] = df_pixels["clc_code"].map(CLC_FUEL_MAPPING).fillna("otros")
-
-    # 1. Calcular clase predominante por cell_id
-    logger.info("Calculando clase predominante por celda...")
-    predominantes = (
-        df_pixels.groupby("cell_id")["combustible"]
-        .agg(lambda x: x.value_counts().index[0] if len(x) > 0 else "otros")
-        .reset_index(name="combustible_clase")
-    )
-
-    # 2. Calcular porcentaje de cobertura forestal (bosques de frondosas, coníferas o mixto)
-    logger.info("Calculando porcentaje de cobertura forestal por celda...")
-    df_pixels["es_forestal"] = df_pixels["combustible"].isin(
-        ["bosque_frondosas", "bosque_coniferas", "bosque_mixto"]
-    )
-    pct_forestal = (
-        df_pixels.groupby("cell_id")["es_forestal"]
-        .mean()
-        .reset_index(name="combustible_pct_forestal")
-    )
-    # Convertir a porcentaje (0-100)
-    pct_forestal["combustible_pct_forestal"] = (
-        pct_forestal["combustible_pct_forestal"] * 100.0
-    )
-
-    # Combinar resultados
-    df_vegetacion = pd.merge(predominantes, pct_forestal, on="cell_id", how="left")
-    return df_vegetacion
+    """Alias de compatibilidad que devuelve las columnas derivadas históricas."""
+    variables = extraer_variables_cobertura_suelo(gdf_grid, clc_array, perfil_raster)
+    return variables[["cell_id", "combustible_clase", "combustible_pct_forestal"]]

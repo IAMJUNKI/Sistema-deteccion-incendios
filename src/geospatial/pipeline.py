@@ -10,18 +10,31 @@ import logging
 import sys
 from pathlib import Path
 
-import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from src.geospatial.grid import crear_rejilla_galicia_pipeline
+from src.geospatial.grid import (
+    DEFAULT_CRS,
+    crear_rejilla_galicia_pipeline,
+    guardar_rejilla_datacube,
+)
 from src.geospatial.topography import (
+    TOPOGRAPHY_VARIABLES,
     calcular_pendiente_y_orientacion,
+    calcular_rugosidad_local,
+    crear_datacubo_topografia,
     descargar_dem_galicia,
     extraer_estadisticas_topograficas_rapidas,
+    guardar_datacubo_topografia,
     reproyectar_raster_utm,
 )
-from src.geospatial.vegetation import extraer_variables_vegetacion, reproyectar_clc_utm
+from src.geospatial.vegetation import (
+    LANDCOVER_VARIABLES,
+    cargar_corine_para_rejilla,
+    crear_datacubo_cobertura_suelo,
+    extraer_variables_cobertura_suelo,
+    guardar_datacubo_cobertura_suelo,
+)
 
 # Configurar logging descriptivo
 logging.basicConfig(
@@ -36,23 +49,38 @@ def run_pipeline(
     ruta_limites: Path,
     ruta_clc: Path,
     ruta_salida: Path,
+    ruta_cubo: Path,
+    ruta_vectorial: Path,
+    ruta_topografia: Path,
+    ruta_cobertura_suelo: Path,
     cell_size: float = 1000.0,
+    procesar_vegetacion: bool = True,
 ) -> None:
     """Ejecuta el pipeline geoespacial completo de la Fase 1.
 
     Args:
         ruta_limites: Ruta para guardar/leer los límites de Galicia.
         ruta_clc: Ruta del raster local de CORINE Land Cover.
-        ruta_salida: Ruta del GeoParquet final de salida.
+        ruta_salida: Ruta del GeoParquet final de celdas activas.
+        ruta_cubo: Ruta del NetCDF con la malla rectangular y ``is_galicia``.
+        ruta_vectorial: Ruta del GeoPackage de la malla rectangular completa.
+        ruta_topografia: Ruta del NetCDF con las variables topográficas.
+        ruta_cobertura_suelo: Ruta del NetCDF con las proporciones CORINE.
         cell_size: Tamaño de celda en metros.
+        procesar_vegetacion: Si es ``False``, omite CORINE para una prueba rápida.
     """
     logger.info("=== INICIANDO PIPELINE DE INFRAESTRUCTURA GEOESPACIAL (FASE 1) ===")
 
     # 1. Generar la Rejilla de Celdas Base
     logger.info("--- PASO 1: Generando Rejilla Base de Galicia ---")
-    gdf_grid = crear_rejilla_galicia_pipeline(
+    cube, gdf_grid_completo = crear_rejilla_galicia_pipeline(
         ruta_limites=ruta_limites, cell_size_meters=cell_size
     )
+    guardar_rejilla_datacube(cube, gdf_grid_completo, ruta_cubo, ruta_vectorial)
+
+    # DEM y CORINE solo son pertinentes en las celdas cuyo centro está en Galicia.
+    # El cubo y el GeoPackage conservan la malla completa para el datacube/CNN.
+    gdf_grid = gdf_grid_completo.loc[gdf_grid_completo["is_galicia"] == 1].copy()
 
     # 2. Descargar y Calcular Topografía (DEM)
     logger.info("--- PASO 2: Procesando Elevaciones y Pendientes (Copernicus DEM) ---")
@@ -65,61 +93,63 @@ def run_pipeline(
     try:
         dem_raw, profile_raw = descargar_dem_galicia(bounds_wgs84)
         dem_utm, profile_utm = reproyectar_raster_utm(
-            dem_raw, profile_raw, crs_destino="EPSG:25829", resolucion_destino=30.0
+            dem_raw, profile_raw, crs_destino=DEFAULT_CRS, resolucion_destino=30.0
         )
         slope, aspect = calcular_pendiente_y_orientacion(dem_utm, profile_utm["transform"])
+        roughness = calcular_rugosidad_local(dem_utm)
         df_topo = extraer_estadisticas_topograficas_rapidas(
-            gdf_grid, dem_utm, slope, aspect, profile_utm
+            gdf_grid, dem_utm, slope, aspect, roughness, profile_utm
         )
         logger.info(f"Topografía procesada: {len(df_topo)} celdas agregadas.")
     except Exception as e:
         logger.error(f"Error crítico en el cálculo de la topografía: {e}")
-        logger.warning(
-            "El pipeline continuará rellenando la topografía con valores por defecto."
-        )
-        df_topo = pd.DataFrame(
-            {
-                "cell_id": gdf_grid["cell_id"],
-                "altitud_media": 0.0,
-                "pendiente_media": 0.0,
-                "orientacion_media": 0.0,
-                "orientacion_clase": "plana",
-            }
-        )
+        logger.warning("El pipeline continuará rellenando la topografía con valores por defecto.")
+        df_topo = pd.DataFrame({"cell_id": gdf_grid["cell_id"]})
+        for variable in TOPOGRAPHY_VARIABLES:
+            df_topo[variable] = float("nan")
+        df_topo["altitud_media"] = float("nan")
+        df_topo["pendiente_media"] = float("nan")
+        df_topo["orientacion_media"] = float("nan")
+        df_topo["orientacion_clase"] = None
+
+    topography = crear_datacubo_topografia(cube, df_topo)
+    guardar_datacubo_topografia(topography, ruta_topografia)
 
     # 3. Procesar Vegetación (CORINE)
     logger.info("--- PASO 3: Procesando Cobertura del Suelo (CORINE Land Cover) ---")
-    if ruta_clc.exists():
+    if procesar_vegetacion and ruta_clc.exists():
         try:
-            clc_utm, clc_profile = reproyectar_clc_utm(
-                ruta_clc_original=ruta_clc,
-                crs_destino="EPSG:25829",
+            clc_array, clc_profile = cargar_corine_para_rejilla(
+                ruta_clc=ruta_clc,
+                gdf_grid=gdf_grid,
+                crs_destino=DEFAULT_CRS,
                 resolucion_destino=100.0,
             )
-            df_veg = extraer_variables_vegetacion(gdf_grid, clc_utm, clc_profile)
-            logger.info(f"Vegetación procesada: {len(df_veg)} celdas agregadas.")
+            df_veg = extraer_variables_cobertura_suelo(gdf_grid, clc_array, clc_profile)
+            logger.info("CORINE procesado: %s celdas agregadas.", len(df_veg))
         except Exception as e:
             logger.error(f"Error procesando el archivo CORINE: {e}")
-            logger.warning("Rellenando vegetación con valores por defecto...")
-            df_veg = pd.DataFrame(
-                {
-                    "cell_id": gdf_grid["cell_id"],
-                    "combustible_clase": "otros",
-                    "combustible_pct_forestal": 0.0,
-                }
-            )
+            logger.warning("Rellenando cobertura del suelo con valores ausentes...")
+            df_veg = pd.DataFrame({"cell_id": gdf_grid["cell_id"]})
+            for variable in LANDCOVER_VARIABLES:
+                df_veg[variable] = float("nan")
+            df_veg["combustible_clase"] = None
+            df_veg["combustible_pct_forestal"] = float("nan")
     else:
-        logger.warning(
-            f"El archivo CORINE Land Cover no se encontró en '{ruta_clc}'. "
-            "Rellenando con valores por defecto ('otros', 0%)."
+        reason = (
+            "se omitió por solicitud"
+            if not procesar_vegetacion
+            else f"no se encontró en '{ruta_clc}'"
         )
-        df_veg = pd.DataFrame(
-            {
-                "cell_id": gdf_grid["cell_id"],
-                "combustible_clase": "otros",
-                "combustible_pct_forestal": 0.0,
-            }
-        )
+        logger.warning("CORINE %s. Rellenando cobertura del suelo con valores ausentes.", reason)
+        df_veg = pd.DataFrame({"cell_id": gdf_grid["cell_id"]})
+        for variable in LANDCOVER_VARIABLES:
+            df_veg[variable] = float("nan")
+        df_veg["combustible_clase"] = None
+        df_veg["combustible_pct_forestal"] = float("nan")
+
+    landcover = crear_datacubo_cobertura_suelo(cube, df_veg)
+    guardar_datacubo_cobertura_suelo(landcover, ruta_cobertura_suelo)
 
     # 4. Integrar Datos por cell_id
     logger.info("--- PASO 4: Cruzando y uniendo todas las capas de datos ---")
@@ -130,9 +160,7 @@ def run_pipeline(
     gdf_final["cell_id"] = gdf_final["cell_id"].astype(int)
     gdf_final["altitud_media"] = gdf_final["altitud_media"].astype(float)
     gdf_final["pendiente_media"] = gdf_final["pendiente_media"].astype(float)
-    gdf_final["combustible_pct_forestal"] = gdf_final[
-        "combustible_pct_forestal"
-    ].astype(float)
+    gdf_final["combustible_pct_forestal"] = gdf_final["combustible_pct_forestal"].astype(float)
 
     # 5. Guardar el GeoParquet resultante
     logger.info(f"--- PASO 5: Guardando GeoParquet resultante en: {ruta_salida} ---")
@@ -170,7 +198,9 @@ def run_pipeline(
         docs_dir.mkdir(parents=True, exist_ok=True)
         plt.tight_layout()
         plt.savefig(docs_dir / "verificacion_grid_fase1.png", dpi=150)
-        logger.info("Mapa de verificación guardado con éxito en 'docs/verificacion_grid_fase1.png'.")
+        logger.info(
+            "Mapa de verificación guardado con éxito en 'docs/verificacion_grid_fase1.png'."
+        )
     except Exception as e:
         logger.warning(f"No se pudo generar el mapa de control visual: {e}")
 
@@ -186,6 +216,30 @@ if __name__ == "__main__":
         help="Ruta donde guardar el GeoParquet de salida.",
     )
     parser.add_argument(
+        "--cube-output",
+        type=str,
+        default="data/processed/cube.nc",
+        help="Ruta del NetCDF con la malla regular EPSG:3035 y la máscara is_galicia.",
+    )
+    parser.add_argument(
+        "--vector-output",
+        type=str,
+        default="data/processed/grid/grid_1km.gpkg",
+        help="Ruta del GeoPackage con la malla rectangular completa.",
+    )
+    parser.add_argument(
+        "--topography-output",
+        type=str,
+        default="data/processed/topography.nc",
+        help="Ruta del NetCDF con las quince variables topográficas.",
+    )
+    parser.add_argument(
+        "--landcover-output",
+        type=str,
+        default="data/processed/landcover.nc",
+        help="Ruta del NetCDF con las nueve proporciones CORINE.",
+    )
+    parser.add_argument(
         "--boundary",
         type=str,
         default="data/raw/igm/galicia_boundary.geojson",
@@ -194,14 +248,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--corine",
         type=str,
-        default="data/raw/corine/clc_galicia.tif",
-        help="Ruta al GeoTIFF original de CORINE Land Cover.",
+        default="data/raw/corine/U2018_CLC2018_V2020_20u1.tif",
+        help="Ruta al GeoTIFF oficial o preprocesado de CORINE Land Cover.",
     )
     parser.add_argument(
         "--cell-size",
         type=float,
         default=1000.0,
         help="Resolución de la celda en metros (default: 1000m).",
+    )
+    parser.add_argument(
+        "--skip-vegetation",
+        action="store_true",
+        help="Omite CORINE; útil para probar solo la generación del grid y la topografía.",
     )
 
     args = parser.parse_args()
@@ -210,5 +269,10 @@ if __name__ == "__main__":
         ruta_limites=Path(args.boundary),
         ruta_clc=Path(args.corine),
         ruta_salida=Path(args.output),
+        ruta_cubo=Path(args.cube_output),
+        ruta_vectorial=Path(args.vector_output),
+        ruta_topografia=Path(args.topography_output),
+        ruta_cobertura_suelo=Path(args.landcover_output),
         cell_size=args.cell_size,
+        procesar_vegetacion=not args.skip_vegetation,
     )

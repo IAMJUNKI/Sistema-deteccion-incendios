@@ -1,80 +1,68 @@
-"""Módulo para el procesamiento y extracción de variables topográficas.
+"""Variables topográficas estáticas para la malla regular EPSG:3035.
 
-Descarga los datos del Copernicus DEM GLO-30 para el bounding box de la rejilla,
-reproyecta el raster al CRS métrico (EPSG:25829), calcula la pendiente y
-la orientación del terreno en metros, y agrega estas variables por celda de 1 km²
-mediante estadísticas zonales rasterizadas de alta velocidad.
+El módulo agrega un DEM de 30 m a la malla de 1 km y genera las quince
+variables topográficas usadas como referencia en IberFire: estadísticas de
+elevación, pendiente y rugosidad, además de ocho proporciones de orientación
+y la proporción sin orientación válida.
 """
 
 import logging
 from pathlib import Path
-from typing import Dict, Tuple, Union
+from typing import Tuple
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+import xarray as xr
 from rasterio.features import rasterize
 from rasterio.warp import Resampling, calculate_default_transform, reproject
+from scipy.ndimage import uniform_filter
 
 logger = logging.getLogger(__name__)
+
+NODATA_VALUE = -9999.0
+ASPECT_RANGES = ((0, 45), (45, 90), (90, 135), (135, 180), (180, 225), (225, 270), (270, 315), (315, 360))
+ASPECT_VARIABLES = [f"aspect_{start:03d}_{end:03d}" for start, end in ASPECT_RANGES]
+ASPECT_NODATA_VARIABLE = "aspect_sin_datos"
+TOPOGRAPHY_VARIABLES = [
+    "elevation_mean",
+    "elevation_std",
+    "slope_mean",
+    "slope_std",
+    "roughness_mean",
+    "roughness_std",
+    *ASPECT_VARIABLES,
+    ASPECT_NODATA_VARIABLE,
+]
 
 
 def descargar_dem_galicia(
     bounds_wgs84: Tuple[float, float, float, float]
 ) -> Tuple[np.ndarray, dict]:
-    """Descarga el Copernicus DEM GLO-30 para un bounding box en WGS84.
-
-    Utiliza la librería `dem-stitcher` para descargar los datos directamente de AWS.
-
-    Args:
-        bounds_wgs84: Tupla de (min_lon, min_lat, max_lon, max_lat).
-
-    Returns:
-        Tuple del array de elevación y el diccionario de perfil del rasterio.
-    """
-    logger.info(
-        f"Descargando Copernicus DEM GLO-30 para los límites WGS84: {bounds_wgs84}..."
-    )
+    """Descarga Copernicus DEM GLO-30 para un bounding box en WGS84."""
     try:
         from dem_stitcher import stitch_dem
-    except ImportError as e:
-        logger.error(
-            "La librería 'dem-stitcher' no está instalada. Ejecuta 'pip install dem-stitcher'."
-        )
-        raise e
+    except ImportError as error:
+        raise ImportError("Instala dem-stitcher para descargar Copernicus DEM GLO-30.") from error
 
-    # Descarga del DEM sin credenciales desde AWS
     dem_array, dem_profile = stitch_dem(
         bounds_wgs84,
         dem_name="glo_30",
         dst_ellipsoidal_height=False,
         dst_area_or_point="Point",
     )
-    logger.info(f"DEM descargado con éxito. Shape original: {dem_array.shape}")
+    logger.info("DEM descargado. Dimensiones originales: %s", dem_array.shape)
     return dem_array, dem_profile
 
 
 def reproyectar_raster_utm(
     dem_array: np.ndarray,
     perfil_src: dict,
-    crs_destino: str = "EPSG:25829",
+    crs_destino: str = "EPSG:3035",
     resolucion_destino: float = 30.0,
 ) -> Tuple[np.ndarray, dict]:
-    """Reproyecta un raster de elevación en grados (WGS84) a metros (UTM).
-
-    Args:
-        dem_array: Array del DEM descargado.
-        perfil_src: Perfil original del raster en EPSG:4326.
-        crs_destino: CRS métrico de destino.
-        resolucion_destino: Tamaño de pixel en metros en el raster destino.
-
-    Returns:
-        Tuple del array reproyectado y el nuevo perfil de rasterio.
-    """
-    logger.info(f"Reproyectando DEM a {crs_destino} con resolución de {resolucion_destino}m...")
-
-    # Calcular la transformación de destino y dimensiones
+    """Reproyecta un DEM a un CRS métrico, conservando una resolución dada."""
     transform, width, height = calculate_default_transform(
         perfil_src["crs"],
         crs_destino,
@@ -85,7 +73,6 @@ def reproyectar_raster_utm(
         ),
         resolution=resolucion_destino,
     )
-
     perfil_dst = perfil_src.copy()
     perfil_dst.update(
         {
@@ -93,13 +80,10 @@ def reproyectar_raster_utm(
             "transform": transform,
             "width": width,
             "height": height,
-            "nodata": -9999.0,
+            "nodata": NODATA_VALUE,
         }
     )
-
-    dem_reproyectado = np.empty((height, width), dtype=np.float32)
-
-    # Ejecutar la reproyección
+    dem_reproyectado = np.full((height, width), NODATA_VALUE, dtype=np.float32)
     reproject(
         source=dem_array,
         destination=dem_reproyectado,
@@ -108,74 +92,79 @@ def reproyectar_raster_utm(
         dst_transform=transform,
         dst_crs=crs_destino,
         resampling=Resampling.bilinear,
-        src_nodata=perfil_src.get("nodata", np.nan),
-        dst_nodata=-9999.0,
+        src_nodata=perfil_src.get("nodata", NODATA_VALUE),
+        dst_nodata=NODATA_VALUE,
     )
-
     return dem_reproyectado, perfil_dst
 
 
 def calcular_pendiente_y_orientacion(
     dem_array: np.ndarray, transform: rasterio.Affine
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Calcula la pendiente (en grados) y la orientación (en grados) a partir del DEM en metros.
+    """Calcula pendiente y orientación a partir de un DEM en unidades métricas."""
+    dem = dem_array.astype(np.float32, copy=True)
+    dem[dem == NODATA_VALUE] = np.nan
+    dx = transform.a
+    dy = abs(transform.e)
+    dzdx = np.gradient(dem, dx, axis=1)
+    dzdy = np.gradient(dem, dy, axis=0)
 
-    Args:
-        dem_array: Array del DEM en un CRS métrico.
-        transform: Affine transform del raster.
+    slope = np.degrees(np.arctan(np.hypot(dzdx, dzdy)))
+    aspect = np.degrees(np.arctan2(-dzdx, dzdy)) % 360
+    return (
+        np.nan_to_num(slope, nan=NODATA_VALUE).astype(np.float32),
+        np.nan_to_num(aspect, nan=NODATA_VALUE).astype(np.float32),
+    )
 
-    Returns:
-        Tuple de (pendiente_deg, orientacion_deg).
+
+def calcular_rugosidad_local(
+    dem_array: np.ndarray, window_size: int = 3
+) -> np.ndarray:
+    """Calcula la desviación estándar local del DEM como medida de rugosidad.
+
+    IberFire emplea una capa de rugosidad externa cuyo algoritmo no se publica.
+    Esta implementación documentada usa la desviación estándar en una ventana
+    de ``window_size`` píxeles como aproximación reproducible.
     """
-    logger.info("Calculando pendientes y orientaciones del terreno...")
+    if window_size < 1 or window_size % 2 == 0:
+        raise ValueError("window_size debe ser un entero impar positivo.")
 
-    # Reemplazar nodata con nans para evitar distorsiones en el cálculo del gradiente
-    dem_temp = dem_array.copy()
-    dem_temp[dem_temp == -9999.0] = np.nan
-
-    # Resolución del pixel (suponiendo cuadrícula cuadrada)
-    px = transform.a
-    py = -transform.e
-
-    # Gradientes espaciales (cambio en Z respecto a X e Y)
-    dzdx = np.gradient(dem_temp, px, axis=1)
-    dzdy = np.gradient(dem_temp, py, axis=0)
-
-    # 1. Pendiente en grados (Slope)
-    pendiente_rad = np.arctan(np.sqrt(dzdx**2 + dzdy**2))
-    pendiente_deg = np.degrees(pendiente_rad)
-
-    # 2. Orientación en grados (Aspect: 0 = Norte, 90 = Este, 180 = Sur, 270 = Oeste)
-    aspect_rad = np.arctan2(-dzdx, dzdy)
-    orientacion_deg = np.degrees(aspect_rad) % 360
-
-    # Rellenar nans resultantes
-    pendiente_deg = np.nan_to_num(pendiente_deg, nan=-9999.0)
-    orientacion_deg = np.nan_to_num(orientacion_deg, nan=-9999.0)
-
-    return pendiente_deg, orientacion_deg
+    valid = np.isfinite(dem_array) & (dem_array != NODATA_VALUE)
+    values = np.where(valid, dem_array, 0.0).astype(np.float32)
+    weights = valid.astype(np.float32)
+    count = uniform_filter(weights, size=window_size, mode="nearest")
+    mean = uniform_filter(values, size=window_size, mode="nearest") / np.where(count == 0, 1, count)
+    mean_sq = uniform_filter(values**2, size=window_size, mode="nearest") / np.where(
+        count == 0, 1, count
+    )
+    roughness = np.sqrt(np.maximum(mean_sq - mean**2, 0.0))
+    return np.where(valid, roughness, NODATA_VALUE).astype(np.float32)
 
 
-def clasificar_orientacion(grados: float) -> str:
-    """Clasifica los grados de orientación en las 4 macro-direcciones o plana.
+def clasificar_aspecto(orientacion_array: np.ndarray) -> np.ndarray:
+    """Asigna las ocho clases de 45 grados especificadas por IberFire.
 
-    Args:
-        grados: Dirección en grados (0-360).
-
-    Returns:
-        Categoría string de orientación.
+    Las clases siguen los intervalos ``(0, 45]``, ..., ``(315, 360]``.
+    El valor 0 grados es equivalente a 360 y se asigna a la clase 8.
     """
-    if grados == -9999.0 or np.isnan(grados):
-        return "plana"
-    # Clasificación estándar: Norte (315-45), Este (45-135), Sur (135-225), Oeste (225-315)
-    if grados >= 315 or grados < 45:
-        return "norte"
-    elif 45 <= grados < 135:
-        return "este"
-    elif 135 <= grados < 225:
-        return "sur"
-    else:
-        return "oeste"
+    classes = np.full(orientacion_array.shape, -1, dtype=np.int8)
+    valid = np.isfinite(orientacion_array) & (orientacion_array != NODATA_VALUE)
+    angles = np.mod(orientacion_array[valid], 360.0)
+    values = np.ceil(angles / 45.0).astype(np.int8)
+    values[values == 0] = 8
+    classes[valid] = values
+    return classes
+
+
+def _rasterizar_celdas(gdf_grid: gpd.GeoDataFrame, perfil_raster: dict) -> np.ndarray:
+    """Rasteriza identificadores de celda en la rejilla del raster topográfico."""
+    return rasterize(
+        shapes=((geometry, int(cell_id)) for geometry, cell_id in zip(gdf_grid.geometry, gdf_grid.cell_id)),
+        out_shape=(perfil_raster["height"], perfil_raster["width"]),
+        transform=perfil_raster["transform"],
+        fill=-1,
+        dtype=np.int32,
+    )
 
 
 def extraer_estadisticas_topograficas_rapidas(
@@ -183,78 +172,99 @@ def extraer_estadisticas_topograficas_rapidas(
     dem_array: np.ndarray,
     pendiente_array: np.ndarray,
     orientacion_array: np.ndarray,
+    rugosidad_array: np.ndarray,
     perfil_raster: dict,
 ) -> pd.DataFrame:
-    """Calcula estadísticas zonales vectorizadas y rápidas mediante rasterización de cell_ids.
-
-    Args:
-        gdf_grid: Rejilla base de polígonos.
-        dem_array: Array del DEM en UTM.
-        pendiente_array: Array de pendientes calculadas.
-        orientacion_array: Array de orientaciones calculadas.
-        perfil_raster: Perfil del raster UTM.
-
-    Returns:
-        DataFrame con [cell_id, altitud_media, pendiente_media, orientacion_media, orientacion_clase].
-    """
-    logger.info("Iniciando agregación topográfica rápida por celda (vectorized groupby)...")
-
-    # Obtener dimensiones y transform
-    height, width = perfil_raster["height"], perfil_raster["width"]
-    transform = perfil_raster["transform"]
-
-    # Crear lista de tuplas (geometria, cell_id) para la rasterización
-    formas_celdas = ((geom, float(cell_id)) for geom, cell_id in zip(gdf_grid.geometry, gdf_grid.cell_id))
-
-    # Rasterizar los cell_ids en la resolución del DEM
-    logger.info("Rasterizando geometrías de las celdas...")
-    grid_raster = rasterize(
-        shapes=formas_celdas,
-        out_shape=(height, width),
-        transform=transform,
-        fill=-1.0,
-        dtype=np.float32,
-    )
-
-    # Aplanar arrays para análisis columnar con Pandas (extremadamente rápido)
-    flat_grid = grid_raster.flatten()
-    flat_alt = dem_array.flatten()
-    flat_slope = pendiente_array.flatten()
-    flat_aspect = orientacion_array.flatten()
-
-    # Filtrar solo pixeles que pertenecen a alguna celda de nuestro grid
-    mask = flat_grid != -1.0
-    df_pixels = pd.DataFrame(
+    """Agrega las quince variables topográficas a cada celda activa de 1 km."""
+    grid_raster = _rasterizar_celdas(gdf_grid, perfil_raster)
+    in_grid = grid_raster != -1
+    pixels = pd.DataFrame(
         {
-            "cell_id": flat_grid[mask].astype(int),
-            "alt": flat_alt[mask],
-            "slope": flat_slope[mask],
-            "aspect": flat_aspect[mask],
+            "cell_id": grid_raster[in_grid].astype(np.int64),
+            "elevation": dem_array[in_grid],
+            "slope": pendiente_array[in_grid],
+            "roughness": rugosidad_array[in_grid],
+            "aspect_class": clasificar_aspecto(orientacion_array)[in_grid],
         }
     )
-
-    # Limpiar valores de nodata de los arrays originales en el dataframe
-    df_pixels = df_pixels[
-        (df_pixels["alt"] != -9999.0)
-        & (df_pixels["slope"] != -9999.0)
-        & (df_pixels["aspect"] != -9999.0)
+    result = pd.DataFrame({"cell_id": gdf_grid["cell_id"].to_numpy(dtype=np.int64)})
+    valid_stats = pixels[
+        (pixels["elevation"] != NODATA_VALUE)
+        & (pixels["slope"] != NODATA_VALUE)
+        & (pixels["roughness"] != NODATA_VALUE)
     ]
-
-    # Agrupar y calcular estadísticas zonales
-    logger.info("Agrupando y calculando promedios por cell_id...")
-    df_agrupado = (
-        df_pixels.groupby("cell_id")
+    statistics = (
+        valid_stats.groupby("cell_id")
         .agg(
-            altitud_media=("alt", "mean"),
-            pendiente_media=("slope", "mean"),
-            orientacion_media=("aspect", "mean"),
+            elevation_mean=("elevation", "mean"),
+            elevation_std=("elevation", "std"),
+            slope_mean=("slope", "mean"),
+            slope_std=("slope", "std"),
+            roughness_mean=("roughness", "mean"),
+            roughness_std=("roughness", "std"),
         )
         .reset_index()
     )
+    result = result.merge(statistics, on="cell_id", how="left")
 
-    # Clasificar la orientación predominante de cada celda
-    df_agrupado["orientacion_clase"] = df_agrupado["orientacion_media"].apply(
-        clasificar_orientacion
-    )
+    total = pixels.groupby("cell_id").size().rename("total")
+    valid_aspect = pixels[pixels["aspect_class"] != -1]
+    valid_count = valid_aspect.groupby("cell_id").size().rename("valid")
+    result = result.merge(total, on="cell_id", how="left").merge(valid_count, on="cell_id", how="left")
+    result["valid"] = result["valid"].fillna(0)
+    for class_index, variable in enumerate(ASPECT_VARIABLES, start=1):
+        count = (valid_aspect["aspect_class"] == class_index).groupby(valid_aspect["cell_id"]).sum()
+        result = result.merge(count.rename(variable), on="cell_id", how="left")
+        result[variable] = result[variable].fillna(0) / result["valid"].replace(0, np.nan)
+    result[ASPECT_NODATA_VARIABLE] = 1 - result["valid"] / result["total"].replace(0, np.nan)
 
-    return df_agrupado
+    # Alias de compatibilidad para los consumidores vectoriales preexistentes.
+    result["orientacion_media"] = np.nan
+    result["orientacion_clase"] = result[ASPECT_VARIABLES].idxmax(axis=1).where(result["valid"] > 0)
+    result = result.drop(columns=["total", "valid"])
+    result["altitud_media"] = result["elevation_mean"]
+    result["pendiente_media"] = result["slope_mean"]
+    return result
+
+
+def crear_datacubo_topografia(cube: xr.Dataset, topografia: pd.DataFrame) -> xr.Dataset:
+    """Inserta las variables topográficas por ``cell_id`` en el cubo espacial."""
+    if "is_galicia" not in cube:
+        raise ValueError("El cubo debe incluir la máscara is_galicia.")
+    missing = set(TOPOGRAPHY_VARIABLES) - set(topografia.columns)
+    if missing:
+        raise ValueError(f"Faltan variables topográficas: {sorted(missing)}")
+
+    topography = cube.copy()
+    ny, nx = cube["is_galicia"].shape
+    cell_ids = topografia["cell_id"].to_numpy(dtype=np.int64)
+    if (cell_ids < 0).any() or (cell_ids >= ny * nx).any():
+        raise ValueError("Los cell_id no pertenecen a la malla del cubo.")
+    rows, columns = np.divmod(cell_ids, nx)
+    for variable in TOPOGRAPHY_VARIABLES:
+        values = np.full((ny, nx), np.nan, dtype=np.float32)
+        values[rows, columns] = topografia[variable].to_numpy(dtype=np.float32)
+        topography[variable] = (("y", "x"), values)
+
+    topography.attrs = {
+        "title": "Topographic variables",
+        "description": "Topographic variables aggregated to the 1 km spatial grid.",
+        "module": "topography",
+        "source": "Copernicus DEM GLO-30",
+        "crs": cube.attrs["crs"],
+        "spatial_resolution": cube.attrs["spatial_resolution"],
+        "roughness_method": "3x3 local elevation standard deviation",
+    }
+    for variable in TOPOGRAPHY_VARIABLES:
+        topography[variable].attrs = {
+            "units": "fraction" if variable.startswith("aspect_") else "m",
+        }
+    topography["slope_mean"].attrs["units"] = "degrees"
+    topography["slope_std"].attrs["units"] = "degrees"
+    return topography
+
+
+def guardar_datacubo_topografia(topography: xr.Dataset, ruta_salida: Path) -> None:
+    """Guarda el datacubo topográfico en formato NetCDF."""
+    ruta_salida.parent.mkdir(parents=True, exist_ok=True)
+    topography.to_netcdf(ruta_salida)
