@@ -10,7 +10,7 @@ import pandas as pd
 import xarray as xr
 
 DEFAULT_START_DATE = "2018-12-01"
-DEFAULT_END_DATE = "2023-12-31"
+DEFAULT_END_DATE = "2023-11-23"
 DEFAULT_RAW_DIR = Path("data/raw/meteorology/era5")
 DEFAULT_OUTPUT = Path("data/processed/meteorology/era5_daily_2018_2023.nc")
 FILE_PATTERN = re.compile(r"era5_?land_galicia_(\d{4})_(\d{2})\.nc$")
@@ -27,7 +27,15 @@ DAILY_VARIABLES = (
     "wind_speed_max",
     "wind_speed_max_12_18h",
     "precipitation_sum",
+    "precipitation_sum_1d",
+    "precipitation_sum_3d",
+    "precipitation_sum_7d",
+    "precipitation_sum_14d",
+    "precipitation_sum_30d",
+    "consecutive_dry_days",
 )
+PRECIPITATION_WINDOWS = (1, 3, 7, 14, 30)
+DRY_DAY_THRESHOLD_MM = 1.0
 
 
 def listar_archivos_era5(
@@ -77,6 +85,40 @@ def _daily(data: xr.DataArray, operation: str) -> xr.DataArray:
     return result.rename({"date": "time"}).assign_coords(time=pd.to_datetime(result.date.values))
 
 
+def add_meteorology_accumulations(daily: xr.Dataset) -> xr.Dataset:
+    """Añade acumulados de lluvia y rachas secas, incluyendo el día observado.
+
+    No aplica desplazamiento temporal: por ejemplo, ``precipitation_sum_30d``
+    para la fecha T contiene la precipitación de T-29 a T, ambas inclusive.
+    """
+    output = daily.copy()
+    precipitation = output["precipitation_sum"]
+    for window in PRECIPITATION_WINDOWS:
+        name = f"precipitation_sum_{window}d"
+        output[name] = precipitation.rolling(time=window, min_periods=window).sum().astype(np.float32)
+        output[name].attrs = {
+            "long_name": f"Precipitation accumulated over {window} days",
+            "units": "mm",
+            "time_contract": f"Includes the observation date and the preceding {window - 1} days.",
+        }
+
+    values = precipitation.values
+    dry_days = np.zeros(values.shape, dtype=np.float32)
+    streak = np.zeros(values.shape[1:], dtype=np.float32)
+    for time_index in range(values.shape[0]):
+        is_dry = np.isfinite(values[time_index]) & (values[time_index] < DRY_DAY_THRESHOLD_MM)
+        streak = np.where(is_dry, streak + 1, 0.0)
+        dry_days[time_index] = np.where(np.isfinite(values[time_index]), streak, np.nan)
+    output["consecutive_dry_days"] = (precipitation.dims, dry_days)
+    output["consecutive_dry_days"].attrs = {
+        "long_name": "Consecutive dry days",
+        "units": "days",
+        "dry_day_threshold": f"precipitation_sum < {DRY_DAY_THRESHOLD_MM} mm",
+        "time_contract": "Includes the observation date; no temporal shift applied.",
+    }
+    return output
+
+
 def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
     """Create daily observations. No temporal shift is applied."""
     temperature = hourly["t2m"] - 273.15
@@ -105,6 +147,7 @@ def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
             "precipitation_sum": _daily(hourly["tp"] * 1000, "max"),
         }
     ).astype(np.float32)
+    output = add_meteorology_accumulations(output)
     output.attrs = {
         "title": "Daily ERA5-Land meteorology for Galicia",
         "source": "Copernicus CDS reanalysis-era5-land",

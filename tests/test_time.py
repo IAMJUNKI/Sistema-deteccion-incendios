@@ -5,16 +5,16 @@ import numpy as np
 from src.features.time import TIME_VARIABLES, crear_datacubo_temporal
 
 
-def test_cubo_temporal_por_defecto_cubre_contexto_y_periodo_historico() -> None:
-    """El rango incluye diciembre de contexto y todos los días de 2019-2023."""
+def test_cubo_temporal_por_defecto_cubre_periodo_historico() -> None:
+    """El rango coincide exactamente con el periodo objetivo definido."""
     dataset = crear_datacubo_temporal()
 
-    assert len(dataset.time) == 1857
-    assert str(dataset.time.min().values)[:10] == "2018-12-01"
-    assert str(dataset.time.max().values)[:10] == "2023-12-31"
+    assert len(dataset.time) == 1788
+    assert str(dataset.time.min().values)[:10] == "2019-01-01"
+    assert str(dataset.time.max().values)[:10] == "2023-11-23"
     assert set(TIME_VARIABLES).issubset(dataset.data_vars)
     assert int(dataset.sel(time="2020-02-29")["day_of_year"]) == 60
-    assert int(dataset.sel(time="2023-12-31")["is_weekend"]) == 1
+    assert int(dataset.sel(time="2023-11-23")["is_weekend"]) == 0
 
 
 def test_variables_ciclicas_estan_acotadas() -> None:

@@ -19,7 +19,7 @@ DEFAULT_EVENTS_OUTPUT = Path("data/processed/target/egif_events_2018_2023.gpkg")
 DEFAULT_TARGET_OUTPUT = Path("data/processed/target/egif_target_2018_2023.parquet")
 DEFAULT_METADATA_OUTPUT = Path("data/processed/target/egif_target_2018_2023_metadata.json")
 DEFAULT_START_DATE = "2018-01-01"
-DEFAULT_END_DATE = "2023-12-31"
+DEFAULT_END_DATE = "2023-11-23"
 EVENT_COLUMNS = [
     "egif_id",
     "fecha",

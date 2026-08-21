@@ -11,11 +11,13 @@ import xarray as xr
 DEFAULT_SPATIAL_CUBE = Path("data/processed/cube_topography_test.nc")
 DEFAULT_TOPOGRAPHY_CUBE = Path("data/processed/topography_test.nc")
 DEFAULT_LANDCOVER_CUBE = Path("data/processed/landcover_test.nc")
-DEFAULT_TIME_CUBE = Path("data/processed/time_2018_2023.nc")
+DEFAULT_TIME_CUBE = Path("data/processed/time_2019_2023.nc")
 DEFAULT_METEOROLOGY_CUBE = Path("data/processed/meteorology_2018_2023.nc")
 DEFAULT_EGIF_TARGET = Path("data/processed/target/egif_target_2018_2023.parquet")
 DEFAULT_EGIF_METADATA = Path("data/processed/target/egif_target_2018_2023_metadata.json")
-DEFAULT_OUTPUT = Path("data/processed/datacube_2018_2023.nc")
+DEFAULT_OUTPUT = Path("data/processed/datacube_2019_2023.nc")
+DATACUBE_START_DATE = "2019-01-01"
+DATACUBE_END_DATE = "2023-11-23"
 
 
 def construir_datacubo_completo(
@@ -27,6 +29,8 @@ def construir_datacubo_completo(
     egif_target_path: str | Path,
     egif_metadata_path: str | Path,
     output_path: str | Path,
+    start_date: str = DATACUBE_START_DATE,
+    end_date: str = DATACUBE_END_DATE,
 ) -> None:
     """Une las capas estáticas, temporales, meteorológicas y el target EGIF.
 
@@ -45,6 +49,8 @@ def construir_datacubo_completo(
         xr.open_dataset(time_cube_path) as temporal,
         xr.open_dataset(meteorology_cube_path) as meteorology,
     ):
+        temporal = temporal.sel(time=slice(start_date, end_date))
+        meteorology = meteorology.sel(time=slice(start_date, end_date))
         target_values = np.full(
             (meteorology.sizes["time"], meteorology.sizes["y"], meteorology.sizes["x"]),
             np.nan,
@@ -90,10 +96,7 @@ def construir_datacubo_completo(
         )
         complete.attrs = {
             "title": "Galicia wildfire historical datacube",
-            "period": (
-                f"{pd.Timestamp(complete.time.min().values):%Y-%m-%d} to "
-                f"{pd.Timestamp(complete.time.max().values):%Y-%m-%d}"
-            ),
+            "period": f"{start_date} to {end_date}",
             "egif_observed_until": observed_end.date().isoformat(),
             "target_contract": "Dates without EGIF coverage are missing, never negative.",
         }
@@ -118,6 +121,8 @@ def main() -> None:
     parser.add_argument("--egif-target", default=str(DEFAULT_EGIF_TARGET))
     parser.add_argument("--egif-metadata", default=str(DEFAULT_EGIF_METADATA))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
+    parser.add_argument("--start-date", default=DATACUBE_START_DATE)
+    parser.add_argument("--end-date", default=DATACUBE_END_DATE)
     args = parser.parse_args()
     construir_datacubo_completo(
         args.spatial_cube,
@@ -128,9 +133,10 @@ def main() -> None:
         args.egif_target,
         args.egif_metadata,
         args.output,
+        args.start_date,
+        args.end_date,
     )
 
 
 if __name__ == "__main__":
     main()
-

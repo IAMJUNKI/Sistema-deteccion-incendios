@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 DEFAULT_START_DATE = date(2018, 12, 1)
-DEFAULT_END_DATE = date(2023, 12, 31)
+DEFAULT_END_DATE = date(2023, 11, 23)
 DATASET = "reanalysis-era5-land"
 GALICIA_AREA = [43.8, -9.3, 41.8, -6.7]
 ERA5_VARIABLES = [
