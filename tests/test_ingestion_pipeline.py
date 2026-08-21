@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.ingestion.pipeline import ejecutar_pipeline_meteorologia
+from src.ingestion.pipeline import ejecutar_pipeline_egif, ejecutar_pipeline_meteorologia
 
 
 def test_ejecutar_pipeline_procesa_e_interpola(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,3 +33,15 @@ def test_ejecutar_pipeline_no_omite_diario_inexistente() -> None:
         ejecutar_pipeline_meteorologia(
             "static.nc", "grid.gpkg", daily_output_path="missing_daily.nc", skip_daily=True
         )
+
+
+def test_ejecutar_pipeline_egif_delega_en_el_procesador(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(
+        "src.ingestion.pipeline.procesar_egif", lambda *args: calls.append(args) or {"ok": True}
+    )
+
+    result = ejecutar_pipeline_egif("egif.xml", "grid.gpkg")
+
+    assert result == {"ok": True}
+    assert calls[0][0:2] == ("egif.xml", "grid.gpkg")

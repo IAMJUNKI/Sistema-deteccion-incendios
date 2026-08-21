@@ -1,8 +1,15 @@
-"""Orquestación reproducible de la ingesta meteorológica histórica."""
+"""Orquestación reproducible de la ingesta histórica del proyecto."""
 
 import argparse
 from pathlib import Path
+from typing import Any
 
+from src.ingestion.ingest_egif import (
+    DEFAULT_EVENTS_OUTPUT,
+    DEFAULT_METADATA_OUTPUT,
+    DEFAULT_TARGET_OUTPUT,
+    procesar_egif,
+)
 from src.ingestion.meteorology import (
     DEFAULT_END_DATE,
     DEFAULT_OUTPUT,
@@ -25,23 +32,7 @@ def ejecutar_pipeline_meteorologia(
     end_date: str = DEFAULT_END_DATE,
     skip_daily: bool = False,
 ) -> None:
-    """Procesa ERA5-Land y lo incorpora al cubo espacial de 1 km.
-
-    No descarga datos: los NetCDF horarios deben estar previamente en
-    ``data/raw/meteorology/era5``. Esto permite repetir el pipeline sin hacer
-    peticiones a Copernicus y conserva la procedencia de los datos originales.
-
-    Args:
-        spatial_cube_path: Cubo estático con coordenadas ``x``, ``y`` e
-            ``is_galicia``.
-        grid_path: Rejilla vectorial con ``cell_id`` e ``is_galicia``.
-        raw_dir: Directorio de NetCDF horarios mensuales de ERA5-Land.
-        daily_output_path: Destino del NetCDF diario intermedio.
-        meteorology_cube_path: Destino del cubo meteorológico interpolado.
-        start_date: Fecha inicial inclusiva, en formato ISO.
-        end_date: Fecha final inclusiva, en formato ISO.
-        skip_daily: Reutiliza el NetCDF diario existente si es válido.
-    """
+    """Procesa ERA5-Land y lo incorpora al cubo espacial de 1 km."""
     daily_output_path = Path(daily_output_path)
     if not skip_daily:
         procesar_era5(raw_dir, daily_output_path, start_date, end_date)
@@ -60,10 +51,31 @@ def ejecutar_pipeline_meteorologia(
     )
 
 
+def ejecutar_pipeline_egif(
+    xml_path: str | Path,
+    grid_path: str | Path,
+    events_output_path: str | Path = DEFAULT_EVENTS_OUTPUT,
+    target_output_path: str | Path = DEFAULT_TARGET_OUTPUT,
+    metadata_output_path: str | Path = DEFAULT_METADATA_OUTPUT,
+    start_date: str = "2018-01-01",
+    end_date: str = DEFAULT_END_DATE,
+) -> dict[str, Any]:
+    """Genera eventos EGIF y el target por celda y día sobre la rejilla actual."""
+    return procesar_egif(
+        xml_path,
+        grid_path,
+        events_output_path,
+        target_output_path,
+        metadata_output_path,
+        start_date,
+        end_date,
+    )
+
+
 def main() -> None:
-    """Ejecuta el pipeline meteorológico histórico desde la línea de comandos."""
-    parser = argparse.ArgumentParser(description="Procesa e interpola ERA5-Land sobre la rejilla.")
-    parser.add_argument("--spatial-cube", required=True, help="Cubo estático con la máscara Galicia.")
+    """Ejecuta las fases de meteorología y/o EGIF desde la línea de comandos."""
+    parser = argparse.ArgumentParser(description="Procesa la ingesta histórica sobre la rejilla.")
+    parser.add_argument("--spatial-cube", help="Cubo estático con la máscara Galicia.")
     parser.add_argument("--grid", required=True, help="Rejilla vectorial de 1 km.")
     parser.add_argument("--raw-dir", default=str(DEFAULT_RAW_DIR))
     parser.add_argument("--daily-output", default=str(DEFAULT_OUTPUT))
@@ -75,17 +87,45 @@ def main() -> None:
         action="store_true",
         help="Reutiliza el NetCDF diario ya procesado sin recalcularlo.",
     )
-    args = parser.parse_args()
-    ejecutar_pipeline_meteorologia(
-        spatial_cube_path=args.spatial_cube,
-        grid_path=args.grid,
-        raw_dir=args.raw_dir,
-        daily_output_path=args.daily_output,
-        meteorology_cube_path=args.output,
-        start_date=args.start_date,
-        end_date=args.end_date,
-        skip_daily=args.skip_daily,
+    parser.add_argument(
+        "--skip-meteorology",
+        action="store_true",
+        help="Ejecuta exclusivamente la fase EGIF.",
     )
+    parser.add_argument("--egif-xml", help="XML oficial de EGIF para incorporar la fase de incendios.")
+    parser.add_argument("--egif-events-output", default=str(DEFAULT_EVENTS_OUTPUT))
+    parser.add_argument("--egif-target-output", default=str(DEFAULT_TARGET_OUTPUT))
+    parser.add_argument("--egif-metadata-output", default=str(DEFAULT_METADATA_OUTPUT))
+    parser.add_argument("--egif-start-date", default="2018-01-01")
+    args = parser.parse_args()
+
+    if not args.skip_meteorology:
+        if not args.spatial_cube:
+            parser.error("--spatial-cube es obligatorio salvo que se use --skip-meteorology.")
+        ejecutar_pipeline_meteorologia(
+            spatial_cube_path=args.spatial_cube,
+            grid_path=args.grid,
+            raw_dir=args.raw_dir,
+            daily_output_path=args.daily_output,
+            meteorology_cube_path=args.output,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            skip_daily=args.skip_daily,
+        )
+
+    if args.egif_xml:
+        metadata = ejecutar_pipeline_egif(
+            args.egif_xml,
+            args.grid,
+            args.egif_events_output,
+            args.egif_target_output,
+            args.egif_metadata_output,
+            args.egif_start_date,
+            args.end_date,
+        )
+        print(f"EGIF: {metadata}")
+    elif args.skip_meteorology:
+        parser.error("Indica --egif-xml al usar --skip-meteorology.")
 
 
 if __name__ == "__main__":
