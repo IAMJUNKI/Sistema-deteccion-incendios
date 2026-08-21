@@ -1,0 +1,4 @@
+modelo,pr_auc,roc_auc,recall_at_fpr5,brier_score
+LightGBM Tabular 2D (Baseline),7.1e-05,0.8377,0.3235,0.001
+XGBoost Tabular 2D,4.9e-05,0.8297,0.2745,0.0007
+Red Neuronal 3D Conv3D (PyTorch),0.17909560332264932,0.8124663590926566,0.12745098039215685,0.09397318214178085

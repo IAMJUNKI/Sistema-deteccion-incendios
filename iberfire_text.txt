@@ -1,0 +1,2295 @@
+IberFire - a detailed creation of a spatio-temporal dataset for
+wildfire risk assessment in Spain
+Julen Erzibengoa Calvo1, 2 , Meritxell Gómez-Omella1 , and Izaro Goienetxea Urkizu2
+1
+
+Tekniker, Spain, {julen.ercibengoa, meritxell.gomez}@tekniker.es
+EHU, jercibengoa001@ikasle.ehu.eus, izaro.goienetxea@ehu.eus
+
+2
+
+arXiv:2505.00837v2 [cs.LG] 1 Dec 2025
+
+Abstract
+Wildfires pose a threat to ecosystems, economies and public safety, particularly in Mediterranean regions such as Spain. Accurate predictive models require high-resolution spatio-temporal
+data to capture complex dynamics of environmental and human factors. To address the scarcity
+of fine-grained wildfire datasets in Spain, we introduce IberFire: a spatio-temporal dataset with
+1 km × 1 km × 1-day resolution, covering mainland Spain and the Balearic Islands from December 2007 to December 2024. IberFire integrates 120 features across eight categories: auxiliary
+data, fire history, geography, topography, meteorology, vegetation indices, human activity and
+land cover. All features and processing rely on open-access data and tools, with a publicly
+available codebase ensuring transparency and applicability. IberFire offers enhanced spatial
+granularity and feature diversity compared to existing European datasets, and provides a reproducible framework. It supports advanced wildfire risk modelling via Machine Learning and
+Deep Learning, facilitates climate trend analysis, and informs fire prevention and land management strategies. The dataset is freely available on Zenodo to promote open research and
+collaboration.
+
+1
+
+Background & Summary
+
+Forest fires constitute a critical environmental issue with severe ecological, social, and economic
+implications. Wildfires not only destroy vast forest areas, cause the loss of natural habitats, and
+release large amounts of carbon dioxide, but also cause substantial economic damage through the
+destruction of infrastructure, housing, and productive land.
+Spain is one of the countries most affected within the European Union [1, 2]. Nearly 40% of the
+total burned area in the entire Mediterranean region of Europe between 1980 and 2008 was in Spain
+[3]. Furthermore, data from the European Forest Fire Information System (EFFIS) [4] indicate that
+over 7,000 fires have occurred in Spain since 2008, as shown in the left image of Figure 1.
+Wildfires are increasing in scale, with a growing number of autonomous communities experiencing
+wildfires spanning areas of 5,000 ha, 10,000 ha, and even 20,000 ha [5]. The year 2022 marked the
+
+Figure 1: Left: wildfires that occurred from 2008 to 2024, according to data from EFFIS. Right:
+selected area of interest to build the datacube.
+
+1
+
+most severe wildfire season, with two consecutive forest fires jointly burning over 60,000 ha in the
+same region, an area roughly equivalent to that of Madrid.
+In this context, the development of precise predictive models can support fire prevention and fire
+service management by providing early warnings and identifying high-risk areas. Physical models,
+such as the Canadian Fire Weather Index [6], leverage meteorological data and physical equations to
+make predictions; however, recent studies have shown that data-driven models often achieve superior
+performance in terms of predictive accuracy [7, 8].
+Building Machine Learning (ML) and Deep Learning (DL) models for fire risk assessment requires
+high-resolution spatio-temporal features. Many data sources are available for this purpose: the
+Corine Land Cover (CLC) [9] dataset provides a classification of land usage, ERA5-Land [10] offers
+hourly meteorological curated data and vegetation indices can be retrieved from the Copernicus Land
+Monitoring Service (CLMS) [11]. When complemented with additional variables, these data enable
+the development of robust fire-risk prediction models. However, these sources differ significantly
+in spatial and temporal resolution, format, and update frequency, making direct integration a nontrivial task.
+Datacubes are multidimensional data structures designed to standardise spatial and spatiotemporal features with varying original resolutions, providing a consistent and accessible means
+of analysis. They facilitate the modelling of complex spatio-temporal phenomena eliminating the
+need for independent processing pipelines for each data source. In the context of wildfire risk prediction, datacubes are particularly crucial, as they enable the integration of historical fire records
+alongside heterogeneous environmental variables that influence fire behaviour, like the CLC dataset
+and ERA5-Land.
+To the best of current knowledge, only two datacubes that include Spain within their area
+of interest are available for this purpose, although neither is specifically focused on the Spanish
+territory. On the one hand, SeasFire Cube [12] offers 59 variables from 2001 to 2021 with 0.25◦
+spatial resolution (approximately 27 km at the equator) and 8-day temporal resolution. While this
+dataset may be used for fire-risk predictions, its resolution is likely too coarse for practical use at
+the scale of Spain. On the other hand, Mesogeos [13] offers a 1 km spatial resolution covering the
+Mediterranean area from 2006 to 2022, with 27 spatio-temporal features. In this case, it is believed
+that incorporating a broader range of Spain-specific features could enhance forest fire risk predictive
+models, potentially improving the accuracy of the predictions.
+The IberFire [14] datacube was constructed to address this gap. It is a 1km × 1km × 1-day
+high-resolution datacube covering Spain from December 2007 to December 2024. It includes 120
+features identified in the literature as relevant to forest fire risk. All features were selected based
+on their potential to be automatically retrieved from external sources, allowing for real-time model
+deployment.
+The features of IberFire can be divided into 8 main categories: auxiliary features that assist
+in locating the cells, fire history obtained from EFFIS, geographical location information
+features, land usage from Copernicus Corine Land Cover [9], topography variables obtained
+from the European Digital Elevation Model [15], human activity related features retrieved from
+WorldPop[16] and OpenStreetMap [17], meteorological variables obtained from ERA5-Land [10],
+and vegetation indices downloaded from Copernicus Land Monitoring Service [11].
+This paper presents two main objectives. The first is the introduction and public release of the
+IberFire datacube, which improves upon existing datasets in terms of resolution and feature diversity
+for Spain. The IberFire datacube offers high-resolution modelling capabilities to gain insights not
+only into Spain’s fire risk behaviour but also into time-series modelling of climate change patterns.
+The second objective is the provision of a reproducible, systematic methodology for constructing
+similar datacubes, an approach that can be extended to model other spatio-temporal environmental phenomena. The presented methodology includes a detailed explanation of the generation of
+IberFire, along with the concepts needed to manipulate geospatial data.
+
+1.1
+
+Concepts and tools about Geographic Information Systems (GIS)
+
+Geographic features are not usually stored in commonly used formats such as CSV (Comma Separated Values); instead, specific formats that contain integrated geographical coordinates, are used;
+raster data is an example of this. Among these formats, datacubes organise spatial and temporal
+information into structured, multi-dimensional arrays. This structure enables efficient storage, retrieval, and analysis of geospatial variables over both space and time, since any cell of the grid can
+be accessed and every feature value of that cell can be retrieved. The construction of such a datacube requires an understanding of Geographic Information Systems (GIS). This subsection provides
+
+2
+
+Figure 2: Left: Example of vectorial data (blue), some burned areas retrieved from EFFIS. Right:
+Example of raster data, elevation values on the same region as the left plot at a 1km×1km resolution.
+an introduction to GIS, emphasising the main data formats and processing techniques involved in
+manipulating spatial data.
+Geographic Information Systems comprise a wide range of tools and data formats specifically
+designed for the storage, management, and visualisation of spatially-referenced data. In GIS, data
+are primarily represented using two distinct formats: vector and raster.
+Vector data represents geographic features using points, lines, and polygons, which accurately
+capture geometric locations and boundaries [18]. Each instance of a vector dataset corresponds to
+a geographic shape with some feature values assigned. This representation is particularly suited
+for discrete features such as roads or specific fire-affected areas, as exemplified in the left image of
+Figure 2.
+On the other hand, raster data represents geographic space as a regular grid of cells [19], where
+each pixel is assigned a value corresponding to a property of the geographic area, as can be seen in
+the right image of Figure 2. This data format is commonly used to represent continuous geographic
+phenomena such as climate data.
+Interpolation methods are commonly used to adjust the resolution of raster data when homogenising datasets, a process known as resampling. For instance, this process can involve converting data
+from a finer spatial resolution, such as 100m × 100m, to a coarser resolution, like 1 km × 1 km. One
+widely used interpolation technique is the nearest neighbour interpolation, which assigns the value
+of the closest input cell to the output cell. Another resampling technique is average resampling,
+which computes the mean of all input cells that fall within the extent of each output cell.
+Geographic data, whether in vector or raster format, relies on Coordinate Reference Systems
+(CRS). A CRS provides a standardised framework for accurately representing locations on the
+Earth’s surface. Different CRSs are designed to minimise spatial distortion, depending on the
+specific geographic area and the purpose of the analysis. For instance, the WGS84 CRS (also known
+as EPSG:4326), which is based on latitude and longitude, is often used for global analysis. In
+contrast, ETRS89-LAEA (also known as EPSG:3035) can be used for analysis based in Europe since
+it uses metres as units.
+Downloaded GIS data may come in different CRSs, therefore, it is essential to transform all
+datasets to a common CRS, a process known as reprojection. In this study, all spatial layers were
+reprojected to the EPSG:3035 coordinate system, which is particularly suited for European spatial
+analyses due to its equal-area properties. However, individual CRS transformations applied during
+the preprocessing stage are not detailed, as they follow standard reprojection procedures widely
+adopted in geographic data processing.
+Effectively processing geospatial data often requires the use of specialised tools. QGIS [20] is
+an open-source software employed for working with vector and raster data. This software offers an
+extensive set of functions for visualising, manipulating, automatically reprojecting, and resampling
+spatial datasets. Other tools for working with GIS data include the rasterio and xarray Python
+libraries, which provide modules for resampling raster data and creating datacubes, respectively. In
+this work, both QGIS and Python-based tools were employed, ensuring the reproducibility of the
+entire process through open-source software solutions.
+
+3
+
+DATACUBE
+Spatiotemporal
+feature 1
+
+Spatiotemporal
+feature n
+
+time
+
+time
+
+(...)
+
+y
+
+y
+
+x
+
+x
+
+Spatial feature 1
+
+Spatial feature m
+
+y
+
+y
+
+(...)
+x
+
+x
+
+Figure 3: Visual representation of a datacube.
+Datacubes
+In GIS, datacubes are essentially raster arrays stacked one on top of the other across time. Hence, for
+every timestamp, there is one raster representing the values of a specific feature at that timestamp.
+The rasters share the same CRS, coordinate values and resolution, hence, the only thing that differ
+are the values of the feature. For every feature a datacube contains, there is a set of stacked raster
+arrays; and the combination of all the features creates a datacube.
+As some features do not vary over time, in order not to store repeated values, they can be saved
+as spatial-only features; hence, only one array is saved for the entire period that the datacube covers.
+For instance, elevation values could be stored as a spatial-only feature, whereas temperature values
+should be stored as spatio-temporal. Figure 3 provides a visual representation of the datacube
+concept.
+IberFire comprises 1188 x coordinates, 920 y coordinates and 6241 timestamps (t or time), one
+every day. For each (x, y, t) cell, a vector with all the feature values on that specific cell can be
+retrieved. The values of the retrieved spatial-only features will remain constant if the value of t is
+changed but (x, y) values do not vary. And the values of the retrieved spatio-temporal features will
+change if t changes, even if (x, y) remains constant. As an example, elevation does not vary even if
+t changes, but temperature, stored as a spatio-temporal feature, varies from day to day.
+This storage approach is particularly useful for features with low temporal update frequency.
+For example, features that update annually—although technically spatio-temporal—can be stored
+as spatial-only layers. This avoids storing 365 identical rasters per year and instead requires just a
+single raster array, significantly reducing redundancy and storage requirements.
+
+2
+
+Methods
+
+The creation of a datacube involves several steps. First, the spatio-temporal extent and resolution
+should be defined, which is influenced by the required granularity for the problem, the available
+computational resources, and the inherent resolution of the data to be employed. Once the spatiotemporal grid has been generated, the desired features should be downloaded and incorporated into
+the datacube. This is the most time-consuming stage, as it is highly feature-specific and requires the
+careful curation and integration of each variable. To achieve this, data are usually reprojected to a
+different coordinate reference system, interpolated, and combined.
+This section provides a detailed analysis of the construction process of the IberFire datacube.
+Subsection 2.1 describes the generation of the spatio-temporal grid. After that, Subsection 2.2
+analyses the auxiliary features introduced to the datacube. Then, Subsection 2.3 presents a thorough
+explanation of the integration of the primary output feature, is fire, alongside the integration of
+the baseline model, the Fire Weather Index (FWI). Subsequently, Subsections 2.4 to 2.9 describe
+the incorporation of the explanatory variables into the dataset. Finally, Subsection 2.10 provides a
+summary of all external sources utilised in the construction of the datacube.
+
+4
+
+2.1
+
+Grid generation
+
+Given that datacubes are many equal-shaped raster arrays arranged along the time dimension, the
+grid of a datacube is required to be rectangular. A key consideration in the creation of the grid was
+ensuring that each cell represented exactly 1 km2 of area, which ensures that all cells have the same
+importance and no cell is underrepresented. To achieve this, the grid was created on the EPSG:3035
+CRS, whose units are metres. Within QGIS, the region of interest shown in the right image of Figure
+1 was selected, and an empty base raster file with a 1km × 1km spatial resolution was generated on
+that region. This empty raster file was then saved as a reference for the subsequent generation of
+the datacube and the creation of all the layers it contains.
+The datacube was then constructed in Python using the xarray package. To build a datacube,
+it is necessary to define coordinate values in each dimension, hence, for x, y, and t dimensions. Each
+coordinate consists of a vector of values that are used to locate the individual grid cells. These
+coordinates are similar to indices, but they can be any ordered set of values, including temporal
+sequences such as dates.
+The base raster file’s horizontal and vertical coordinate values served as the coordinates of the x
+and y dimensions of the datacube respectively. Then, for the temporal dimension, the coordinates
+consisted of daily timestamps from 01/12/2007 to 31/12/2024. The final datacube comprised 1188
+values for the x dimension, 920 values for the y dimension, and 6241 values for the time axis. As
+a result, the datacube contains a total of 1188 · 920 · 6241 ≈ 6.8 · 109 different cells, each storing
+different features. However, not all of these cells should be used for modelling, since not all the cells
+fall inside Spain, as mentioned in Section 5. The amount of usable cells is 498530 · 6241 ≈ 3.1 · 109 .
+One important remark is that when adding new features to the datacube, it is possible to select
+the dimensions that affect the feature. For example, a feature that remains constant over time
+would only require the x and y dimensions, excluding the time axis, as represented in Figure 3. This
+approach prevents redundant storage of repeated values for time-invariant features.
+
+2.2
+
+Auxiliary features
+
+After constructing the empty datacube, three auxiliary features were added to the dataset: x index,
+y index, and is spain. These features, as explained in more detail in Section 5, are not intended
+to serve as explanatory variables, but rather to facilitate the manipulation and processing of the
+datacube.
+The first two auxiliary variables, x index and y index, were introduced to facilitate the identification of grid cells. The x index variable consists of a sequence of integer values representing the
+horizontal index of each cell, ordered from left to right. Similarly, the y index indicates the vertical
+index, ordered from top to bottom. These auxiliary variables are particularly useful when individual
+cell values are extracted from the datacube and stored in a standard CSV format, as they allow
+each instance to be accurately mapped back to its corresponding original spatial location within the
+datacube.
+The third auxiliary feature, is spain, identifies the cells corresponding to Spanish territory,
+which are the only ones for which predictions should be generated. This layer was derived from a
+vectorial dataset containing the boundaries of Spain obtained from simplemaps [21] and processed
+with the QGIS software.
+Given that these auxiliary features do not vary over time, they were stored as spatial features,
+with only the x and y coordinate values.
+
+2.3
+
+Fire history: EFFIS
+
+The historical fire data for Spain were obtained using the EFFIS data request format [4]. The
+raw data were retrieved in vectorial format and contained geometries representing the burned area
+of historical fire events, along with the corresponding start and end dates of each fire event. To
+integrate this information into the datacube, the intersection of the spatial grid cells with the fire
+geometries in QGIS was calculated, as illustrated in Figure 4. Subsequently, a binary layer in the
+datacube, named is fire, was created. A value of 1 was assigned to cells that intersected with fire
+geometries and fell within the corresponding temporal interval defined by the fire’s start and end
+dates. Following the definition of fire danger from [7], the previous process was executed on fires
+(geometries retrieved from EFFIS) with a burned area greater than 5 ha. This is because fire danger
+can be viewed as the combined risk of a fire igniting and the risk of that fire growing large (>5 ha).
+Introducing small wildfires as fire instances (is fire = 1) could lead to inconsistencies, as these
+
+5
+
+small fires did not grow larger for certain reasons (for example, high humidity). Therefore, the fire
+risk for these small fires was low, even though a fire was present.
+
+Figure 4: Left: raw geometries of the fire events downloaded from EFFIS. Right: the same geometries
+intersected with the spatial grid.
+After that, the is near fire layer was added, which is a binary feature indicating whether a cell
+is within a 25 × 25 cell area centred on each is fire = 1 instance, as well as the 10 days preceding
+the event. This results in a 25 × 25 × 10-sized box prior to each fire cell. The is near fire feature
+is particularly useful for identifying true non-fire events that are neither spatially nor temporally
+close to fire events, thereby avoiding the inclusion of near-fire instances that may closely resemble
+actual fire conditions due to their proximity.
+Both of these features were added to the datacube as spatio-temporal features, hence, with all
+three x, y, and t dimensions.
+Baseline model: Fire Weather Index
+The Fire Weather Index (FWI) [6] was introduced to IberFire as a baseline model. It leverages
+temperature, wind, relative humidity and precipitation data, along with physical equations to predict
+a continuous value that represents fire risk. The FWI takes values in the range [0, + inf), although
+the most common values lie between 0 and 50. Depending on the value that it has, fire risk levels
+are assigned according to Table 1 [22].
+Very low
+< 5.2
+
+Low
+
+Moderate
+
+Hight
+
+Very high Extreme
+
+5.2 - 11.2 11.2 - 21.3 21.3 -38.0
+
+38.0 - 50
+
+≥ 50
+
+Table 1: FWI risk levels.
+To introduce FWI to IberFire, data from the Copernicus Emergency Management Service (CEMS)
+[23] was downloaded, which provides daily values at a spatial resolution of 0.25º × 0.25º latitudelongitude, equivalent to approximately 27.5 km. Since the original dataset resolution is lower than
+desired, the data was interpolated to a 1 km × 1 km resolution using nearest-neighbor interpolation.
+This feature was also added as a spatio-temporal feature.
+
+2.4
+
+Geographical location information
+
+The geographical location information included in the IberFire datacube plays a crucial role. As
+illustrated in Figure 1, certain regions inherently present a higher susceptibility to wildfires than
+others. Therefore, the inclusion of features representing the spatial position of each cell was deemed
+advantageous for the models.
+Five features were added for this purpose: x coordinate, y coordinate, is sea, is waterbody
+and AutonomousCommunities. Since these geographical location features are time-invariant, they
+were stored in the datacube using only the spatial dimensions.
+
+6
+
+The first two features consist of the values of the coordinates of each cell in the EPSG:3035
+coordinate reference system. The next two features, is sea and is waterbody, are binary indicators
+that denote whether a given cell is located over open sea or inland water, respectively. These features
+were calculated using QGIS with data from the European Digital Elevation Model [15].
+Lastly, the AutonomousCommunities feature represents the level 2 NUTS (Nomenclature of Territorial Units for Statistics) [24] division of Spain, with values listed in Table 2. However, since the
+region of interest does not include Ceuta, Melilla, and the Canary Islands, the corresponding values
+for these regions do not appear in the dataset. The feature was generated in QGIS by converting
+a vector dataset containing the shapes of the autonomous communities of Spain [25] into a raster
+layer, assigning to each cell the corresponding value from Table 2 based on its intersection with the
+appropriate autonomous community.
+Value
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+Region
+Nodata
+Andalucı́a
+Aragón
+Principado de Asturias
+Islas Baleares
+Canarias
+Cantabria
+Castilla y León
+Castilla - La Mancha
+Cataluña
+
+Value
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+
+Region
+Comunidad Valenciana
+Extremadura
+Galicia
+Comunidad de Madrid
+Región de Murcia
+Comunidad Foral de Navarra
+Paı́s Vasco
+La Rioja
+Ceuta
+Melilla
+
+Table 2: Values of the feature AutonomousCommunities and their corresponding regions.
+
+2.5
+
+Land usage: Corine Land Cover
+
+The Copernicus Corine Land Cover (CLC) dataset [9] offers a standardised classification of land
+cover types across Europe, distinguishing 44 discrete categories. It represents the continent as a
+regular grid of 100m × 100m cells, assigning to each cell an integer value between 1 and 44 that
+corresponds to a specific land cover class.
+As detailed in Table 3, each of the 44 land cover classes is associated with three hierarchical
+labels that facilitate their aggregation into broader thematic groups. The third label, Label 3, is the
+most specific, assigning a unique identifier to each of the 44 classes, therefore comprising 44 distinct
+categories. Label 2 serves as an intermediate level, grouping related Label 3 classes into broader
+categories, while Label 1 represents the highest level of aggregation, clustering the 44 land classes
+into 5 major land cover types.
+For instance, the class labelled as Continuous urban fabric in Label 3 is grouped under the
+category Urban fabric in Label 2, which, in turn, falls under the broader category Artificial surfaces
+in Label 1. More specifically, the category Urban fabric includes classes 1 and 2, whereas Artificial
+surfaces includes classes 1 through 11. This hierarchical structure enables both detailed analysis
+and higher-level generalization.
+The original spatial resolution of the CLC dataset is 100m × 100m; consequently, resampling of
+the data was needed to match the 1km × 1km resolution of the IberFire datacube. Using QGIS,
+the proportion of each of the 44 classes within each 1km × 1km cell was calculated. This resulted
+in 44 features, denoted as CLC i for i = 1, 2, . . . , 44, with values ranging between 0 and 1.
+Given that these features represent proportions and therefore sum up to 1 for each 1km ×
+1km cell, and also considering the hierarchical structure of the CLC classification, five additional
+features were derived corresponding to the higher-level groupings defined in Label 1. Specifically,
+for each higher-level category, its proportion within a cell was computed by summing the relevant
+CLC i variables that fall inside the category. For example, the proportion of Artificial surfaces was
+obtained by aggregating the values of CLC 1 through CLC 11.
+The same procedure was applied to the intermediate level of the hierarchy, Label 2, resulting
+in the creation of 14 additional aggregated features. Although 15 categories exist at this level, the
+Pastures category (corresponding to class 18 in Label 3) was excluded, as it consists of a single class
+and thus provides no added abstraction over the original variable.
+1 Complete description shortened.
+
+7
+
+Class Label 1
+1
+Artificial surfaces
+2
+Artificial surfaces
+3
+Artificial surfaces
+4
+Artificial surfaces
+5
+Artificial surfaces
+6
+Artificial surfaces
+7
+Artificial surfaces
+8
+Artificial surfaces
+9
+Artificial surfaces
+10
+Artificial surfaces
+11
+Artificial surfaces
+12
+Agricultural areas
+13
+Agricultural areas
+14
+Agricultural areas
+15
+Agricultural areas
+16
+Agricultural areas
+17
+Agricultural areas
+18
+Agricultural areas
+19
+Agricultural areas
+20
+Agricultural areas
+21
+Agricultural areas
+22
+Agricultural areas
+23
+Forest and semi natural areas
+24
+Forest and semi natural areas
+25
+Forest and semi natural areas
+26
+Forest and semi natural areas
+27
+Forest and semi natural areas
+28
+Forest and semi natural areas
+29
+Forest and semi natural areas
+30
+Forest and semi natural areas
+31
+Forest and semi natural areas
+32
+Forest and semi natural areas
+33
+Forest and semi natural areas
+34
+Forest and semi natural areas
+35
+Wetlands
+36
+Wetlands
+37
+Wetlands
+38
+Wetlands
+39
+Wetlands
+40
+Water bodies
+41
+Water bodies
+42
+Water bodies
+43
+Water bodies
+44
+Water bodies
+
+Label 2
+Urban fabric
+Urban fabric
+Industrial, commercial and transport units
+Industrial, commercial and transport units
+Industrial, commercial and transport units
+Industrial, commercial and transport units
+Mine, dump and construction sites
+Mine, dump and construction sites
+Mine, dump and construction sites
+Artificial, non-agricultural vegetated areas
+Artificial, non-agricultural vegetated areas
+Arable land
+Arable land
+Arable land
+Permanent crops
+Permanent crops
+Permanent crops
+Pastures
+Heterogeneous agricultural areas
+Heterogeneous agricultural areas
+Heterogeneous agricultural areas
+Heterogeneous agricultural areas
+Forests
+Forests
+Forests
+Scrub and/or herbaceous vegetation associations
+Scrub and/or herbaceous vegetation associations
+Scrub and/or herbaceous vegetation associations
+Scrub and/or herbaceous vegetation associations
+Open spaces with little or no vegetation
+Open spaces with little or no vegetation
+Open spaces with little or no vegetation
+Open spaces with little or no vegetation
+Open spaces with little or no vegetation
+Inland wetlands
+Inland wetlands
+Maritime wetlands
+Maritime wetlands
+Maritime wetlands
+Inland waters
+Inland waters
+Marine waters
+Marine waters
+Marine waters
+
+Label 3
+Continuous urban fabric
+Discontinuous urban fabric
+Industrial or commercial units
+Road and rail networks and associated land
+Port areas
+Airports
+Mineral extraction sites
+Dump sites
+Construction sites
+Green urban areas
+Sport and leisure facilities
+Non-irrigated arable land
+Permanently irrigated land
+Rice fields
+Vineyards
+Fruit trees and berry plantations
+Olive groves
+Pastures
+Permanent crops1
+Complex cultivation patterns
+Land principally occupied by agriculture 1
+Agro-forestry areas
+Broad-leaved forest
+Coniferous forest
+Mixed forest
+Natural grasslands
+Moors and heathland
+Sclerophyllous vegetation
+Transitional woodland-shrub
+Beaches, dunes, sands
+Bare rocks
+Sparsely vegetated areas
+Burnt areas
+Glaciers and perpetual snow
+Inland marshes
+Peat bogs
+Salt marshes
+Salines
+Intertidal flats
+Water courses
+Water bodies
+Coastal lagoons
+Estuaries
+Sea and ocean
+
+Table 3: Definitions of the 44 classes from Corine Land Cover.
+To recapitulate, a total of 63 explanatory variables were derived from the CLC dataset and
+incorporated into IberFire: 44 corresponding to the most detailed classification level Label 3, 14 to
+the intermediate level Label 2, and 5 to the highest level of aggregation Label 1.
+The CLC dataset is updated every six years; accordingly, the 2006 [26], 2012 [27], and 2018 [28]
+editions were used in this work, as the 2024 version was not yet available at the time of writing.
+As previously discussed, time-invariant features in the datacube can be stored using only spatial
+dimensions. Given the low update frequency of the CLC dataset, including a temporal dimension
+would result in unnecessary duplication of values. Therefore, all CLC-derived features were stored
+without the time axis. To differentiate between editions, the corresponding year was appended to
+each feature name, as better described in Table 7 of Section 3. Each of the three CLC editions
+contributed 63 variables, this approach ultimately yielded 63 · 3 = 189 distinct CLC-derived spatialonly features in the datacube. However, since only one CLC edition is relevant for any given (x, y, t)
+cell, these 189 variables effectively represent just 63 unique features. The selection of the appropriate
+CLC edition for each cell is described in detail in Section 5.
+
+2.6
+
+Topography variables: European Digital Elevation Model
+
+Topography is a well-established factor influencing the spread and intensity of forest fires. To capture
+these effects, topographic features were downloaded from the European Digital Elevation Model (EUDEM) provided by OpenTopography [15]. The original EU-DEM dataset offers elevation values at
+a 30m×30m spatial resolution. Using this elevation data, additional variables such as slope, aspect
+and roughness of the terrain can be derived, all of which are also offered by OpenTopography.
+However, the specific methods used by OpenTopography to calculate the slope and roughness are
+not documented, leaving the units of these variables undefined. In contrast, the aspect is expressed
+in degrees, ranging from 0◦ to 360◦ , indicating the direction in which the slope of each 30m×30m
+terrain cell faces, with 0° corresponding to the north and the values increasing clockwise.
+The elevation, slope, roughness and aspect were downloaded and, for the first three features, the
+mean and standard deviation in each 1km×1km cell were calculated. Therefore, a total of 6 different
+features were obtained from elevation, slope, and roughness. For aspect, the feature was discretised
+into 8 different classes defined in Table 4. For each of the 1km×1km cell, the proportion of each
+class inside the cell was calculated, resulting in 8 new features called aspect i for i = 1, . . . , 8.
+Additionally, an extra feature, aspect NODATA, was included to represent the proportion of pixels
+within each 1km×1km cell for which no aspect value was available, which is highly correlated with
+is waterbody. This lack of data typically occurs in areas covered by lakes and rivers, where aspect
+
+8
+
+values are undefined due to the absence of terrain elevation gradients.
+Class 1 Class 2 Class 3
+(0, 45]
+
+Class 4
+
+Class 5
+
+Class 6
+
+Class 7
+
+Class 8
+
+(45, 90] (90, 135] (135, 180] (180, 225] (225, 270] (270, 315] (315, 360]
+Table 4: Orientation classes grouped into 45◦ intervals.
+
+These processes were performed using QGIS software, and the resulting 15 features were subsequently integrated into the datacube, utilizing only spatial coordinates.
+
+2.7
+
+Human activity
+
+It is widely recognised that most wildfires are directly related to human activities, either intentionally
+or accidentally [29]. To model this phenomenon, six human-related explanatory variables were
+considered: distance to roads, distance to waterways, distance to railways, designation within the
+Natura 2000 protected network [30], population density, and holiday periods. These variables were
+used to derive a total of 20 features, which were subsequently integrated into the datacube.
+The first two variables, distance to roads [31] and distance to waterways [32], were obtained from
+WorldPop [16], which provides data at an approximate spatial resolution of 100m×100m, represented
+in kilometres. To upscale the data to the target resolution, the mean and standard deviation within
+each 1km×1km cell were computed using QGIS. These aggregated statistics were then incorporated
+into the datacube, resulting in four derived features from the original two variables. These features
+were considered invariant over time and therefore added with only spatial coordinates.
+For distance to railways, railway vectorial data in Spain were retrieved from OpenStreetMap
+[17]. Using QGIS, a 100m×100m raster layer was generated to represent the distance to the nearest
+railway geometry from each 100m×100m cell. Then, the same procedure applied to the previous
+two variables was then applied here as well, and the average and standard deviation were calculated.
+These two features were then added to the datacube as spatial data.
+The Natura 2000 network, a European ecological network for biodiversity conservation, was
+included due to its relevance to fire data reported by EFFIS. In the vector fire data provided
+by EFFIS, the proportion of each forest fire that occurred within Natura 2000 protected areas is
+specified. Using vectorial boundaries of the Natura 2000 network, a binary raster layer was created
+with QGIS indicating whether each 1km×1km cell falls within the protected area. Since this variable
+remains constant over time, it was integrated as a spatial layer into the datacube.
+Population density was incorporated as a proxy for human presence and potential ignition sources.
+Annual data were obtained from WorldPop for the years 2008 to 2020 [33], due to the unavailability
+of more recent data. The original data were retrieved with a resolution of approximately 1km ×
+1km, and average resampling was applied to match the coordinate values of IberFire. Given the
+annual update frequency of the data, population density were stored as spatial features to prevent
+unnecessary duplication of values, mirroring the process conducted with the CLC-derived features.
+Consequently, this variable appears as 13 spatial layers in the dataset, but functionally represents
+a single feature, as only the population density for the relevant year should be selected for each
+(x, y, t) cell.
+Finally, a binary feature representing holiday periods was included. This variable accounts for
+the increased presence of people in rural and natural areas during weekends and public holidays,
+potentially raising the risk of fire ignition. A cell was flagged as a holiday if the corresponding
+date was a Saturday, Sunday, or a national or regional public holiday in Spain. To determine
+public holidays, the Python library holidays [34] was utilised. This library provides holiday dates
+for various countries and their subdivisions, allowing for precise identification of holidays at the
+autonomous community level in Spain. Consequently, the AutonomousCommunities feature was
+employed to assign the appropriate regional holidays to each cell. The resulting is holiday binary
+layer was added as a spatio-temporal feature within the datacube.
+
+2.8
+
+Meteorological variables: ERA5-Land
+
+Meteorological conditions are among the most influential factors driving both the ignition and propagation of forest fires. Variables such as temperature, precipitation, and wind speed significantly
+affect fire behaviour and overall risk levels. Therefore, incorporating meteorological data into the
+datacube is essential for generating robust predictive models.
+
+9
+
+To account for these dynamics, data from ERA5-Land [10] were integrated, a high-resolution
+global reanalysis dataset provided by the Copernicus Climate Data Store. ERA5-Land offers hourly
+meteorological variables at a spatial resolution of 9 km × 9 km, from 1950 to the present. These
+variables are obtained as a combination of meteorological measurements and numerical weather
+prediction models through data assimilation techniques. This approach ensures spatial and temporal
+consistency.
+ERA5-Land is particularly well-suited for environmental modelling due to its global coverage,
+temporal consistency, and availability of multiple curated atmospheric variables relevant to fire risk
+assessment. Within the Copernicus Climate Data Store, two data access modes are available: raw
+hourly observations [35] and post-processed daily statistics [36]. Both sources were used in the
+construction of the IberFire datacube, depending on the specific requirements of each variable.
+Although ERA5-Land provides temporally consistent data, its availability is subject to a delay
+of five days, making it unsuitable for real-time fire risk prediction, where daily forecasts are required. Consequently, while ERA5-Land data were used to construct the datacube, real-time model
+deployment is intended to rely on meteorological station measurements.
+The use of meteorological station measurements for the construction of the datacube was also
+considered, but the lack of historical data for many variables in various meteorological stations posed
+significant limitations.
+AEMET (the Spanish Meteorological Agency) provides open-access, near real-time data from
+weather stations across Spain. Therefore, to ensure compatibility, all meteorological ERA5-Land
+features included in IberFire were selected and processed to align with the type and format of data
+provided by AEMET.
+A total of 17 meteorological features were derived from ERA5-Land data. The features can be
+grouped as follows: temperature, relative humidity, surface pressure, precipitations, wind speed, and
+wind direction. This subsection outlines the methodology used to obtain and incorporate these variables into the IberFire datacube, including the selection of source variables and the transformations
+necessary to ensure compatibility with the format and units used in AEMET observations.
+ERA5-Land data are available at a global scale; therefore, all relevant variables were extracted for
+the specific region of interest illustrated in Figure 1. To ensure spatial consistency across the entire
+datacube, all ERA5-Land data, originally provided at a resolution of 9km × 9km, were resampled
+to the target 1 km × 1 km resolution using nearest-neighbour interpolation. All the meteorological
+features were added to the datacube as spatio-temporal variables, and the processing of these features
+was done using Python.
+Temperature
+Temperature plays a central role in wildfire risk modelling, as it directly affects the dryness and
+flammability of vegetation. Four daily statistics were saved to describe the temperature: mean,
+minimum, maximum, and range. The first three features were extracted from the daily statistics of
+the variable 2m temperature provided by ERA5-Land, which measures the temperature of the air
+at 2 metres above the surface of land. Then, the range, which is the difference between the daily
+maximum and minimum value, was calculated. Finally, the original units in Kelvin provided by
+ERA5-Land were transformed into Celsius, ensuring consistency with the units used by AEMET.
+Relative humidity
+Relative humidity is the percentage of moisture in the air relative to the maximum amount the air
+can hold at a given temperature. It is a critical variable for fire risk assessment, as it directly affects
+the moisture content of vegetation and, consequently, the likelihood of ignition and propagation.
+However, ERA5-Land does not provide this variable directly, while AEMET does. To address
+this, hourly relative humidity values were derived from two available ERA5-Land variables: the
+2m temperature and the 2m dewpoint temperature. The last one represents the temperature at
+which the air becomes saturated with moisture, at 2 metres above the ground. Using these two
+temperature variables, relative humidity values were computed by applying the Magnus formula
+[37], an empirically validated approach for estimating saturation vapor pressure:
+17.625·D
+
+Relative Humidity =
+
+exp( 243.04+Dpp )
+17.625·T
+exp( 243.04+T
+)
+
+(1)
+
+where Dp and T represent the 2m dewpoint temperature and 2m temperature in Celsius, respectively.
+
+10
+
+From the computed hourly values, four daily statistics were derived and included in the datacube:
+the mean, minimum, maximum, and range of relative humidity.
+Computing daily relative humidity statistics first required deriving hourly relative humidity values from the corresponding hourly temperature and dewpoint temperature data. This step was
+essential because daily statistics of relative humidity cannot be accurately obtained from the summary statistics of the temperature variables provided by ERA5-Land. For instance, inserting the
+daily mean values of Dp and T into Equation (1) does not yield the correct daily mean of relative
+humidity.
+Surface pressure
+Surface pressure values were retrieved from ERA5-Land as daily aggregated statistics, namely the
+mean, minimum, and maximum, originally expressed in pascals. Again, the daily range was then
+computed as the difference between the maximum and minimum values. Finally, all four features
+were converted to hectopascals to ensure consistency with the unit conventions used by AEMET.
+Precipitations
+Since pre-aggregated precipitation statistics were not available, hourly precipitation values were
+downloaded from ERA5-Land. These values, originally expressed in metres (equivalent to 1000
+l/m2 ), were averaged to obtain daily mean precipitation values. Subsequently, the units were converted from metres to millimetres to ensure consistency with AEMET.
+Wind speed
+Wind-related features required particularly careful processing. ERA5-Land provides wind data in
+terms of its eastward (u-wind) and northward (v-wind) components, therefore, two hourly features,
+u-wind and v-wind, can be retrieved from ERA5-Land. In contrast, AEMET reports wind information as maximum and average wind speeds, without disaggregating it into horizontal and vertical
+components.
+To align the ERA5-Land data with the format used by AEMET, hourly u-wind and v-wind values
+were retrieved from ERA5-Land. Then, the wind speed magnitude at each hour was computed using
+the Euclidean norm, taking into account the orthogonality of the components:
+p
+(2)
+∥(u,⃗ v)∥ = |u|2 + |v|2 .
+From these hourly magnitudes, the daily maximum and average wind speeds were calculated and
+incorporated into the datacube as spatio-temporal features, named wind speed max and
+wind speed mean. The data were stored with the original ERA5-Land units, metres per second
+(m/s), since they match with the units used by AEMET.
+It is important to note that, analogous to the case of relative humidity, daily wind speed statistics
+cannot be accurately computed from the daily maximum or average values of u-wind and v-wind
+individually. The magnitude must be calculated at the hourly level before aggregation.
+Wind direction
+Wind direction is conventionally defined as the direction from which the wind originates, expressed
+in degrees measured clockwise from true north. AEMET provides two daily wind-direction metrics:
+the average wind direction and the direction at the daily maximum wind speed. Meanwhile, ERA5Land offers hourly wind data at a resolution of 9km × 9km, represented by horizontal (u wind) and
+vertical (v wind) components. To convert these components into standard wind direction, equation
+(3) is employed, where α denotes the angle between (u,⃗ v) and the north vector (0,⃗ 1).
+Wind direction = (α − 180◦ ) mod 360◦ ,
+
+α≠
+
+
+(0,⃗ 1), (u,⃗ v) .
+
+(3)
+
+Figure 5 demonstrates this process by comparing the original component-wise data from ERA5Land on the left, with the derived wind direction map on the right.
+To obtain the daily average wind direction, daily averaged values of u wind and v wind were first
+obtained from ERA5-Land’s aggregated statistics and converted with equation 3. Subsequently, to
+capture the direction at each day’s maximum wind speed, hourly u wind and v wind components
+were downloaded, and equation (3) was applied at each hourly timestamp. The direction corresponding to the highest wind speed of the day was then retained. This resulted in the addition of
+two spatio-temporal features, wind direction mean and wind direction at max speed.
+11
+
+Figure 5: Left: wind vectors that represent the sum of ERA5-Land u-wind and v-wind components.
+Right: the wind direction values of those same vectors.
+
+2.9
+
+Vegetation indices: Copernicus Land Monitoring Service
+
+The last group of features integrated into the datacube is the vegetation indices, which are highly
+used for making fire-risk predictions, as they can represent the dryness of the plant life. Five
+different indices were added: FAPAR (Fraction of Photosynthetically Active Radiation), LAI (Leaf
+Area Index), NDVI (Normalised Difference Water Index), LST (Land Surface Index), and SWI (Soil
+Water Index). All of them were retrieved from the Copernicus Land Monitoring Service (CLMS)
+[11] at various spatial and temporal resolutions.
+For each vegetation index, multiple data sources from the Copernicus Land Monitoring Service
+(CLMS) were employed, each differing in spatial and temporal resolution. Depending on the source,
+some datasets provide global coverage, while others are limited to the European continent. To ensure
+efficiency and relevance, the data were downloaded specifically for the region of interest illustrated
+in Figure 1.
+In the following, a detailed description is provided of the sources selected for each index, the
+procedures followed during data acquisition, and the preprocessing steps applied to harmonise all
+variables with the target spatial resolution of 1km × 1km and the daily temporal granularity required
+by the IberFire datacube. This process was done using Python, and all the vegetation indices were
+incorporated into the dataset as spatio-temporal features.
+FAPAR
+The Fraction of Absorbed Photosynthetically Active Radiation (FAPAR) is a key biophysical variable
+that is commonly used as an indicator of vegetation health. It has been identified as one of the 50
+Essential Climate Variables by the Global Climate Observing System (GCOS) [38]. In the context
+of wildfire risk prediction, FAPAR is particularly relevant as it reflects the photosynthetic activity
+and water stress level of vegetation, which are tightly linked to fuel dryness.
+The CLMS provides multiple datasets for the FAPAR variable; however, no single source spans
+the entire temporal range required by the IberFire datacube. To achieve full temporal coverage,
+two complementary datasets were integrated. The first source [39] offers FAPAR measurements at
+a spatial resolution of 1km × 1km with a 10-day temporal frequency and was used to cover the
+period from 01/12/2007 to 30/04/2020. The second source [40], used for the remaining period from
+01/05/2020 to 31/12/2024, provides enhanced spatial resolution at 300m × 300m, while maintaining
+the same temporal frequency.
+The two datasets were harmonised as follows. For the first source, since its native resolution
+matched the target resolution of the datacube, values were directly aligned to the grid using nearestneighbour resampling. In contrast, the higher-resolution values from the second source were aggregated by computing the mean FAPAR value within each corresponding 1km × 1km cell, effectively
+applying the average resampling method.
+LAI
+The Leaf Area Index (LAI) represents the total one-sided green leaf area per unit ground area
+(m2 /m2 ) and is a key indicator of vegetation density and structure. It is also one of the Essential
+12
+
+Climate Variables (ECVs) identified by the GCOS, and is widely used in ecological modelling and
+fire risk assessment.
+The download and preprocessing procedures for this variable followed the same approach as for
+the FAPAR index. A dataset with a 1 km spatial resolution was used for the period from 01/12/2007
+to 30/04/2020 [41] and was aligned to the datacube using nearest-neighbour resampling. For the
+remaining period, from 01/05/2020 to 31/12/2024, a dataset at 300 m resolution was employed [42],
+and values were aggregated to 1 km resolution using average resampling.
+NDVI
+The Normalised Difference Vegetation Index (NDVI) is a remote sensing indicator that estimates
+vegetation health. It is calculated from the red and near-infrared spectral bands and typically
+ranges from −1 to 1, with higher values indicating denser and healthier vegetation. In the context
+of wildfire risk assessment, NDVI serves as a proxy for vegetation condition and fuel availability.
+As with the previous indices, two complementary datasets from the CLMS were used to ensure
+full temporal coverage. The first dataset [43], with a spatial resolution of 1km × 1km and a 10-day
+frequency, covers the period from 01/12/2007 to 30/06/2020. The second dataset [44], with a finer
+resolution of 300 m and the same temporal frequency, was used from 01/07/2020 to 31/12/2024.
+The harmonization process mirrored that used for FAPAR and LAI: nearest-neighbour resampling was
+applied to the 1 km dataset, while the 300 m data were aggregated to 1 km using average resampling.
+LST
+Land Surface Temperature (LST) represents the skin temperature of the Earth’s surface, expressed in
+Kelvin. Unlike other vegetation-related indices, LST is available from CLMS as an hourly variable.
+However, to achieve full temporal coverage for the 2007–2024 period in the IberFire datacube,
+three complementary data sources were integrated, as no single dataset spans the entire time range.
+Specifically, the ERA5-Land skin temperature variable was used to fill in the earlier years, during
+which CLMS does not provide LST data.
+For the period from 01/12/2007 to 10/06/2010, LST values were obtained from the aggregated
+ERA5-Land dataset [36], which provides global daily average skin temperature values at a spatial
+resolution of 9 km × 9 km. From 11/06/2010 to 18/01/2021, a CLMS source offering hourly LST at
+a resolution of 5km × 5km was used [45]. For each daily timestamp, the average value was calculated
+from retrieved hourly values. Finally, from 19/01/2021 to 31/12/2024, a second CLMS source was
+used [46], also with hourly values with 5km × 5km resolution, and the same daily temporal averaging
+method was applied.
+Finally, to harmonise all three datasets with the 1km × 1km resolution of IberFire, nearestneighbour resampling was applied in each case, since the target resolution is finer than the original
+resolutions.
+SWI
+The Soil Water Index (SWI) is a moisture-related indicator that estimates the percentage of water
+retained in the upper layers of the soil. It is derived from observations of Surface Soil Moisture
+(SSM) using an exponential filtering approach, giving more weight to recent measurements while
+smoothing the temporal signal [47].
+Equation 4 calculates SWI for time tn based on past SSM measurements on times ti with i < n:
+n
+X
+
+SWI(tn ) =
+
+SSM(ti )e−
+
+tn −ti
+T
+
+i
+n
+X
+
+.
+e−
+
+(4)
+
+tn −ti
+T
+
+i
+
+The parameter T regulates the influence of past observations, with smaller T values assigning
+greater weight to recent measurements and larger T values producing a more temporally smoothed
+index. For instance, with T = 1, a measurement taken 10 days prior contributes with a weight pro−10
+portional to e 1 ≈ 4.5 · 10−5 , whereas with T = 10 the same observation has a weight proportional
+−10
+to e −10 ≈ 0.37
+To capture moisture dynamics at different temporal scales, four SWI variants were downloaded
+and included in the datacube, corresponding to T = 1, 5, 10, 20 and named SWI 001, SWI 005,
+
+13
+
+SWI 010, SWI 020 respectively. The data were retrieved from CLMS, which provides daily SWI
+values at a spatial resolution of 12.5km × 12.5km [48]. To align with the datacube’s 1 km × 1 km
+resolution, nearest-neighbour interpolation was applied during the resampling process.
+
+2.10
+
+Summary of external data sources
+
+To ensure transparency and reproducibility, Table 5 provides direct links to the original raw datasets
+used in the construction of the IberFire datacube. Each dataset listed in the table corresponds to
+one or more features included in the datacube. These sources include official and publicly accessible
+repositories from European and national institutions, and their inclusion allows users to verify data
+provenance or perform additional processing tailored to specific use cases, like model deployment.
+
+14
+
+Category
+Auxiliary features
+Fire history
+
+Geographical
+location
+Land usage
+Topography
+
+Human activity
+
+Meteorological
+
+Retrieved feature
+Spain boundary
+
+Resolution
+Geometries
+
+Historical fire data
+
+Geometries
+
+FWI
+
+27.5km
+
+Autonomous Communities
+CLC 2006, CLC 2012,
+CLC 2018
+Elevation, slope, aspect, roughness
+Population density
+
+Geometries
+
+Distance to roads
+
+100m
+
+Distance to waterways
+
+100m
+
+Railways raw data
+Natura 2000 network
+
+Geometries
+Geometries
+
+2m temperature, 2m
+dewpoint temperature,
+precipitations, 10m uwind, 10m v-wind
+2m temperature, surface pressure, 10m uwind, 10m v-wind
+
+9km,
+hourly
+
+FAPAR
+
+100m
+30m
+1km
+
+9km,
+daily
+
+LAI
+
+NDVI
+
+1km, 10daily
+
+1km, 10daily
+300m, 10daily
+1km, 10daily
+
+300m, 10daily
+
+LST
+
+9km,
+daily
+5km,
+hourly
+
+5km,
+hourly
+
+SWI 001,
+SWI 005,
+SWI 010, SWI 020
+
+https://forest-fire.emergency.copernicus.eu/apps/
+data.request.form/ [4]
+https://ewds.climate.copernicus.eu/datasets/
+cems-fire-historical-v1?tab=overview [23]
+https://www.arcgis.com/home/item.html?id=
+5f689357238847bc823a2fb164544a77 [25]
+https://land.copernicus.eu/en/products/
+corine-land-cover [26] [27] [28]
+https://portal.opentopography.org/raster?
+opentopoID=OTSDEM.032021.4326.3 [15]
+https://hub.worldpop.org/doi/10.5258/SOTON/
+WP00674 [33]
+https://hub.worldpop.org/geodata/summary?id=17504
+[31]
+https://hub.worldpop.org/geodata/summary?id=18002
+[32]
+https://download.geofabrik.de/europe/spain.html
+https://www.miteco.gob.es/es/biodiversidad/
+servicios/banco-datos-naturaleza/
+informacion-disponible/rednatura_2000_desc.html
+https://cds.climate.copernicus.eu/datasets/
+reanalysis-era5-land?tab=overview [35]
+
+https://cds.climate.copernicus.eu/datasets/
+derived-era5-land-daily-statistics?tab=overview
+[36]
+https://land.copernicus.
+eu/en/products/vegetation/
+fraction-of-absorbed-photosynthetically-active-radiation-v2-0-1km
+[39]
+https://land.copernicus.
+eu/en/products/vegetation/
+fraction-of-absorbed-photosynthetically-active-radiation-v1-0-300m
+[40]
+https://land.copernicus.eu/en/products/
+vegetation/leaf-area-index-v2-0-1km [41]
+https://land.copernicus.eu/en/products/
+vegetation/leaf-area-index-300m-v1.0 [42]
+https://land.copernicus.
+eu/en/products/vegetation/
+normalised-difference-vegetation-index-v3-0-1km
+[43]
+https://land.copernicus.
+eu/en/products/vegetation/
+normalised-difference-vegetation-index-v2-0-300m
+[44]
+https://cds.climate.copernicus.eu/datasets/
+derived-era5-land-daily-statistics?tab=overview
+[36]
+https://land.copernicus.eu/en/
+products/temperature-and-reflectance/
+hourly-land-surface-temperature-global-v1-0-5km
+[45]
+https://land.copernicus.eu/en/
+products/temperature-and-reflectance/
+hourly-land-surface-temperature-global-v2-0-5km
+[46]
+https://land.copernicus.eu/
+en/products/soil-moisture/
+daily-soil-water-index-global-12-5km [48]
+
+300m, 10daily
+
+Vegetation
+
+Original source
+https://simplemaps.com/gis/country/es [21]
+
+12.5km,
+daily
+
+Table 5: Links to the sources of the raw data used in the construction of the IberFire datacube.
+
+15
+
+3
+
+Data Records
+
+IberFire comprises approximately 6.8 × 109 individual cells, resulting from the combination of 1188
+values along the x coordinate, 920 along the y coordinate, and 6241 distinct timestamps. When
+IberFire is opened with the xarray Python package, 261 ‘data variables’ are shown. These are all
+the spatio-temporal and spatial-only features that can be retrieved for each cell, including the low
+update frequency features stored as spatial-only features.
+Therefore, the three versions of the CLC dataset, each with 63 features, along with the 13 yearly
+population density features, result in a total of 261 ‘data variables’. However, when the correct
+versions of CLC and population density are selected for each cell, there are a total of 261−63·2−12 =
+123 different ‘real’ variables. From those 123 features, the auxiliary features are not intended to be
+used for modelling purpose, but for data manipulation. Therefore, IberFire provides a total of 120
+different features for modelling.
+Since opening the dataset initially displays the ‘data variables’, this section presents a detailed
+description of them, organised into structured tables that replicate the format found on IberFire
+when opened with xarray.
+The datacube is publicly available on Zenodo (https://zenodo.org/records/15798999), and
+the variables are organised in the following tables according to the categories defined in Section 2.
+Table 6 presents the three auxiliary features, two fire-related variables, and five geographic context
+features. Table 7 details the 63 variables derived from the 2006 CLC dataset (the 2012 and 2018
+CLC version are not described since they mirror the 2006 version). Table 8 then presents the 15
+topographical and 21 human activity features (including the repeated population density features).
+Lastly, Table 9 summarises the 17 meteorological variables and 8 vegetation indices included in the
+dataset.
+Feature Name
+x index
+y index
+
+Description
+X-coordinate index values.
+Y-coordinate index values.
+
+is spain
+
+Binary mask indicating the Spanish region.
+
+is fire
+
+Binary indicator denoting whether the cell
+was affected by a fire on that date.
+
+is near fire
+
+Binary indicator showing if the cell is within
+a 25×25 spatial area and a 10-day window
+preceding a fire event.
+X-coordinate values in the EPSG:3035 reference system.
+Y-coordinate values in the EPSG:3035 reference system.
+Binary indicator denoting whether a cell lies
+over the open sea.
+
+x coordinate
+y coordinate
+is sea
+is waterbody
+AutonomusCommunity
+
+Binary indicator denoting whether a cell lies
+over inland water (e.g., lakes, rivers).
+The Autonomous Communities code.
+
+Values or Units
+Integer in [0, 1187]
+Integer in [0, 919]
+0 (outside Spain), 1 (inside Spain)
+0 (no fire), 1 (fire)
+0 (not near fire), 1 (near
+fire)
+Metres (float)
+Metres (float)
+0 (land), 1 (sea)
+0 (non-water), 1 (inland
+water)
+Label from 00 to 19
+
+Table 6: Top table: auxiliary features. Middle table: fire history features. Bottom table: geographical location features.
+
+16
+
+Feature Name
+Description
+Label 3 - Raw CLC Classes (1 - 44)
+CLC 2006 1
+Proportion of the original 100m × 100m cells
+labelled as CLC class 1 in the 1km × 1km cell
+(...)
+(...)
+CLC 2006 44
+Proportion of the original 100m × 100m cells
+labelled as CLC class 44 in the 1km × 1km
+cell
+Label 2 - Intermediate aggregations
+CLC 2006 urban fabric proportion
+Sum of CLC 2006 1 - CLC 2006 2
+CLC 2006 industrial proportion
+Sum of CLC 2006 3 - CLC 2006 6
+CLC 2006 mine proportion
+Sum of CLC 2006 7 - CLC 2006 9
+CLC 2006 artificial vegetation proportion
+Sum of CLC 2006 10 - CLC 2006 11
+CLC 2006 arable land proportion
+Sum of CLC 2006 12 - CLC 2006 14
+CLC 2006 permanent crops proportion
+Sum of CLC 2006 15 - CLC 2006 17
+CLC 2006 heterogeneous agriculture proportion Sum of CLC 2006 19 - CLC 2006 22
+CLC 2006 forest proportion
+Sum of CLC 2006 23 - CLC 2006 25
+CLC 2006 scrub proportion
+Sum of CLC 2006 26 - CLC 2006 29
+CLC 2006 open space proportion
+Sum of CLC 2006 30 - CLC 2006 34
+CLC 2006 inland wetlands proportion
+Sum of CLC 2006 35 - CLC 2006 36
+CLC 2006 maritime wetlands proportion
+Sum of CLC 2006 37 - CLC 2006 39
+CLC 2006 inland waters proportion
+Sum of CLC 2006 40 - CLC 2006 41
+CLC 2006 marine waters proportion
+Sum of CLC 2006 42 - CLC 2006 44
+Label 1 - High level aggregations
+CLC 2006 artificial proportion
+Sum of CLC 2006 1 - CLC 2006 11
+CLC 2006 agricultural proportion
+Sum of CLC 2006 12 - CLC 2006 22
+CLC 2006 forest and semi natural proportion
+Sum of CLC 2006 23 - CLC 2006 34
+CLC 2006 wetlands proportion
+Sum of CLC 2006 35 - CLC 2006 39
+CLC 2006 waterbody proportion
+Sum of CLC 2006 40 - CLC 2006 44
+Table 7: Corine Land Cover features (corresponding to 2006). All features correspond to proportions,
+with values ranging from 0 to 1. The top part describes the 44 raw classes of the CLC dataset. The
+middle part corresponds to the 14 intermediate aggregation levels. The lower part of the table
+represents the 5 higher clustering levels of CLC. This hierarchical ordering is defined in Table 3.
+
+17
+
+Feature Name
+elevation mean
+elevation stdev
+slope mean
+slope stdev
+roughness mean
+rougness stdev
+aspect 1
+(...)
+aspect 8
+aspect NODATA
+dist to roads mean
+dist to roads stdev
+dist to waterways mean
+dist to waterways stdev
+dist to railways mean
+dist to railways stdev
+
+Description
+Mean elevation in the 1 km × 1 km grid cell.
+Standard deviation of elevation in the 1 km ×
+1 km grid cell.
+Mean slope in the 1 km × 1 km grid cell.
+Standard deviation slope in the 1 km × 1 km
+grid cell.
+Mean roughness in the 1 km × 1 km grid cell.
+Standard deviation roughness in the 1 km ×
+1 km grid cell.
+Proportion of the aspect class 1 in the 1 km ×
+1 km grid cell.
+(...)
+Proportion of the aspect class 8 in the 1 km ×
+1 km grid cell.
+Proportion of the aspect class NODATA in the
+1 km × 1 km grid cell.
+Mean distance to roads in the 1 km × 1 km
+grid cell.
+Standard deviation of the distance to roads in
+the 1 km × 1 km grid cell.
+Mean distance to waterways in the 1 km ×
+1 km grid cell.
+Standard deviation of the distance to waterways in the 1 km × 1 km grid cell.
+Mean distance to railways in the 1 km × 1 km
+grid cell.
+Standard deviation of the distance to railways
+in the 1 km × 1 km grid cell.
+
+is holiday
+
+Binary mask indicating whether it is a holiday
+in the 1 km × 1 km grid cell in that time or not.
+
+is natura2000
+
+Binary mask indicating whether the 1 km ×
+1 km grid cell is part of the Natura 2000 network or not.
+Mean population density in the 1 km × 1 km
+grid cell for the year 2008.
+(...)
+Mean population density in the 1 km × 1 km
+grid cell for the year 2020.
+
+popdens 2008
+(...)
+popdens 2020
+
+Values or Units
+Metres (float)
+Metres (float)
+Proportion [0,1]
+(...)
+Proportion [0,1]
+Proportion [0,1]
+Kilometres (float)
+Kilometres (float)
+Kilometres (float)
+Kilometres (float)
+0 (working day), 1
+(holiday)
+0 (is not in), 1 (is
+in)
+People/km2
+(...)
+People/km2
+
+Table 8: Top: topography features. Bottom: human activity features.
+
+18
+
+Feature Name
+t2m mean
+
+RH mean
+RH min
+RH max
+RH range
+surface pressure mean
+surface pressure min
+surface pressure max
+surface pressure range
+
+Description
+The mean temperature of air measured at 2m
+above the surface of the land, sea or inland
+waters.
+The minimum temperature of air measured at
+2m above the surface of the land, sea or inland
+waters.
+The maximum temperature of air measured at
+2m above the surface of the land, sea or inland
+waters.
+The range temperature of air measured at 2m
+above the surface of the land, sea or inland
+waters.
+The mean relative humidity of air.
+The minimum relative humidity of air.
+The maximum relative humidity of air.
+The range relative humidity of air.
+The mean surface pressure of air.
+The minimum surface pressure of air.
+The maximum surface pressure of air.
+The range surface pressure of air.
+
+total precipitation
+mean
+
+Mean of the hourly values of the total precipitation variable from ERA5-Land.
+
+wind speed mean
+
+The mean wind speed derived from the hourly
+u-component and v-component of wind.
+
+wind speed max
+
+The maximum wind speed.
+
+wind direction mean
+
+The mean wind direction (where the wind
+comes).
+The wind direction (where the wind comes)
+where the maximum wind speed happened.
+Fraction of Absorbed Photosynthetically Active Radiation, the fraction of the solar radiation absorbed by live plants for photosynthesis.
+Leaf Area Index, representing the half of the
+total green canopy area per unit horizontal
+ground area.
+Land Surface Temperature is the temperature
+of the surface of the Earth.
+Normalised Difference Vegetation Index, an indicator of the greenness of the biomes.
+Soil Water Index at T=1, the moisture humidity conditions of the soil.
+Soil Water Index at T=5, the moisture humidity conditions of the soil.
+Soil Water Index at T=10, the moisture humidity conditions of the soil.
+Soil Water Index at T=20, the moisture humidity conditions of the soil.
+
+t2m min
+
+t2m max
+
+t2m range
+
+wind direction at
+max speed
+FAPAR
+
+LAI
+
+LST
+ndvi
+SWI 001
+SWI 005
+SWI 010
+SWI 020
+
+Values or Units
+Degrees Celsius
+
+Degrees Celsius
+
+Degrees Celsius
+
+Degrees Celsius
+
+[0, 100] in %
+[0, 100] in %
+[0, 100] in %
+[0, 100] in %
+Hectopascal
+Hectopascal
+Hectopascal
+Hectopascal
+Millimetres
+(l/m2 )
+Metres per second
+(m/s)
+Metres per second
+(m/s)
+Degrees
+Degrees
+-
+
+-
+
+Degrees Kelvin
+[0, 100] in %
+[0, 100] in %
+[0, 100] in %
+[0, 100] in %
+
+Table 9: Top: meteorological features. Bottom: vegetation indices.
+
+19
+
+4
+
+Technical Validation
+
+Four distinct validation procedures were conducted to ensure the robustness and reliability of IberFire. First, the integrity of data formats and measurement units was verified to guarantee internal
+consistency across all features. Second, given that vegetation indices were derived from satellitebased remote sensing data, the presence of missing values was common. To address this, multiple
+imputation techniques were evaluated, and the method yielding the lowest reconstruction error was
+applied to fill missing data. Third, available AEMET historical measurement data were downloaded
+to compare with IberFire meteorological data. Finally, an XGBoost model was trained on data from
+2008 to 2023 and using the predicted class probabilities, fire risk maps were plotted for various 2024
+days, which served as a practical validation step. This section provides a detailed account of each
+of these four validation strategies aimed at guaranteeing the quality and usability of the IberFire
+datacube.
+
+4.1
+
+Data correctness
+
+A datacube is a multi-dimensional data structure that integrates spatial and temporal information
+in a unified framework. Within the IberFire datacube, this includes grid coordinate values, binary
+and categorical attributes, proportion-based data, and continuous numerical features. Given the
+complexity and heterogeneity of these components, quality assurance procedures are needed to ensure
+the reliability and internal consistency of the datacube.
+First, a temporal consistency check was conducted to guarantee that there are no duplicated
+time coordinates in the datacube. The dataset was verified to contain valid accessible values for all
+spatio-temporal features across the entire temporal range from 01/12/2007 to 31/12/2024. For the
+spatial features, visual inspection was performed to ensure that spatial coordinates are homogeneous
+across the entire region of interest.
+For categorical and binary features, it was ensured that all entries conformed to the expected set
+of values. For the AutonomousCommunities feature, all labels were verified to fall within the valid
+integer range of 0 to 19, with no occurrences of invalid or unexpected values. Regarding binary features, is spain, is sea, is waterbody, is holiday, is natura2000, is fire, and is near fire,
+it was confirmed that all values were strictly limited to either 0 or 1.
+For features representing proportions, such as the nine derived from aspect and the 189 calculated
+from CLC, data validation procedures ensured that all values lie within the range [0, 1], with no values
+falling outside this interval. Similarly, features derived from relative humidity and the four indices
+based on the Soil Water Index (SWI), which represent percentages, were verified to exclusively
+contain numerical values within the interval [0, 100].
+Additionally, for the proportion-based features derived from the CLC dataset, structured hierarchically into three levels described in Table 3, consistency checks were performed to ensure that
+the proportions at each hierarchical level sum to one for every cell. Therefore, it was verified that
+the five aggregated features at Label 1, the fourteen intermediate-level features at Label 2, and the
+forty-four fine-grained features at Label 3 each sum to exactly one per cell.
+Finally, for numerical features such as meteorological variables and vegetation indices, visual
+inspection was carried out through exploratory plotting to identify potential outliers and ensure
+that all values fell within logical and expected ranges. This process revealed a substantial number
+of missing values in certain data sources used to construct the vegetation indices. For instance,
+in the case of FAPAR, no missing values were observed until 30/04/2020, which corresponds to the
+ending of the first data source [39]. After that date, the second source was used [40] and exhibited
+a considerable number of gaps. The methodology adopted to address this issue is detailed in the
+following subsection.
+
+4.2
+
+Missing values validation
+
+Once all features were validated to fall within their expected formats and value ranges, the missing
+values identified in the vegetation indices were addressed. This step was crucial, as not all machine
+learning algorithms can inherently manage missing data.
+The imputation process was applied exclusively to the vegetation indices, since all other data
+sources were either complete or contained a negligible amount of missing values. In particular,
+no missing data were observed in any of the spatial-only features, and regarding spatio-temporal
+features, the layers is fire, is near fire, and is holiday were complete for the entire temporal
+range. Likewise, the meteorological variables derived from the ERA5-Land dataset did not exhibit
+
+20
+
+missing values within the Spanish territory (is spain = 1), due to the spatial continuity and postprocessing of the source data.
+Four interpolation techniques were analysed to address the missing values in the vegetation indices: nearest neighbour, linear, quadratic, and cubic. Each method was applied along the temporal
+axis independently on each spatial cell.
+To evaluate these methods, artificial gaps were first added in dates known to be complete. These
+gaps followed the real shapes of the missing values observed in satellite-derived vegetation indices.
+Specifically, 140 NAN masks were obtained from the FAPAR variable and inserted on all the indices.
+Three examples of these artificial masks are shown in the top image of Figure 6.
+
+Figure 6: Top: Three examples of binary NAN masks that were introduced as artificial NAN values.
+Bottom: Comparison between original FAPAR values, masked FAPAR values and interpolated
+FAPAR values.
+Subsequently, the four imputation methods were applied to reconstruct the artificially masked
+values. To evaluate the reconstruction accuracy, the absolute differences between the true and the
+imputed values were computed for each masked day. These differences were then summed across all
+data points for that day, and the resulting sums were averaged over all masked days (i.e., they were
+divided by 140). This yielded the Reconstruction Error (RE), which served as the primary metric
+for comparing the performance of the imputation methods.
+The evaluation was performed independently for each vegetation index. To illustrate the effect
+of the interpolation, the bottom image in Figure 6 displays an example with the original data of
+FAPAR, the artificially masked version, and the reconstruction obtained using linear interpolation.
+Table 10 presents the RE scores for each vegetation index across the four imputation methods.
+As shown in the table, linear interpolation yielded the lowest RE across every tested feature. Consequently, it was adopted as the imputation method for filling the real missing values in the vegetation
+indices. It should be noted that the RE varies a lot across different vegetation indices due to the
+difference in magnitudes, not because some indices have inherently more missing data or are harder
+to reconstruct. For example the NDVI ranges between -1 and 1 whereas the SWI ranges from 0
+to 100. Furthermore, RE values are not expected to match the magnitude as the original feature
+values, since the RE represents the sum of absolute errors across all cells for a given day.
+
+4.3
+
+Data comparison with AEMET
+
+The IberFire datacube was constructed to support daily-scale applications that use meteorological
+data from AEMET. Given that the meteorological variables were derived from ERA5-Land data and
+subsequently transformed to align with the format of AEMET observations, a validation process was
+carried out to evaluate the accuracy of these transformations.
+
+21
+
+Tested variable
+FAPAR
+LAI
+NDVI
+SWI 001
+SWI 005
+SWI 010
+SWI 020
+LST
+
+Nearest neighbour
+3412
+14705
+4239
+724876
+326488
+224292
+151797
+325655
+
+Linear
+2418
+9941
+3588
+649175
+273457
+177245
+112792
+285057
+
+Quadratic
+4089
+14716
+*
+1507907
+585050
+367986
+214688
+*
+
+Cubic
+4191
+15037
+*
+1601710
+608277
+381461
+222810
+*
+
+Table 10: Reconstruction Error (RE) of the interpolation techniques for all the tested variables
+(* The interpolation technique was not assessed for that feature due to execution errors caused from
+characteristics of the data).
+This validation compared the transformed ERA5-Land variables included in IberFire against
+historical records from AEMET meteorological stations. Particular attention was paid to the uwind and v-wind components, which underwent the most complex transformations, as they required
+the reconstruction of wind speed and direction.
+To perform the comparison, historical AEMET data were retrieved from https://datosclima.
+es/Aemethistorico/Descargahistorico.html. This source provides daily records from meteorological stations, including maximum, mean, and minimum temperature; precipitation; mean wind
+speed; wind direction at maximum wind speed; maximum wind speed; and both maximum and
+minimum surface pressure. Unfortunately, this source does not include historical records for other
+meteorological variables featured in IberFire, such as relative humidity. No alternative source was
+found that offers historical records for these variables. Furthermore, the retrieved AEMET dataset
+contained missing values for the available variables, and many of those features were not provided
+in all stations.
+For each meteorological station within the region of interest, the Mean Absolute Error (MAE)
+was calculated for all available dates between 01/01/2007 and 31/12/2024, for each available feature.
+To calculate it, the values of the nearest cell to each meteorological station were selected. Chosen
+examples of these results are shown in the top four images of Figure 7. As illustrated, precipitation
+records are available for a considerably larger number of stations compared to surface pressure.
+Additionally, some stations have higher MAE values than others for the same feature.
+Given the substantial regional variability in meteorological conditions, for example, the significantly higher precipitation levels in northern Spain compared to the south, a normalisation step was
+introduced to enable consistent comparisons of error magnitudes across features and stations. To
+this end, the Normalised Mean Absolute Error (NMAE) was computed according to the following
+expression:
+NMAE(feature, station) =
+
+MAE(feature, station)
+,
+max(feature, station) − min(feature, station)
+
+(5)
+
+where MAE(feature, station) is the MAE value of a feature in a given station, max(feature, station)
+is the maximum value of the feature measured in that station, and min(feature, station) is the
+minimum. Table 11 provides the mean MAE and NMAE values across all stations for every available
+feature, and the bottom two images of Figure 7 visually compare the NMAE values with violin and
+density plots.
+
+mean MAE
+stdev MAE
+mean NMAE
+stdev NMAE
+
+t2m max
+
+t2m mean
+
+t2m min
+
+precip.
+
+w s mean
+
+w d max s
+
+w s max
+
+s p max
+
+s p min
+
+2.173
+1.215
+0.055
+0.032
+
+1.495
+0.815
+0.045
+0.026
+
+1.829
+0.732
+0.058
+0.024
+
+0.918
+0.422
+0.246
+0.118
+
+1.046
+0.563
+0.104
+0.08
+
+46.115
+11.841
+0.128
+0.033
+
+5.856
+1.728
+0.209
+0.047
+
+13.995
+15.546
+0.356
+0.629
+
+13.738
+15.531
+0.312
+0.603
+
+Table 11: Mean and standard deviation of MAE and NMAE values across all stations.
+Feature names from left to right: t2m max, t2m mean, t2m min, total precipitation mean,
+wind speed mean, wind direction at max speed, wind speed max, surface pressure max, and
+surface pressure min.
+The results indicate that the temperature features are highly reliable. Even in the worstperforming station, the mean Mean Absolute Error (MAE) remains as low as 2.173, with a standard
+22
+
+MAE for mean temperature (Celsius)
+
+1
+
+2
+
+3
+
+4
+
+5
+
+MAE for mean wind speed (m/s)
+
+6
+
+1
+
+7
+
+1.0
+
+1.5
+
+2.0
+
+3
+
+4
+
+5
+
+MAE for maximum pressure (Hpa)
+
+MAE for hourly mean precipitation (milimetres)
+
+0.5
+
+2
+
+2.5
+
+20
+
+Density Distribution of NMAE values for each feature
+
+40
+
+60
+
+80
+
+100
+
+Density Plots of NMAE Values for Each Feature
+
+t2m_mean
+wind_speed_mean
+wind_speed_max
+wind_direction_at_max_wind_speed
+
+2.00
+
+1.75
+
+1.50
+
+NMAE
+
+1.25
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+w_s_mean
+w_s_max
+t2m_max
+t2m_min
+s_p_min
+t2m_mean
+precipitation w_d_max_speed s_p_max
+
+0
+
+0.1
+
+NMAE
+
+0.2
+
+0.3
+
+Figure 7: Four upper images: MAE values in the available stations for t2m mean, wind speed mean,
+total precipitation mean, surface pressure max. Bottom left: violin plot with NMAE values
+for all variables. Bottom right: density plot with NMAE values for the features with the most
+distinct NMAE distributions.
+
+23
+
+deviation of 1.215. Assuming a normal distribution of errors, this implies that in 95% of the cases,
+the discrepancy between AEMET measurements and IberFire data does not exceed 4◦ . Given that
+temperature values at a single station can vary by up to 35◦ during the year, this error value is
+relatively small and supports the robustness of the temperature variables in the IberFire datacube.
+Moreover, as the temperature values are derived from ERA5-Land, a dataset rigorously validated
+[10] by the Copernicus Climate Data Store, their reliability is further reinforced.
+In comparison, the precipitation and surface pressure features exhibit higher NMAE values than
+temperature. Nevertheless, these variables are also sourced from Copernicus ERA5-Land without
+suffering much transformations. Consequently, despite their relatively higher error metrics, the
+integrity and reliability of these features remain supported by the quality and consistency of the
+underlying data source.
+Finally, the wind-related features yield intermediate NMAE values. These variables underwent
+the most substantial transformations, involving the reconstruction of magnitudes and angles from
+vector components. Despite the complexity of the transformations, the resulting error values remain
+within acceptable bounds, suggesting that the transformation procedures were effective and that the
+wind features in the IberFire datacube are suitable for modelling applications.
+
+4.4
+
+Fire risk mapping validation
+
+To evaluate the practical applicability of the IberFire datacube in real-world scenarios, a fire risk
+mapping exercise was performed. The objective was to assess whether the datacube features can
+support the generation of reliable fire risk maps when used in combination with standard machine
+learning techniques.
+Forest fires are inherently rare events, resulting in a highly imbalanced distribution of the is fire
+feature, with significantly fewer fire instances relative to non-fire occurrences. To address this imbalance during model training, a balanced dataset was retrieved from IberFire by including all fire
+instances recorded between 2008 and 2023, complemented by an approximately equal number of randomly selected non-fire instances from the same dates. Due to the stochastic nature of the sampling
+process of non-fire instances, the final class counts were not exactly equal. The resulting training
+dataset consisted of 140,399 instances, comprising 70,476 fire cases and 69,923 non-fire cases. For
+each selected instance corresponding to a unique spatio-temporal cell, all input features from the
+previous day (selecting the adequate CLC and popdens versions) were extracted from the IberFire
+datacube and stored in CSV format, and as target variable the is fire of the selected instance was
+retrieved. This one-day difference between the input features and the output variable ensures that
+predictions can be made using information from the previous day.
+Following construction of the dataset, an XGBoost classifier was trained on the extracted instances. To reduce the risk of overfitting and ensure the generalisation capability of the model, a
+cross-validation strategy was applied. After model development, an independent test set was generated by retrieving a new balanced dataset, consisting of all available fire instances from the year
+2024 along with a comparable number of randomly sampled non-fire instances from the same dates.
+The trained model was then evaluated on this test set, yielding an accuracy of 86%. Furthermore,
+the model was also tested on all the instances of 2024 (around 3.1 × 109 instances) and achieved an
+Area Under the Receiver Operating Characteristic (AUROC) of 0.95, which indicates a high degree
+of predictive accuracy and robustness in real-world forecasting scenarios.
+In addition to this quantitative evaluation, the classifier was used to generate daily fire risk
+predictions for the entire year of 2024. For each day, all corresponding spatio-temporal instances
+were extracted from the IberFire datacube and converted into CSV format to serve as input for
+the model. Predictions were then computed for each instance. Subsequently, the auxiliary features
+x index and y index were used to construct the daily fire risk raster maps. Figure 8 presents a
+selection of predicted fire risk maps overlaid with the actual forest fire occurrences, enabling visual
+comparison between the predicted risk predictions and observed fires. Furthermore, the public
+repository associated with IberFire presents all the fire risk maps as an animation (see Section 6 for
+code availability).
+Visual inspection of the resulting fire risk maps revealed a high degree of spatial and temporal
+coherence and alignment with historical fire incidence patterns illustrated in Figure 1. Notably,
+areas with historically high fire activity, such as Galicia, Asturias, and regions along the Portuguese
+border, consistently exhibited higher predicted risk levels, reinforcing the model’s ability to capture
+meaningful spatial trends in fire susceptibility. Furthermore, as Figure 8 shows, the model is capable
+of making accurate predictions and assigning high risk to areas where forest fires actually occur.
+This is particularly evident in the winter predictions, which demonstrate the model’s ability to
+
+24
+
+Fires that occurred that day
+Fires that occurred in the next +1 days
+Fires that occurred in the next +2 days
+Fires that occurred in the next +3 days
+Fires that occurred in the next +4 days
+Fires that occurred in the next +5 days
+
+0.0
+
+0.2
+
+0.4
+
+Fire Risk
+
+0.6
+
+0.8
+
+1.0
+
+0.0
+
+0.2
+
+0.4
+
+Fire Risk
+
+0.6
+
+0.8
+
+1.0
+
+Figure 8: Example of fire risk prediction maps. Left: predictions for 13/07/2024. Right: predictions
+for 20/12/2024.
+assign generally low risk across most regions while accurately identifying localised areas with a high
+likelihood of fire ignition.
+These results suggest that the IberFire datacube serves as a reliable foundation for downstream
+predictive modelling and geospatial analysis. Fire risk mapping using machine learning models
+trained on IberFire can therefore be considered a promising approach for anticipating wildfire-prone
+areas.
+
+5
+
+Usage notes
+
+The IberFire datacube was developed to support the modelling of wildfire occurrence risk across the
+Spanish territory, excluding the Canary Islands, Ceuta, and Melilla. A spatio-temporal structure
+was implemented to fulfil this objective, providing daily data from 01/12/2007 to 31/12/2024 over
+a regular grid of 1km × 1km spatial resolution. This design enables the training and validation of
+ML and DL models for wildfire risk prediction. The datacube is intended exclusively for mainland
+Spain and the Balearic Islands. To ensure that only relevant cells with complete and valid data
+are included in modelling workflows, users should filter the dataset accordingly using the variable
+is spain (by selecting the instances where is spain = 1).
+The datacube includes daily records beginning in December 2007; however, fire occurrence data
+were retrieved only from 01/01/2008 onward, and all cells for December 2007 were explicitly set
+as non-fire. This initial month is included to support the modelling of DL models that require a
+sequence of previous dates, like long short-term memory (LSTM) networks. Thus, even though fire
+predictions focus on the period from 2008 to 2024, the extended time frame ensures that models
+requiring temporal dependencies can be effectively trained.
+Prediction targets can be defined using either the is fire variable, which indicates whether a fire
+occurred in a given cell on a specific date, or the is near fire variable, which flags cells located in
+proximity to a fire event. The use of the auxiliary variables is spain, x index and y index as model
+inputs is not recommended. These features were introduced to facilitate data filtering, but they lack
+geospatial meaning beyond the cell grid. Their values are specific to the internal indexing of the
+datacube and are not transferable to other geographic regions. For modelling spatial geographical
+location, instead of x index and y index, the variables x coordinate and y coordinate, which
+represent the actual projected coordinates of each grid cell on the EPSG:3035 CRS, can be used as
+they retain geographic meaning and are suitable for location-aware modelling.
+The remaining features in the datacube are suitable for use as explanatory variables in predictive
+models. Users can decide whether to integrate the baseline model FWI as an input feature, which
+when included, would result in a total of 120 different features for fire risk modelling.
+To incorporate information about the Spanish territorial division, it is recommended to apply
+one-hot encoding to the categorical AutonomousCommunities feature. This results in 17 binary
+features corresponding to the autonomous communities listed in Table 2, excluding the Canary
+Islands, Ceuta, and Melilla, which are not part of the study area. Similarly, a month feature can
+
+25
+
+be derived from the temporal coordinate of each spatio-temporal cell. As different months exhibit
+distinct seasonal fire risk patterns, it is also advisable to apply one-hot encoding to this variable.
+It is important to note that some features, such as those derived from CLC and population density
+(popdens), are not static but also not temporally continuous. These variables are associated with
+a specific year of update and thus are included in the datacube with spatial dimensions only (x, y),
+rather than full spatio-temporal indices (x, y, t). When preprocessing the datacube for modelling
+applications or conversion to tabular formats such as CSV or DataFrame structures, it is crucial
+to ensure that for each spatio-temporal cell (x, y, t), only information available at the time t of the
+cell is used. For instance, when modelling a record for July 15, 2010, the appropriate population
+density value to use is popdens 2010, which should be assigned to a generic popdens column.
+Similarly, for a CLC-derived feature such as CLC urban fabric proportion, the correct value to
+assign would be taken from CLC 2006 urban fabric proportion, since the next update in 2012
+would not yet be available at that date. Careful consideration is required to prevent potential data
+leakage, particularly in the case of land cover features that might implicitly reflect fire occurrence.
+The CLC dataset contains a class representing the area that was burned, which, if taken from a
+dataset version updated after the date being modelled, could inadvertently introduce information
+correlated with the target variable (is fire). This leakage could compromise the integrity and
+validity of predictive modelling results.
+To create practically useful models, the instance extraction process should leverage historical
+data. For instance, the feature values from one day can be used to predict the value of the is fire
+feature for the following day. For more sophisticated models, such as LSTM networks, a larger
+window of historical data can be used.
+For real-world model deployment, relying on ERA5-Land as the meteorological data source is not
+feasible due to its inherent 5-day latency. To address this limitation, the construction of the IberFire
+datacube was carefully designed taking into consideration operational applicability. Consequently,
+all meteorological features were selected and processed to align with the format and units of the
+open-access, near-real-time data provided by AEMET. This compatibility was validated in Section
+4 through a comparison between historical AEMET measurements and the corresponding IberFire
+records. While alternative meteorological sources could be employed for model deployment instead
+of AEMET, doing so would require careful preprocessing to ensure compatibility with the trained
+models.
+Class imbalance presents a significant challenge in training models for forest fire risk prediction.
+The proportion of positive fire instances is extremely low, as the likelihood of a specific area burning
+on a given day is, in general, minimal. To mitigate this imbalance during the training phase, it
+is advisable to construct a balanced dataset by incorporating all fire occurrences and randomly
+sampling an equal number of non-fire (and non near-fire) instances.
+Additionally, Figure 1 displays all recorded fires during the IberFire study period, overlaid across
+the territory. As observed, some autonomous communities exhibit a significantly higher number
+of fire records than others. This spatial disparity may be attributed to various natural factors,
+such as regional climatic conditions, or anthropogenic factors, including local legislation or land
+management practices. Regardless of the cause, it is essential to account for this variability when
+designing predictive models. In certain cases, it may be advisable to develop separate models for
+regions sharing similar environmental or regulatory characteristics.
+Directly comparing the trained models with the baseline Fire Weather Index (FWI) is not
+straightforward, as AI classifiers typically produce probabilistic outputs, while the FWI generates
+continuous, regression-like values. To enable classification using the FWI, it is necessary to discretize
+its outputs. Based on the thresholds in Table 1, FWI values can be clipped at a maximum of 50 and
+linearly scaled to the [0, 1] range to approximate probabilities. Using this approach, cells with FWI
+values below 25 are classified as ‘non-fire’, while those above 25 are classified as ‘fire’, in accordance
+with the fire risk categories.
+An essential final consideration when working with the IberFire datacube is the substantial
+computational resources required for data processing. Although the total disk size of the datacube
+is approximately 29GB, each spatio-temporal feature is stored in a highly compressed format. When
+decompressed, a single feature represented as a float32 array occupies around 25GB of memory,
+making it impractical to load multiple features into RAM simultaneously on standard hardware.
+The xarray package handles this problem by chunking the data. For lightweight tasks such as
+data visualization or exploratory analysis, standard hardware is sufficient. Similarly, retrieving a
+balanced CSV training dataset, including all fire instances of IberFire and an equal number of nonfire instances, can be done with standard hardware, as well as generating daily fire risk maps with
+all the daily instances. However, more demanding operations, such as the addition or generation of
+
+26
+
+new spatio-temporal variables derived from combinations of existing features, require significantly
+more memory. Therefore, all processing steps involved in the construction of IberFire, including
+preprocessing and training dataset extraction, were executed on a machine equipped with 128GB of
+RAM.
+
+6
+
+Code Availability
+
+The functions for loading and transforming the data were implemented in Python. The processing
+code used to generate the IberFire datacube, to validate it and to visualize it, is available on GitHub
+https://github.com/JulenErcibengoaTekniker/IberFire.
+
+Author Information
+Authors and Affiliations
+Intelligent Information Systems Unit, Tekniker, 20600, Eibar, Spain
+Julen Ercibengoa, Meritxell Gómez-Omella
+Department of Languages and Computer Systems, University of the Basque Country (UPV/EHU), Donostia-San Sebastián, Spain
+Julen Ercibengoa, Izaro Goienetxea
+
+Contributions
+Julen Ercibengoa: Conceptualisation, Methodology, Software, Data source finding, Data retrieval,
+Data curation, Visualisation, Writing – original draft.
+Meritxell Gómez-Omella: Conceptualisation, Project administration, Supervision Methodology,
+Supervision, Writing – review & editing.
+Izaro Goienetxea: Conceptualisation, Supervision Methodology, Supervision, Writing – review
+& editing.
+
+Corresponding Author
+Correspondace to Julen Ercibengoa
+julen.ercibengoa@tekniker.es
+
+Competing Interests
+The authors declare no competing interests.
+
+Acknowledgments
+This work was partly supported by GAIA project (Ref PLEC2023-010303) “Gestión integral para la
+prevención, extinción y reforestación debido a incendios forestales” from Spanish Research Agency
+(AEI).
+
+27
+
+References
+[1] Rodrigues, M. & de la Riva, J. An insight into machine-learning algorithms to model humancaused wildfire occurrence. Environmental Modelling & Software 57, 192–201 (2014). URL
+https://www.sciencedirect.com/science/article/pii/S1364815214000814.
+[2] Oliveira, S., Oehler, F., San-Miguel-Ayanz, J., Camia, A. & Pereira, J. M. Modeling spatial
+patterns of fire occurrence in mediterranean europe using multiple regression and random forest.
+Forest Ecology and Management 275, 117–129 (2012). URL https://www.sciencedirect.
+com/science/article/pii/S0378112712001272.
+[3] de Vicente y López, F. J. Diseño de un modelo de riesgo integral de incendios forestales
+mediante técnicas multicriterio y su automatización en sistemas de información geográfica.
+Una aplicación en la comunidad valenciana. Ph.D. thesis, Universidad Politécnica de Madrid
+(2012).
+[4] European Commission. European forest fire information system (effis) (2024). URL https://
+forest-fire.emergency.copernicus.eu/apps/data.request.form/. Accessed 25 December
+2025.
+[5] Úbeda, X., Pérez, J. F., Francos, M. & Solera, J. M. Los grandes incendios forestales y sus consecuencias en el suelo. In Arnáez, J. et al. (eds.) Geografı́a: cambios, retos y adaptación. Actas del
+XXVIII Congreso de la Asociación Española de Geografı́a, 87–96 (Asociación Española de Geografı́a, Logroño, España, 2023). URL https://dialnet.unirioja.es/servlet/articulo?
+codigo=9074642. DOI: https://doi.org/10.21138/CG/2023.lc.
+[6] Wagner, C. V. Structure of the canadian forest fire weather index. Tech. Rep. Publication No. 1333, Canadian Forestry Service, Department of the Environment, Ottawa,
+Ontario (1974). URL https://meteo-wagenborgen.nl/wp/wp-content/uploads/2019/08/
+van-Wagner-1974.pdf. Issued under the authority of the Honourable Jack Davis, P.C., M.P.,
+Minister, Environment Canada.
+[7] Prapas, I. et al. Deep learning methods for daily wildfire danger forecasting.
+abs/2111.02736 (2021). URL https://arxiv.org/abs/2111.02736. 2111.02736.
+
+CoRR
+
+[8] Kondylatos, S. et al. Wildfire danger prediction and understanding with deep learning. Geophysical Research Letters 49, e2022GL099368 (2022). URL https://agupubs.onlinelibrary.
+wiley.com/doi/abs/10.1029/2022GL099368.
+E2022GL099368 2022GL099368, https://
+agupubs.onlinelibrary.wiley.com/doi/pdf/10.1029/2022GL099368.
+[9] Service, C. L. M. Corine land cover. URL https://land.copernicus.eu/en/products/
+corine-land-cover. Accessed 29 December 2024.
+[10] Muñoz Sabater, J. et al. Era5-land: a state-of-the-art global reanalysis dataset for land applications. Earth System Science Data 13, 4349–4383 (2021). URL https://essd.copernicus.
+org/articles/13/4349/2021/.
+[11] Union, E. Copernicus land monitoring service (2025). URL https://land.copernicus.eu/en.
+Accessed 1 January 2025.
+[12] Karasante, I. et al. Seasfire cube – a multivariate dataset for global wildfire modeling. Scientific
+Data 12 (2025). URL https://doi.org/10.1038/s41597-025-04546-3.
+[13] Kondylatos, S., Prapas, I., Camps-Valls, G. & Papoutsis, I. Mesogeos: A multi-purpose dataset
+for data-driven wildfire modeling in the mediterranean (2023). URL https://arxiv.org/abs/
+2306.05144. 2306.05144.
+[14] Erzibengoa, J., Gomez-Omella, M. & Goienetxea, I. Iberfire (2025). URL https://zenodo.
+org/record/15798999.
+[15] Agency, E. S. Copernicus global digital elevation model. URL https://doi.org/10.5069/
+G9028PQB. Distributed by OpenTopography, Accessed 29 December 2024.
+[16] Tatem, A. J. Worldpop: Open spatial demographic data and research. URL https://www.
+worldpop.org/. Accessed 14 July 2025.
+
+28
+
+[17] OpenStreetMap contributors. Openstreetmap. URL https://www.openstreetmap.org. Accessed 14 July 2025.
+[18] QGIS Development Team. A Gentle Introduction to GIS: Vector Attribute Data. QGIS
+Project. URL https://docs.qgis.org/3.40/en/docs/gentle_gis_introduction/vector_
+attribute_data.html. Accessed 11 April 2025.
+[19] QGIS Development Team.
+A Gentle Introduction to GIS: Raster Data.
+QGIS
+Project. URL https://docs.qgis.org/3.40/en/docs/gentle_gis_introduction/raster_
+data.html. Accessed 11 April 2025.
+[20] QGIS Development Team. QGIS Geographic Information System. Open Source Geospatial
+Foundation, USA. URL https://qgis.org. Version 3.2.
+[21] SimpleMaps. GIS Shapefiles of Spain. URL https://simplemaps.com/gis/country/es. Accessed 2 April 2025.
+[22] Giannakopoulos, C., Karali, A. et al. Fire weather index: Dataset description (2025). URL
+https://confluence.ecmwf.int/pages/viewpage.action?pageId=283569774.
+[23] Copernicus Climate Change Service. Fire danger indices historical data from the copernicus emergency management service (2019). URL https://doi.org/10.24381/cds.0e89c522.
+Copernicus Climate Change Service (C3S) Climate Data Store (CDS). Accessed 8 July 2025.
+[24] European Commission. NUTS – Nomenclature of territorial units for statistics (2016). URL
+https://ec.europa.eu/eurostat/web/nuts.
+[25] Área del Registro Central de Cartografı́a del Instituto Geográfico Nacional de España (IGN).
+Lı́mites de las comunidades autónomas de españa (2018). URL https://www.arcgis.com/
+home/item.html?id=5f689357238847bc823a2fb164544a77.
+[26] European Environment Agency / Copernicus Land Monitoring Service. Corine land cover 2006
+(raster 100m), europe, 6-yearly – version 2020 20u1 (2020). URL https://doi.org/10.2909/
+08560441-2fd5-4eb9-bf4c-9ef16725726a. Reference year: 2006; Minimum mapping unit:
+25ha; Projection: EPSG:3035; Raster resolution: 100m.
+[27] European Environment Agency / Copernicus Land Monitoring Service. Corine land cover 2012
+(raster 100m), europe, 6-yearly – version 2020 20u1 (2020). URL https://doi.org/10.2909/
+a84ae124-c5c5-4577-8e10-511bfe55cc0d. Reference year: 2012; Minimum mapping unit:
+25ha; Projection: EPSG:3035.
+[28] European Environment Agency / Copernicus Land Monitoring Service. Corine land cover 2018
+(raster 100m), europe, 6-yearly – version 2020 20u1 (2020). URL https://doi.org/10.2909/
+960998c1-1870-4e82-8051-6485205ebbac. Reference year: 2018; Minimum mapping unit:
+25ha; Projection: EPSG:3035.
+[29] Liz-López, H. et al. Spain on fire: A novel wildfire risk assessment model based on image satellite
+processing and atmospheric information. Knowledge-Based Systems 283, 111198 (2024). URL
+https://www.sciencedirect.com/science/article/pii/S0950705123009486.
+[30] Ministerio para la Transición Ecológica y el Reto Demográfico.
+Red Natura
+2000: Cartografı́a.
+URL https://www.miteco.gob.es/eu/biodiversidad/servicios/
+banco-datos-naturaleza/informacion-disponible/rednatura_2000_desc.html.
+Accessed 12 April 2025.
+[31] WorldPop (School of Geography and Environmental Science, University of Southampton; Department of Geography and Geosciences, University of Louisville; Département de Géographie,
+Université de Namur) and CIESIN, Columbia University. Distance to open street map major
+roads 2016. URL https://dx.doi.org/10.5258/SOTON/WP00644.
+[32] WorldPop (School of Geography and Environmental Science, University of Southampton; Department of Geography and Geosciences, University of Louisville; Département de Géographie,
+Université de Namur) and CIESIN, Columbia University. Distance to open street map major
+waterways 2016. URL https://hub.worldpop.org/geodata/summary?id=18002.
+
+29
+
+[33] WorldPop (School of Geography and Environmental Science, University of Southampton; Department of Geography and Geosciences, University of Louisville; Département de Géographie,
+Université de Namur) and CIESIN, Columbia University. Population density (unconstrained
+individual countries 2000–2020, 1km resolution). URL https://dx.doi.org/10.5258/SOTON/
+WP00674.
+[34] Yakovets, A., Siripanich, P. & Murza, S. Open world holidays framework v0.70. URL https:
+//doi.org/10.5281/zenodo.15169945.
+[35] Muñoz Sabater, J. Era5-land hourly data from 1950 to present. Copernicus Climate Change
+Service (C3S) Climate Data Store. URL https://doi.org/10.24381/cds.e2161bac. Accessed
+15 July 2025.
+[36] Muñoz-Sabater, J. Era5-land post-processed daily statistics from 1950 to present. Copernicus
+Climate Change Service (C3S) Climate Data Store. URL https://doi.org/10.24381/cds.
+e9c9c792.
+[37] Alduchov, O. A. & Eskridge, R. E.
+Improved magnus form approximation of saturation vapor pressure.
+Journal of Applied Meteorology and Climatology 35, 601 –
+609 (1996). URL https://journals.ametsoc.org/view/journals/apme/35/4/1520-0450_
+1996_035_0601_imfaos_2_0_co_2.xml.
+[38] World Meteorological Organization. Global climate observing system (gcos). URL https:
+//gcos.wmo.int/site/global-climate-observing-system-gcos. Accessed 31 March 2025.
+[39] Copernicus Land Monitoring Service. Fraction of Absorbed Photosynthetically Active Radiation
+1999–2020 (Raster 1km), Global, 10-daily–Version 2 (2017). URL https://doi.org/10.2909/
+fb3b9550-d542-4eb9-a661-27d586780f76. Accessed 15 July 2025.
+[40] Copernicus Land Monitoring Service. Fraction of Absorbed Photosynthetically Active Radiation
+2014-present (raster 300 m), global, 10-daily - version 1 (2017). URL https://doi.org/10.
+2909/5a38461b-3ef7-4f97-a933-4c9f51a0eda5. Accessed 15 July 2025.
+[41] Copernicus Land Monitoring Service.
+Leaf Area Index 1999-2020 (raster 1
+km), global, 10-daily – version 2 (2017).
+URL https://doi.org/10.2909/
+d5fdc595-2e03-4cbe-a39e-5f006f9cef07. Accessed 15 July 2025.
+[42] Copernicus Land Monitoring Service.
+Leaf Area Index 2014-present (raster
+300 m), global, 10-daily – version 1 (2017).
+URL https://doi.org/10.2909/
+219fdc9f-616b-444b-a495-198f527b4722. Accessed 15 July 2025.
+[43] Copernicus Land Monitoring Service. Normalised Difference Vegetation Index 1999-2020
+(raster 1 km), global, 10-daily – version 3 (2021). URL https://doi.org/10.2909/
+8048eb1c-8579-45c6-b188-b0a26ef26248. Accessed 15 July 2025.
+[44] Copernicus Land Monitoring Service. Normalised Difference Vegetation Index 2020-present
+(raster 300 m), global, 10-daily – version 2 (2021). URL https://doi.org/10.2909/
+ae760a70-708e-459a-8eec-6852462a5faf. Accessed 15 July 2025.
+[45] Copernicus Land Monitoring Service.
+Land Surface Temperature 2010-2021 (raster
+5 km), global, hourly – version 1 (2018).
+URL https://doi.org/10.2909/
+90ca3e33-7926-4f71-857b-7336818cbd23. Accessed 15 July 2025.
+[46] Copernicus Land Monitoring Service.
+Land Surface Temperature 2021-present (raster
+5 km), global, hourly – version 2 (2021).
+URL https://doi.org/10.2909/
+45a5c6e5-f142-4e66-8017-fa9161c2768b. Accessed 15 July 2025.
+[47] Wagner, W., Lemoine, G. & Rott, H. A method for estimating soil moisture from ers
+scatterometer and soil data. Remote Sensing of Environment 70, 191–207 (1999). URL
+https://www.sciencedirect.com/science/article/pii/S003442579900036X.
+[48] Copernicus Land Monitoring Service.
+Soil Water Index 2007-present (raster
+12.5 km), global, daily - version 3 (2021).
+URL https://doi.org/10.2909/
+98c5e00e-3580-4bb3-9509-50a572b1e935. Accessed 15 July 2025.
+
+30
+
+

@@ -1,0 +1,222 @@
+# =============================================================================
+# Configuración del entrenamiento — v1
+# =============================================================================
+# Los hiperparámetros viven aquí y no en el código para que sean auditables y
+# versionables sin tocar la lógica. Cada ejecución guarda una copia de este
+# fichero junto al modelo serializado.
+#
+# Uso:  python -m scripts.train_model --config configs/model_v1.yaml
+# =============================================================================
+
+version: v1
+seed: 42
+
+# ─── Split temporal ───────────────────────────────────────────────────────────
+# Protocolo de desarrollo. El test ciego no se mira hasta congelar el modelo.
+split:
+  train: [2019, 2020, 2021]
+  validation: [2022]        # hiperparámetros, umbral operativo y calibración
+  test: [2023, 2024]        # ciego
+
+# Protocolo de reporte: ventana expansiva, entrenando siempre solo con el pasado.
+# Se activa con --protocol expanding
+expanding_window:
+  test_years: [2022, 2023, 2024]
+  first_train_year: 2019
+
+# ─── Datos ────────────────────────────────────────────────────────────────────
+data:
+  # Ruta de los parquets. Si se deja vacío se resuelve desde DATA_ROOT (.env) o
+  # desde data/raw/dataset_maestro/.
+  root: null
+  block_size: 4000          # celdas por bloque; controla el pico de memoria
+  cyclic_features: true     # añade dia_anio_sin / dia_anio_cos
+
+  # Variantes del dataset que se entrenan y comparan.
+  #   nowcast -> meteorología del día del incendio (diagnóstico)
+  #   t1      -> meteorología del día anterior (previsión 24 h, objetivo del TFM)
+  modes: [nowcast, t1]
+
+# ─── Variables explicativas ───────────────────────────────────────────────────
+# Resultado del analisis de notebooks/02_feature_engineering.ipynb.
+#
+# El diagnostico fue que las variables absolutas (tmax_vc, prec_acum_7d...) codifican sobre todo
+# ESTACIONALIDAD: el calendario por si solo daba ROC-AUC 0,857 de los 0,927 que daban las 29
+# variables juntas. Medido con AUC calculado DENTRO de cada dia -que es lo que decide a que monte
+# va la brigada esta manana- el calendario cae a 0,500 exacto, porque es identico en toda Galicia
+# ese dia.
+#
+# Comparativa de conjuntos (validacion 2022, AUC intra-dia sobre los 74 dias con incendio):
+#
+#   conjunto    n_vars   AUC global   AUC intra-dia
+#   ACTUAL        17       0.8753        0.6505
+#   PROPUESTO     20       0.8840        0.7161     <-- elegido
+#   AMBOS         31       0.8726        0.6987
+#
+# Anadir las absolutas de vuelta (AMBOS) EMPEORA: no faltaban variables, distraian las que habia.
+#
+# Criterio de seleccion:
+#   * se sustituyen las magnitudes absolutas por anomalias frente a la climatologia de la celda
+#     (_anom) y por posicion relativa dentro del dia (_z_dia);
+#   * se anaden los indices fisicos de sequedad, que combinan magnitudes como dice la fisica del
+#     fuego en vez de esperar a que el arbol lo descubra con 840 incendios;
+#   * se elimina la redundancia detectada (|rho| > 0,8): tmax_vc<->tmax_media_7d,
+#     vpd<->rhmin_vc, dias_sin_lluvia<->prec_dia;
+#   * se conservan las categoricas, que tienen un factor 6 entre clases (matorral 1,76x frente a
+#     agricola 0,30x) y que los experimentos anteriores del repositorio descartaban por ser texto.
+#
+# La variable con mas señal espacial resulto ser la HUMEDAD, no la temperatura: rhmin_vc alcanza
+# 0,720 de AUC intra-dia y tmax_vc se queda en 0,583.
+features:
+  derived: true             # calcula las variables de src/features/derived.py
+  columns:
+    # Anomalias frente a la climatologia de la propia celda (mismo mes)
+    - tmax_vc_anom
+    - rhmin_vc_anom
+    - vmax_vc_anom
+    - prec_acum_7d_anom
+    # Posicion relativa dentro del mapa de ese dia
+    - tmax_vc_z_dia
+    - rhmin_vc_z_dia
+    - vmax_vc_z_dia
+    - prec_acum_7d_z_dia
+    # Indices fisicos de sequedad del combustible
+    - vpd
+    - dias_sin_lluvia
+    - nesterov
+    - ratio_termico_eolico
+    # Interacciones combustible x sequedad
+    - vpd_x_forestal
+    - seq_x_forestal
+    # Terreno y combustible
+    - altitud_media
+    - pendiente_media
+    - orientacion_media
+    - combustible_pct_forestal
+    - combustible_clase
+    - orientacion_clase
+    # Estacionalidad continua (se conserva: aporta al ranking global aunque no al intra-dia)
+    - dia_anio_sin
+    - dia_anio_cos
+
+# ─── Tratamiento del desbalanceo ──────────────────────────────────────────────
+sampling:
+  neg_ratio: 50             # negativos por positivo
+
+  # hard_fraction = parte del cupo de negativos que sale de dias "dificiles" (secos y calidos
+  # sin incendio).
+  #
+  # PUESTO A 0 TRAS MEDIRLO. La version inicial usaba 0.8 con el argumento de que asi el modelo
+  # aprende la frontera real en vez de separar trivialmente el invierno. En la practica hacia lo
+  # contrario: al llenar el entrenamiento de dias secos y calidos, positivos y negativos quedan
+  # meteorologicamente casi identicos, la meteorologia deja de discriminar y lo unico que separa
+  # unos de otros es la ubicacion de la celda. El modelo memoriza que celdas ardieron y eso no
+  # transfiere a otro anio. Es desplazamiento de covariables introducido por el propio muestreo:
+  # la distribucion de entrenamiento deja de parecerse a la de evaluacion (el anio completo).
+  #
+  # Barrido sobre validacion 2022, variante t1 (docs/technical/model_v1_fixed_hf*_resultados.csv):
+  #
+  #   hard_fraction | LogReg ROC-AUC | LogReg Recall@5% | LightGBM ROC-AUC | LightGBM Recall@5%
+  #   --------------|----------------|------------------|------------------|-------------------
+  #        0.0      |     0.9434     |      78.5 %      |      0.9088      |       42.0 %
+  #        0.18     |     0.9454     |      76.2 %      |      0.8924      |       13.4 %
+  #        0.5      |     0.9245     |      68.4 %      |      0.8440      |        3.1 %
+  #        0.8      |     0.8455     |      39.8 %      |      0.5549      |        5.3 %
+  #
+  # El concepto de "negativo dificil" sigue siendo valido, pero pertenece a la EVALUACION (medir
+  # el rendimiento restringido a los dias de riesgo real), no al muestreo de entrenamiento.
+  hard_fraction: 0.0
+
+  # Umbrales que definen "negativo dificil". Ya no se usan para muestrear, pero se conservan
+  # porque son los que delimitan la subpoblacion de riesgo en la evaluacion. Derivados del
+  # perfil de los 1.761 incendios reales (tmax media 25,0 C | rhmin media 40,1 % | 96 % con
+  # P < 5 mm).
+  hard_thresholds:
+    prec_max: 5.0
+    tmax_min: 20.0
+    rhmin_max: 60.0
+
+# ─── Métricas ─────────────────────────────────────────────────────────────────
+metrics:
+  fpr_max: 0.05             # Recall @ FPR <= 5 %
+  top_k_daily: 0.01         # Recall alertando el 1 % de celdas cada día
+  n_bootstrap: 1000
+  alpha: 0.10               # intervalo de confianza del 90 %
+
+# ─── Calibración ──────────────────────────────────────────────────────────────
+calibration:
+  enabled: true
+  max_fit_points: 2000000
+  risk_quantiles: [0.90, 0.98, 0.995]   # Moderado | Alto | Extremo
+
+# ─── Modelos ──────────────────────────────────────────────────────────────────
+models:
+
+  # CAPACIDAD RECORTADA (v1.1). La configuración anterior (400 arboles x 63 hojas = 25.200
+  # hojas para 42.808 filas con solo 840 positivos, una hoja por cada 1,7 filas) sobreajustaba:
+  # perdia por 5x frente a una regresion logistica de 19 coeficientes y sus importancias salian
+  # planas, senal de que repartia cortes sobre ruido. Ahora se limita el numero de hojas, se
+  # exigen hojas mucho mas pobladas, se sube la regularizacion y se deja que la parada temprana
+  # decida cuantos arboles sobreviven en lugar de agotarlos siempre.
+  lightgbm:
+    enabled: true
+    early_stopping_rounds: 100
+    params:
+      n_estimators: 3000        # techo alto; la parada temprana elige el numero real
+      learning_rate: 0.03
+      num_leaves: 15            # era 63
+      max_depth: 6              # era -1 (sin limite)
+      min_child_samples: 300    # era 50
+      subsample: 0.8
+      subsample_freq: 1
+      colsample_bytree: 0.7
+      reg_lambda: 10.0          # era 1.0
+      scale_pos_weight: 3.0
+      n_jobs: -1
+      verbose: -1
+
+  xgboost:
+    enabled: true
+    early_stopping_rounds: 100
+    params:
+      n_estimators: 3000
+      learning_rate: 0.03
+      max_depth: 4              # era 7
+      min_child_weight: 50      # era 5
+      subsample: 0.8
+      colsample_bytree: 0.7
+      reg_lambda: 10.0          # era 1.0
+      scale_pos_weight: 3.0
+      tree_method: hist
+      enable_categorical: true
+      n_jobs: -1
+
+  # Baselines de referencia. Solo se entrenan sobre el conjunto submuestreado:
+  # justifican el salto a boosting, no compiten por ser el modelo operativo.
+  #
+  # AVISO DE COSTE: entrenar es instantáneo (15-45 k filas), pero la inferencia sobre un año
+  # completo (11,2 M de filas) pasa por el ColumnTransformer y es MUY lenta comparada con
+  # LightGBM/XGBoost, que predicen de forma nativa. Medido: ~24 min con 40 árboles de
+  # profundidad 10. Por eso van dimensionados a la baja: como referencia bastan.
+  # Para iterar rápido, entrena solo los de boosting:
+  #     python -m scripts.train_model --models lightgbm xgboost
+  logistic_regression:
+    enabled: true
+    params:
+      max_iter: 2000
+      class_weight: balanced
+
+  random_forest:
+    enabled: true
+    params:
+      n_estimators: 100
+      max_depth: 12
+      min_samples_leaf: 10
+      class_weight: balanced_subsample
+      n_jobs: -1
+
+# ─── Salidas ──────────────────────────────────────────────────────────────────
+output:
+  models_dir: data/models
+  results_dir: docs/technical
+  results_prefix: model_v1
