@@ -4,6 +4,7 @@ import argparse
 import re
 from pathlib import Path
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -139,6 +140,52 @@ def procesar_era5(
         daily.to_netcdf(destination, encoding=encoding)
     finally:
         hourly.close()
+
+
+def interpolar_al_grid(
+    daily_path: str | Path,
+    cube_path: str | Path,
+    grid_path: str | Path,
+    output_path: str | Path,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> None:
+    """Interpola ERA5 diario al grid 1 km, escribiendo una variable cada vez."""
+    with xr.open_dataset(daily_path) as daily, xr.open_dataset(cube_path) as cube:
+        if start_date or end_date:
+            daily = daily.sel(time=slice(start_date, end_date))
+        grid = gpd.read_file(grid_path)
+        active = grid.loc[grid["is_galicia"] == 1].copy()
+        points = gpd.GeoSeries(active.geometry.centroid, crs=active.crs).to_crs("EPSG:4326")
+        latitude = xr.DataArray(points.y.to_numpy(), dims="cell")
+        longitude = xr.DataArray(points.x.to_numpy(), dims="cell")
+        rows = (active["cell_id"].to_numpy() // cube.sizes["x"]).astype(int)
+        cols = (active["cell_id"].to_numpy() % cube.sizes["x"]).astype(int)
+        destination = Path(output_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            with xr.open_dataset(destination) as existing:
+                completed = set(existing.data_vars)
+        else:
+            completed = set()
+            xr.Dataset(
+                {"is_galicia": cube["is_galicia"]},
+                coords={"time": daily.time, "y": cube.y, "x": cube.x},
+            ).to_netcdf(destination)
+
+        for name in daily.data_vars:
+            if name in completed:
+                continue
+            linear = daily[name].interp(latitude=latitude, longitude=longitude, method="linear")
+            nearest = daily[name].sel(latitude=latitude, longitude=longitude, method="nearest")
+            values = linear.where(linear.notnull(), nearest).values.astype(np.float32)
+            full = np.full((len(daily.time), cube.sizes["y"], cube.sizes["x"]), np.nan, dtype=np.float32)
+            full[:, rows, cols] = values
+            xr.Dataset({name: (("time", "y", "x"), full)}).to_netcdf(
+                destination,
+                mode="a",
+                encoding={name: {"zlib": True, "complevel": 4, "dtype": "float32"}},
+            )
 
 
 def main() -> None:
