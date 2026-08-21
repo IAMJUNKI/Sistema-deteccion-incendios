@@ -70,7 +70,7 @@ dependencies:
   # ─── Dependencias adicionales via pip (no disponibles en conda-forge) ──────
   - pip
   - pip:
-    - cdsapi>=0.6.1          # Cliente oficial Copernicus CDS (ERA5)
+    - cdsapi>=0.7.7          # Cliente oficial Copernicus CDS (ERA5)
     - pyarrow>=13.0          # Soporte Parquet
     - streamlit-folium>=0.16  # Integración Folium en Streamlit
     - dem-stitcher>=2.5.0    # Descarga dinámica de Copernicus DEM GLO-30
