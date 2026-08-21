@@ -12,8 +12,10 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-DEFAULT_START_DATE = "2019-01-01"
-DEFAULT_END_DATE = "2023-11-23"
+from src.config import DATACUBE_END, DATACUBE_START
+
+DEFAULT_START_DATE = DATACUBE_START
+DEFAULT_END_DATE = DATACUBE_END
 TIME_VARIABLES = [
     "year",
     "month",
@@ -80,10 +82,10 @@ def crear_datacubo_temporal(
 
     dataset.attrs = {
         "title": "Daily temporal variables",
-        "description": "Calendar predictors for the 2019-01-01 to 2023-11-23 modelling period.",
+        "description": f"Calendar predictors for the {time.min().date()} to {time.max().date()} modelling period.",
         "module": "time",
         "temporal_resolution": "1 day",
-        "prediction_period": "2019-01-01 to 2023-11-23",
+        "prediction_period": f"{time.min().date()} to {time.max().date()}",
     }
     dataset.time.attrs = {"long_name": "Date"}
     for variable in TIME_VARIABLES:

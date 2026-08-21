@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from src.ingestion.pipeline import ejecutar_pipeline_egif, ejecutar_pipeline_meteorologia
+from src.ingestion.pipeline import (
+    DEFAULT_METEOROLOGY_CUBE,
+    ejecutar_pipeline_egif,
+    ejecutar_pipeline_meteorologia,
+)
 
 
 def test_ejecutar_pipeline_procesa_e_interpola(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -14,17 +18,19 @@ def test_ejecutar_pipeline_procesa_e_interpola(monkeypatch: pytest.MonkeyPatch) 
         "src.ingestion.pipeline.interpolar_al_grid", lambda *args: calls.append(("grid", *args))
     )
 
-    ejecutar_pipeline_meteorologia("static.nc", "grid.gpkg", raw_dir="raw", daily_output_path="daily.nc")
+    ejecutar_pipeline_meteorologia(
+        "static.nc", "grid.gpkg", raw_dir="raw", daily_output_path="daily.nc"
+    )
 
-    assert calls[0] == ("daily", "raw", Path("daily.nc"), "2018-12-01", "2023-11-23")
+    assert calls[0] == ("daily", "raw", Path("daily.nc"), "2018-12-01", "2023-11-26")
     assert calls[1] == (
         "grid",
         Path("daily.nc"),
         "static.nc",
         "grid.gpkg",
-        Path("data/processed/meteorology_2018_2023.nc"),
+        DEFAULT_METEOROLOGY_CUBE,
         "2018-12-01",
-        "2023-11-23",
+        "2023-11-26",
     )
 
 

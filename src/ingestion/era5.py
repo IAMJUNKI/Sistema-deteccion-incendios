@@ -67,7 +67,9 @@ def crear_cliente_cds() -> object:
     try:
         import cdsapi
     except ImportError as error:
-        raise RuntimeError("Falta cdsapi. Instala el entorno definido en environment.yml.") from error
+        raise RuntimeError(
+            "Falta cdsapi. Instala el entorno definido en environment.yml."
+        ) from error
 
     url = os.getenv("COPERNICUS_CDS_API_URL", "https://cds.climate.copernicus.eu/api")
     return cdsapi.Client(url=url, key=api_key)

@@ -8,7 +8,6 @@ posiciones exteriores a Galicia se mantienen para preservar las dimensiones
 import logging
 import math
 from pathlib import Path
-from typing import Optional, Union
 
 import geopandas as gpd
 import numpy as np
@@ -22,7 +21,7 @@ DEFAULT_CELL_SIZE_METERS = 1000.0
 
 
 def descargar_limites_galicia(
-    ruta_salida: Union[str, Path], url_fuente: Optional[str] = None
+    ruta_salida: str | Path, url_fuente: str | None = None
 ) -> gpd.GeoDataFrame:
     """Carga los límites de Galicia, descargándolos de GADM si no existen.
 
@@ -153,7 +152,7 @@ def crear_rejilla_vectorial(cube: xr.Dataset, cell_size_meters: float) -> gpd.Ge
 
 
 def crear_rejilla_galicia_pipeline(
-    ruta_limites: Union[str, Path],
+    ruta_limites: str | Path,
     cell_size_meters: float = DEFAULT_CELL_SIZE_METERS,
     crs_trabajo: str = DEFAULT_CRS,
 ) -> tuple[xr.Dataset, gpd.GeoDataFrame]:
@@ -178,8 +177,8 @@ def crear_rejilla_galicia_pipeline(
 def guardar_rejilla_datacube(
     cube: xr.Dataset,
     grid: gpd.GeoDataFrame,
-    ruta_cubo: Union[str, Path],
-    ruta_vectorial: Union[str, Path],
+    ruta_cubo: str | Path,
+    ruta_vectorial: str | Path,
 ) -> None:
     """Guarda las dos salidas del notebook: NetCDF y GeoPackage."""
     ruta_cubo = Path(ruta_cubo)

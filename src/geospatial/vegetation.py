@@ -30,6 +30,7 @@ LANDCOVER_VARIABLES = [
     "wetlands",
     "water",
 ]
+FOREST_COVER_VARIABLE = "forest_cover_fraction"
 LANDCOVER_METADATA = {
     "artificial": "Artificial surfaces",
     "agriculture": "Agricultural areas",
@@ -206,6 +207,7 @@ def extraer_variables_cobertura_suelo(
     result["combustible_pct_forestal"] = (
         result[["broadleaf_forest", "coniferous_forest", "mixed_forest"]].sum(axis=1) * 100.0
     )
+    result[FOREST_COVER_VARIABLE] = result["combustible_pct_forestal"] / 100.0
     fractions = result[LANDCOVER_VARIABLES]
     has_landcover = fractions.notna().any(axis=1)
     dominant = fractions.fillna(-np.inf).idxmax(axis=1).where(has_landcover)
@@ -226,11 +228,14 @@ def crear_datacubo_cobertura_suelo(cube: xr.Dataset, landcover: pd.DataFrame) ->
     if (cell_ids < 0).any() or (cell_ids >= ny * nx).any():
         raise ValueError("Los cell_id no pertenecen a la malla del cubo.")
     rows, columns = np.divmod(cell_ids, nx)
-    for variable in LANDCOVER_VARIABLES:
+    for variable in [*LANDCOVER_VARIABLES, FOREST_COVER_VARIABLE]:
         values = np.full((ny, nx), np.nan, dtype=np.float32)
         values[rows, columns] = landcover[variable].to_numpy(dtype=np.float32)
         output[variable] = (("y", "x"), values)
-        output[variable].attrs = {"long_name": LANDCOVER_METADATA[variable], "units": "fraction"}
+        output[variable].attrs = {
+            "long_name": LANDCOVER_METADATA.get(variable, "Total forest cover"),
+            "units": "fraction",
+        }
     output.attrs = {
         "title": "Land cover variables",
         "description": "CORINE Land Cover fractions aggregated to the 1 km spatial grid.",

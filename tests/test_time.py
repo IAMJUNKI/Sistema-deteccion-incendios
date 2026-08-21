@@ -9,12 +9,12 @@ def test_cubo_temporal_por_defecto_cubre_periodo_historico() -> None:
     """El rango coincide exactamente con el periodo objetivo definido."""
     dataset = crear_datacubo_temporal()
 
-    assert len(dataset.time) == 1788
+    assert len(dataset.time) == 1791
     assert str(dataset.time.min().values)[:10] == "2019-01-01"
-    assert str(dataset.time.max().values)[:10] == "2023-11-23"
+    assert str(dataset.time.max().values)[:10] == "2023-11-26"
     assert set(TIME_VARIABLES).issubset(dataset.data_vars)
     assert int(dataset.sel(time="2020-02-29")["day_of_year"]) == 60
-    assert int(dataset.sel(time="2023-11-23")["is_weekend"]) == 0
+    assert int(dataset.sel(time="2023-11-26")["is_weekend"]) == 1
 
 
 def test_variables_ciclicas_estan_acotadas() -> None:

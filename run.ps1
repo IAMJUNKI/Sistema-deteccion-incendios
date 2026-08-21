@@ -11,7 +11,7 @@
 # $PROFILE si quiere); esto simplemente evita repetir la ruta del intérprete.
 # =============================================================================
 
-$py = "$env:USERPROFILE\anaconda3\python.exe"
+$py = "$env:USERPROFILE\anaconda3\envs\incendios-forestales\python.exe"
 if (-not (Test-Path $py)) {
     Write-Error "No se encuentra el intérprete en $py. Ajusta la ruta en run.ps1."
     exit 1

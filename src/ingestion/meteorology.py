@@ -9,10 +9,12 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-DEFAULT_START_DATE = "2018-12-01"
-DEFAULT_END_DATE = "2023-11-23"
+from src.config import DATACUBE_END, ERA5_DAILY_PATH, METEOROLOGY_CONTEXT_START
+
+DEFAULT_START_DATE = METEOROLOGY_CONTEXT_START
+DEFAULT_END_DATE = DATACUBE_END
 DEFAULT_RAW_DIR = Path("data/raw/meteorology/era5")
-DEFAULT_OUTPUT = Path("data/processed/meteorology/era5_daily_2018_2023.nc")
+DEFAULT_OUTPUT = ERA5_DAILY_PATH
 FILE_PATTERN = re.compile(r"era5_?land_galicia_(\d{4})_(\d{2})\.nc$")
 
 DAILY_VARIABLES = (
@@ -95,7 +97,9 @@ def add_meteorology_accumulations(daily: xr.Dataset) -> xr.Dataset:
     precipitation = output["precipitation_sum"]
     for window in PRECIPITATION_WINDOWS:
         name = f"precipitation_sum_{window}d"
-        output[name] = precipitation.rolling(time=window, min_periods=window).sum().astype(np.float32)
+        output[name] = (
+            precipitation.rolling(time=window, min_periods=window).sum().astype(np.float32)
+        )
         output[name].attrs = {
             "long_name": f"Precipitation accumulated over {window} days",
             "units": "mm",
@@ -123,12 +127,16 @@ def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
     """Create daily observations. No temporal shift is applied."""
     temperature = hourly["t2m"] - 273.15
     dewpoint = hourly["d2m"] - 273.15
-    humidity = 100 * np.exp(17.625 * dewpoint / (243.04 + dewpoint)) / np.exp(
-        17.625 * temperature / (243.04 + temperature)
+    humidity = (
+        100
+        * np.exp(17.625 * dewpoint / (243.04 + dewpoint))
+        / np.exp(17.625 * temperature / (243.04 + temperature))
     )
     humidity = humidity.clip(min=0, max=100)
     wind = np.hypot(hourly["u10"], hourly["v10"]) * 3.6
-    local_time = pd.DatetimeIndex(hourly.time.values).tz_localize("UTC").tz_convert("Europe/Madrid")
+    local_time = (
+        pd.DatetimeIndex(hourly.time.values).tz_localize("UTC").tz_convert("Europe/Madrid")
+    )
     local_hour = xr.DataArray(local_time.hour, dims="time", coords={"time": hourly.time})
     critical = (local_hour >= 12) & (local_hour <= 18)
 
@@ -157,9 +165,18 @@ def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
     }
     for name in DAILY_VARIABLES:
         output[name].attrs["long_name"] = name.replace("_", " ")
-    for name in ("temperature_mean", "temperature_min", "temperature_max", "temperature_max_12_18h"):
+    for name in (
+        "temperature_mean",
+        "temperature_min",
+        "temperature_max",
+        "temperature_max_12_18h",
+    ):
         output[name].attrs["units"] = "degC"
-    for name in ("relative_humidity_mean", "relative_humidity_min", "relative_humidity_min_12_18h"):
+    for name in (
+        "relative_humidity_mean",
+        "relative_humidity_min",
+        "relative_humidity_min_12_18h",
+    ):
         output[name].attrs["units"] = "%"
     for name in ("wind_speed_mean", "wind_speed_max", "wind_speed_max_12_18h"):
         output[name].attrs["units"] = "km h-1"
@@ -179,7 +196,9 @@ def procesar_era5(
         daily = crear_meteorologia_diaria(hourly)
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        encoding = {name: {"zlib": True, "complevel": 4, "dtype": "float32"} for name in daily.data_vars}
+        encoding = {
+            name: {"zlib": True, "complevel": 4, "dtype": "float32"} for name in daily.data_vars
+        }
         daily.to_netcdf(destination, encoding=encoding)
     finally:
         hourly.close()
@@ -219,10 +238,13 @@ def interpolar_al_grid(
         for name in daily.data_vars:
             if name in completed:
                 continue
-            linear = daily[name].interp(latitude=latitude, longitude=longitude, method="linear")
-            nearest = daily[name].sel(latitude=latitude, longitude=longitude, method="nearest")
+            source = daily[name].dropna(dim="latitude", how="all").dropna(dim="longitude", how="all")
+            linear = source.interp(latitude=latitude, longitude=longitude, method="linear")
+            nearest = source.sel(latitude=latitude, longitude=longitude, method="nearest")
             values = linear.where(linear.notnull(), nearest).values.astype(np.float32)
-            full = np.full((len(daily.time), cube.sizes["y"], cube.sizes["x"]), np.nan, dtype=np.float32)
+            full = np.full(
+                (len(daily.time), cube.sizes["y"], cube.sizes["x"]), np.nan, dtype=np.float32
+            )
             full[:, rows, cols] = values
             xr.Dataset({name: (("time", "y", "x"), full)}).to_netcdf(
                 destination,
@@ -232,7 +254,9 @@ def interpolar_al_grid(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Process hourly ERA5-Land into daily meteorology.")
+    parser = argparse.ArgumentParser(
+        description="Process hourly ERA5-Land into daily meteorology."
+    )
     parser.add_argument("--raw-dir", default=str(DEFAULT_RAW_DIR))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--start-date", default=DEFAULT_START_DATE)

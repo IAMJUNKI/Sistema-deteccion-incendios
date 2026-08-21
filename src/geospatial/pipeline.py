@@ -112,6 +112,8 @@ def run_pipeline(
         df_topo["orientacion_media"] = float("nan")
         df_topo["orientacion_clase"] = None
 
+    if df_topo["elevation_mean"].isna().all():
+        raise RuntimeError("La topografía no se pudo calcular; no se guardan capas incompletas.")
     topography = crear_datacubo_topografia(cube, df_topo)
     guardar_datacubo_topografia(topography, ruta_topografia)
 
@@ -148,6 +150,8 @@ def run_pipeline(
         df_veg["combustible_clase"] = None
         df_veg["combustible_pct_forestal"] = float("nan")
 
+    if df_veg[LANDCOVER_VARIABLES].isna().all().all():
+        raise RuntimeError("CORINE no se pudo procesar; no se guardan capas incompletas.")
     landcover = crear_datacubo_cobertura_suelo(cube, df_veg)
     guardar_datacubo_cobertura_suelo(landcover, ruta_cobertura_suelo)
 

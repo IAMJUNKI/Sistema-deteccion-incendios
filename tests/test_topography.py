@@ -31,8 +31,8 @@ def test_agregacion_topografica_y_datacubo() -> None:
         grid, elevation, slope, aspect, roughness, profile
     )
     assert set(TOPOGRAPHY_VARIABLES).issubset(dataframe.columns)
-    assert dataframe.loc[0, "aspect_000_045"] == 1.0
-    assert dataframe.loc[1, "aspect_045_090"] == 1.0
+    assert dataframe.loc[0, "aspect_000_045_fraction"] == 1.0
+    assert dataframe.loc[1, "aspect_045_090_fraction"] == 1.0
     assert dataframe.loc[0, "elevation_std"] > 0
 
     cube = xr.Dataset(coords={"x": [0.0, 1000.0], "y": [0.0]})
@@ -41,5 +41,5 @@ def test_agregacion_topografica_y_datacubo() -> None:
     topography = crear_datacubo_topografia(cube, dataframe)
 
     assert topography["elevation_mean"].shape == (1, 2)
-    assert topography["aspect_000_045"].values.tolist() == [[1.0, 0.0]]
-    assert topography["aspect_045_090"].values.tolist() == [[0.0, 1.0]]
+    assert topography["aspect_000_045_fraction"].values.tolist() == [[1.0, 0.0]]
+    assert topography["aspect_045_090_fraction"].values.tolist() == [[0.0, 1.0]]

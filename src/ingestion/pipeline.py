@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from src.config import EGIF_START, METEOROLOGY_CUBE_PATH
 from src.ingestion.ingest_egif import (
     DEFAULT_EVENTS_OUTPUT,
     DEFAULT_METADATA_OUTPUT,
@@ -19,7 +20,7 @@ from src.ingestion.meteorology import (
     procesar_era5,
 )
 
-DEFAULT_METEOROLOGY_CUBE = Path("data/processed/meteorology_2018_2023.nc")
+DEFAULT_METEOROLOGY_CUBE = METEOROLOGY_CUBE_PATH
 
 
 def ejecutar_pipeline_meteorologia(
@@ -57,7 +58,7 @@ def ejecutar_pipeline_egif(
     events_output_path: str | Path = DEFAULT_EVENTS_OUTPUT,
     target_output_path: str | Path = DEFAULT_TARGET_OUTPUT,
     metadata_output_path: str | Path = DEFAULT_METADATA_OUTPUT,
-    start_date: str = "2018-01-01",
+    start_date: str = EGIF_START,
     end_date: str = DEFAULT_END_DATE,
 ) -> dict[str, Any]:
     """Genera eventos EGIF y el target por celda y día sobre la rejilla actual."""
@@ -92,11 +93,13 @@ def main() -> None:
         action="store_true",
         help="Ejecuta exclusivamente la fase EGIF.",
     )
-    parser.add_argument("--egif-xml", help="XML oficial de EGIF para incorporar la fase de incendios.")
+    parser.add_argument(
+        "--egif-xml", help="XML oficial de EGIF para incorporar la fase de incendios."
+    )
     parser.add_argument("--egif-events-output", default=str(DEFAULT_EVENTS_OUTPUT))
     parser.add_argument("--egif-target-output", default=str(DEFAULT_TARGET_OUTPUT))
     parser.add_argument("--egif-metadata-output", default=str(DEFAULT_METADATA_OUTPUT))
-    parser.add_argument("--egif-start-date", default="2018-01-01")
+    parser.add_argument("--egif-start-date", default=EGIF_START)
     args = parser.parse_args()
 
     if not args.skip_meteorology:

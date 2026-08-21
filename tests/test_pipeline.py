@@ -1,5 +1,3 @@
-import json
-
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -7,7 +5,7 @@ import xarray as xr
 from src.pipeline import construir_datacubo_completo
 
 
-def test_construir_datacubo_marca_como_ausente_el_periodo_sin_egif(tmp_path) -> None:
+def test_construir_datacubo_asigna_ceros_fuera_de_las_igniciones(tmp_path) -> None:
     spatial = xr.Dataset(
         {"is_galicia": (("y", "x"), np.array([[1]], dtype=np.uint8))},
         coords={"y": [0.0], "x": [0.0]},
@@ -34,7 +32,6 @@ def test_construir_datacubo_marca_como_ausente_el_periodo_sin_egif(tmp_path) -> 
         "temporal": tmp_path / "time.nc",
         "meteorology": tmp_path / "meteorology.nc",
         "target": tmp_path / "target.parquet",
-        "metadata": tmp_path / "metadata.json",
         "output": tmp_path / "complete.nc",
     }
     spatial.to_netcdf(paths["spatial"])
@@ -45,10 +42,6 @@ def test_construir_datacubo_marca_como_ausente_el_periodo_sin_egif(tmp_path) -> 
     pd.DataFrame(
         {"cell_id": [0], "fecha": [pd.Timestamp("2020-01-01")], "target_ignicion": [1]}
     ).to_parquet(paths["target"], index=False)
-    paths["metadata"].write_text(
-        json.dumps({"available_event_period": {"end": "2020-01-01"}}),
-        encoding="utf-8",
-    )
 
     construir_datacubo_completo(
         paths["spatial"],
@@ -57,12 +50,10 @@ def test_construir_datacubo_marca_como_ausente_el_periodo_sin_egif(tmp_path) -> 
         paths["temporal"],
         paths["meteorology"],
         paths["target"],
-        paths["metadata"],
         paths["output"],
     )
 
     with xr.open_dataset(paths["output"]) as result:
         assert result["target_ignicion"].sel(time="2020-01-01").item() == 1
-        assert np.isnan(result["target_ignicion"].sel(time="2020-01-02").item())
-        assert result["egif_observed"].values.tolist() == [1, 0]
-
+        assert result["target_ignicion"].sel(time="2020-01-02").item() == 0
+        assert "egif_observed" not in result

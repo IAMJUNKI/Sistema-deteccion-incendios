@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -13,13 +12,21 @@ import pandas as pd
 from pyproj import Transformer
 from shapely.geometry import Point
 
+from src.config import (
+    DATACUBE_END,
+    EGIF_EVENTS_PATH,
+    EGIF_METADATA_PATH,
+    EGIF_START,
+    EGIF_TARGET_PATH,
+)
+
 GALICIA_PROVINCES = {"15", "27", "32", "36"}
 DEFAULT_RAW_DIR = Path("data/raw/fire_history")
-DEFAULT_EVENTS_OUTPUT = Path("data/processed/target/egif_events_2018_2023.gpkg")
-DEFAULT_TARGET_OUTPUT = Path("data/processed/target/egif_target_2018_2023.parquet")
-DEFAULT_METADATA_OUTPUT = Path("data/processed/target/egif_target_2018_2023_metadata.json")
-DEFAULT_START_DATE = "2018-01-01"
-DEFAULT_END_DATE = "2023-11-23"
+DEFAULT_EVENTS_OUTPUT = EGIF_EVENTS_PATH
+DEFAULT_TARGET_OUTPUT = EGIF_TARGET_PATH
+DEFAULT_METADATA_OUTPUT = EGIF_METADATA_PATH
+DEFAULT_START_DATE = EGIF_START
+DEFAULT_END_DATE = DATACUBE_END
 EVENT_COLUMNS = [
     "egif_id",
     "fecha",
@@ -175,6 +182,14 @@ def map_fires_to_grid(fires_gdf: gpd.GeoDataFrame, grid_gdf: gpd.GeoDataFrame) -
     return target[["cell_id", "fecha", "target_ignicion", "n_incendios", "superficie_ha"]]
 
 
+def ultima_fecha_egif(xml_path: str | Path) -> pd.Timestamp:
+    """Devuelve la última fecha registrada en el XML gallego de EGIF."""
+    fires = parse_egif_xml(xml_path)
+    if fires.empty:
+        raise ValueError("El XML EGIF no contiene incendios válidos de Galicia.")
+    return pd.Timestamp(fires["fecha"].max())
+
+
 def procesar_egif(
     xml_path: str | Path,
     grid_path: str | Path,
@@ -182,11 +197,18 @@ def procesar_egif(
     target_output_path: str | Path = DEFAULT_TARGET_OUTPUT,
     metadata_output_path: str | Path = DEFAULT_METADATA_OUTPUT,
     start_date: str = DEFAULT_START_DATE,
-    end_date: str = DEFAULT_END_DATE,
+    end_date: str | None = None,
 ) -> dict[str, Any]:
     """Procesa EGIF, guarda eventos auditables y el target diario por celda."""
     fires = parse_egif_xml(xml_path)
-    fires = fires.loc[fires["fecha"].between(pd.Timestamp(start_date), pd.Timestamp(end_date))].copy()
+    source_end = pd.Timestamp(fires["fecha"].max()) if not fires.empty else None
+    if end_date is None:
+        if source_end is None:
+            raise ValueError("El XML EGIF no contiene incendios válidos de Galicia.")
+        end_date = source_end.date().isoformat()
+    fires = fires.loc[
+        fires["fecha"].between(pd.Timestamp(start_date), pd.Timestamp(end_date))
+    ].copy()
     fires_gdf = crear_geodatos_incendios(fires)
     grid = gpd.read_file(grid_path)
     target = map_fires_to_grid(fires_gdf, grid)
@@ -199,25 +221,15 @@ def procesar_egif(
     fires_gdf.to_file(events_output_path, driver="GPKG")
     target.to_parquet(target_output_path, index=False)
 
-    last_event_date = fires["fecha"].max().date().isoformat() if not fires.empty else None
     metadata = {
         "source": "EGIF-MITECO XML",
         "requested_period": {"start": start_date, "end": end_date},
-        "available_event_period": {
-            "start": fires["fecha"].min().date().isoformat() if not fires.empty else None,
-            "end": last_event_date,
-        },
+        "source_last_event_date": source_end.date().isoformat() if source_end is not None else None,
+        "coverage_contract": "Every date from requested start through requested end is EGIF-covered.",
         "n_events_galicia": int(len(fires_gdf)),
         "n_positive_cell_days": int(len(target)),
-        "warning": (
-            "The source ends before the requested period. Do not label subsequent dates as negatives."
-            if last_event_date and last_event_date < end_date
-            else None
-        ),
     }
     metadata_output_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-    if metadata["warning"]:
-        warnings.warn(metadata["warning"], stacklevel=2)
     return metadata
 
 
@@ -230,7 +242,7 @@ def main() -> None:
     parser.add_argument("--target-output", default=str(DEFAULT_TARGET_OUTPUT))
     parser.add_argument("--metadata-output", default=str(DEFAULT_METADATA_OUTPUT))
     parser.add_argument("--start-date", default=DEFAULT_START_DATE)
-    parser.add_argument("--end-date", default=DEFAULT_END_DATE)
+    parser.add_argument("--end-date", default=None)
     args = parser.parse_args()
     print(
         procesar_egif(

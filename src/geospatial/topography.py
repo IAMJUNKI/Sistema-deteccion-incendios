@@ -8,7 +8,6 @@ y la proporción sin orientación válida.
 
 import logging
 from pathlib import Path
-from typing import Tuple
 
 import geopandas as gpd
 import numpy as np
@@ -22,9 +21,18 @@ from scipy.ndimage import uniform_filter
 logger = logging.getLogger(__name__)
 
 NODATA_VALUE = -9999.0
-ASPECT_RANGES = ((0, 45), (45, 90), (90, 135), (135, 180), (180, 225), (225, 270), (270, 315), (315, 360))
-ASPECT_VARIABLES = [f"aspect_{start:03d}_{end:03d}" for start, end in ASPECT_RANGES]
-ASPECT_NODATA_VARIABLE = "aspect_sin_datos"
+ASPECT_RANGES = (
+    (0, 45),
+    (45, 90),
+    (90, 135),
+    (135, 180),
+    (180, 225),
+    (225, 270),
+    (270, 315),
+    (315, 360),
+)
+ASPECT_VARIABLES = [f"aspect_{start:03d}_{end:03d}_fraction" for start, end in ASPECT_RANGES]
+ASPECT_NODATA_VARIABLE = "aspect_no_data_fraction"
 TOPOGRAPHY_VARIABLES = [
     "elevation_mean",
     "elevation_std",
@@ -38,8 +46,8 @@ TOPOGRAPHY_VARIABLES = [
 
 
 def descargar_dem_galicia(
-    bounds_wgs84: Tuple[float, float, float, float]
-) -> Tuple[np.ndarray, dict]:
+    bounds_wgs84: tuple[float, float, float, float],
+) -> tuple[np.ndarray, dict]:
     """Descarga Copernicus DEM GLO-30 para un bounding box en WGS84."""
     try:
         from dem_stitcher import stitch_dem
@@ -61,7 +69,7 @@ def reproyectar_raster_utm(
     perfil_src: dict,
     crs_destino: str = "EPSG:3035",
     resolucion_destino: float = 30.0,
-) -> Tuple[np.ndarray, dict]:
+) -> tuple[np.ndarray, dict]:
     """Reproyecta un DEM a un CRS métrico, conservando una resolución dada."""
     transform, width, height = calculate_default_transform(
         perfil_src["crs"],
@@ -100,7 +108,7 @@ def reproyectar_raster_utm(
 
 def calcular_pendiente_y_orientacion(
     dem_array: np.ndarray, transform: rasterio.Affine
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Calcula pendiente y orientación a partir de un DEM en unidades métricas."""
     dem = dem_array.astype(np.float32, copy=True)
     dem[dem == NODATA_VALUE] = np.nan
@@ -117,9 +125,7 @@ def calcular_pendiente_y_orientacion(
     )
 
 
-def calcular_rugosidad_local(
-    dem_array: np.ndarray, window_size: int = 3
-) -> np.ndarray:
+def calcular_rugosidad_local(dem_array: np.ndarray, window_size: int = 3) -> np.ndarray:
     """Calcula la desviación estándar local del DEM como medida de rugosidad.
 
     IberFire emplea una capa de rugosidad externa cuyo algoritmo no se publica.
@@ -133,7 +139,9 @@ def calcular_rugosidad_local(
     values = np.where(valid, dem_array, 0.0).astype(np.float32)
     weights = valid.astype(np.float32)
     count = uniform_filter(weights, size=window_size, mode="nearest")
-    mean = uniform_filter(values, size=window_size, mode="nearest") / np.where(count == 0, 1, count)
+    mean = uniform_filter(values, size=window_size, mode="nearest") / np.where(
+        count == 0, 1, count
+    )
     mean_sq = uniform_filter(values**2, size=window_size, mode="nearest") / np.where(
         count == 0, 1, count
     )
@@ -159,7 +167,10 @@ def clasificar_aspecto(orientacion_array: np.ndarray) -> np.ndarray:
 def _rasterizar_celdas(gdf_grid: gpd.GeoDataFrame, perfil_raster: dict) -> np.ndarray:
     """Rasteriza identificadores de celda en la rejilla del raster topográfico."""
     return rasterize(
-        shapes=((geometry, int(cell_id)) for geometry, cell_id in zip(gdf_grid.geometry, gdf_grid.cell_id)),
+        shapes=(
+            (geometry, int(cell_id))
+            for geometry, cell_id in zip(gdf_grid.geometry, gdf_grid.cell_id)
+        ),
         out_shape=(perfil_raster["height"], perfil_raster["width"]),
         transform=perfil_raster["transform"],
         fill=-1,
@@ -210,17 +221,23 @@ def extraer_estadisticas_topograficas_rapidas(
     total = pixels.groupby("cell_id").size().rename("total")
     valid_aspect = pixels[pixels["aspect_class"] != -1]
     valid_count = valid_aspect.groupby("cell_id").size().rename("valid")
-    result = result.merge(total, on="cell_id", how="left").merge(valid_count, on="cell_id", how="left")
+    result = result.merge(total, on="cell_id", how="left").merge(
+        valid_count, on="cell_id", how="left"
+    )
     result["valid"] = result["valid"].fillna(0)
     for class_index, variable in enumerate(ASPECT_VARIABLES, start=1):
-        count = (valid_aspect["aspect_class"] == class_index).groupby(valid_aspect["cell_id"]).sum()
+        count = (
+            (valid_aspect["aspect_class"] == class_index).groupby(valid_aspect["cell_id"]).sum()
+        )
         result = result.merge(count.rename(variable), on="cell_id", how="left")
         result[variable] = result[variable].fillna(0) / result["valid"].replace(0, np.nan)
     result[ASPECT_NODATA_VARIABLE] = 1 - result["valid"] / result["total"].replace(0, np.nan)
 
     # Alias de compatibilidad para los consumidores vectoriales preexistentes.
     result["orientacion_media"] = np.nan
-    result["orientacion_clase"] = result[ASPECT_VARIABLES].idxmax(axis=1).where(result["valid"] > 0)
+    result["orientacion_clase"] = (
+        result[ASPECT_VARIABLES].idxmax(axis=1).where(result["valid"] > 0)
+    )
     result = result.drop(columns=["total", "valid"])
     result["altitud_media"] = result["elevation_mean"]
     result["pendiente_media"] = result["slope_mean"]
