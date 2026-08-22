@@ -81,21 +81,34 @@ def exportar_datacubo_tabular(
                 year_frame.to_parquet(destination, index=False)
             part += 1
 
-        annual_files = _consolidar_partes_anuales(output_dir)
-        metadata = {
+        finalizar_exportacion_tabular(cube_path, output_dir, dropped_incomplete)
+
+
+def finalizar_exportacion_tabular(
+    cube_path: str | Path, output_dir: str | Path, dropped_incomplete_predictors: int = 0
+) -> None:
+    """Consolida un dataset tabular ya exportado y escribe sus metadatos."""
+    output_dir = Path(output_dir)
+    with xr.open_dataset(cube_path) as cube:
+        predictors = sorted(
+            set(cube.data_vars) - OUTCOME_COLUMNS - {"is_galicia", "cell_id"}
+        )
+        time_contract = cube.attrs.get("time_contract")
+    annual_files = _consolidar_partes_anuales(output_dir)
+    metadata = {
             "row_definition": "One active 1 km Galicia cell on one EGIF-covered date with complete predictors.",
             "target": "target_ignicion (EGIF-MITECO)",
             "outcome_columns_not_predictors": sorted(OUTCOME_COLUMNS),
             "predictor_columns": predictors,
             "partitioning": "year=YYYY/dataset_YYYY.parquet",
             "annual_files": annual_files,
-            "dropped_rows_incomplete_predictors": dropped_incomplete,
+            "dropped_rows_incomplete_predictors": dropped_incomplete_predictors,
             "source_datacube": str(cube_path),
-            "time_contract": data.attrs.get("time_contract"),
+            "time_contract": time_contract,
         }
-        (output_dir / "metadata.json").write_text(
-            json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+    (output_dir / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 def _consolidar_partes_anuales(output_dir: Path) -> dict[str, int]:
@@ -103,24 +116,35 @@ def _consolidar_partes_anuales(output_dir: Path) -> dict[str, int]:
     annual_rows: dict[str, int] = {}
     for year_dir in sorted(output_dir.glob("year=*")):
         parts = sorted(year_dir.glob("part-*.parquet"))
+        destination = year_dir / f"dataset_{year_dir.name.removeprefix('year=')}.parquet"
+        if destination.exists():
+            with pq.ParquetFile(destination) as annual:
+                annual_rows[year_dir.name.removeprefix("year=")] = annual.metadata.num_rows
+            for part in parts:
+                part.unlink()
+            continue
         if not parts:
             continue
-        destination = year_dir / f"dataset_{year_dir.name.removeprefix('year=')}.parquet"
         temporary = destination.with_suffix(".partial")
         writer = None
         rows = 0
         try:
             for part in parts:
                 parquet = pq.ParquetFile(part)
-                for batch in parquet.iter_batches(batch_size=250_000):
-                    if writer is None:
-                        writer = pq.ParquetWriter(temporary, batch.schema, compression="snappy")
-                    writer.write_batch(batch)
-                    rows += batch.num_rows
+                try:
+                    for batch in parquet.iter_batches(batch_size=250_000):
+                        if writer is None:
+                            writer = pq.ParquetWriter(temporary, batch.schema, compression="snappy")
+                        writer.write_batch(batch)
+                        rows += batch.num_rows
+                finally:
+                    parquet.close()
         finally:
             if writer is not None:
                 writer.close()
-        if writer is None or pq.ParquetFile(temporary).metadata.num_rows != rows:
+        with pq.ParquetFile(temporary) as written:
+            verified_rows = written.metadata.num_rows
+        if writer is None or verified_rows != rows:
             raise RuntimeError(f"No se pudo verificar la consolidación anual: {year_dir.name}")
         temporary.replace(destination)
         for part in parts:
