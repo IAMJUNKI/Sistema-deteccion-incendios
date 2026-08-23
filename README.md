@@ -42,3 +42,5 @@ Para validar los productos generados sin descargar ni modificar datos, ejecutar:
   meteorologica y cobertura del target en el NetCDF.
 - `notebooks/08_validacion_dataset_parquet.ipynb`: esquema, particiones,
   target, meteorologia y preparacion de los Parquet para ML.
+- `notebooks/09_exploracion_y_seleccion_features.ipynb`: exploración reproducible,
+  señal univariante, redundancia y definición de conjuntos de predictores para modelado.

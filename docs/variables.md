@@ -15,8 +15,7 @@ NetCDF conserva además la rejilla rectangular completa y la máscara `is_galici
 ## Topografía (Copernicus DEM GLO-30)
 
 `elevation_mean/std`, `slope_mean/std`, `roughness_mean/std` y las fracciones
-de orientación `aspect_000_045_fraction` hasta `aspect_315_360_fraction`, más
-`aspect_no_data_fraction`.
+de orientación `aspect_000_045_fraction` hasta `aspect_315_360_fraction`.
 
 ## Cobertura del suelo (CORINE 2018)
 
@@ -32,7 +31,7 @@ CORINE válidos, se copia el vector completo de la celda válida más próxima.
 |---|---|
 | Día completo | `temperature_mean/min/max`, `relative_humidity_mean/min`, `wind_speed_mean/max`, `precipitation_sum` |
 | Tarde crítica (12–18 h, Europe/Madrid) | `temperature_max_12_18h`, `relative_humidity_min_12_18h`, `wind_speed_max_12_18h` |
-| Memoria meteorológica | `temperature_mean_7d`, `relative_humidity_mean_7d`, `precipitation_sum_1d/3d/7d/14d/30d`, `consecutive_dry_days` |
+| Memoria meteorológica | `temperature_mean_7d`, `relative_humidity_mean_7d`, `precipitation_sum_3d/7d/14d/30d`, `consecutive_dry_days` |
 
 Los acumulados y las medias móviles incluyen la fecha T y los días anteriores.
 Las celdas de borde sin interpolación lineal válida se completan con el píxel

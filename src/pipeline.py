@@ -57,6 +57,12 @@ def construir_datacubo_completo(
     ):
         temporal = temporal.sel(time=slice(start_date, end_date))
         meteorology = meteorology.sel(time=slice(start_date, end_date))
+        # Esta proporción es una comprobación de calidad del DEM estático. En
+        # Galicia es constante a cero y no forma parte del producto final.
+        topography = topography.drop_vars("aspect_no_data_fraction", errors="ignore")
+        # La acumulación de un día era un duplicado exacto de la precipitación
+        # diaria; se descarta también si se reutiliza una capa meteorológica antigua.
+        meteorology = meteorology.drop_vars("precipitation_sum_1d", errors="ignore")
         target_values = np.full(
             (meteorology.sizes["time"], meteorology.sizes["y"], meteorology.sizes["x"]),
             np.nan,

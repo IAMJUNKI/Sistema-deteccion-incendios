@@ -29,7 +29,6 @@ DAILY_VARIABLES = (
     "wind_speed_max",
     "wind_speed_max_12_18h",
     "precipitation_sum",
-    "precipitation_sum_1d",
     "precipitation_sum_3d",
     "precipitation_sum_7d",
     "precipitation_sum_14d",
@@ -38,7 +37,7 @@ DAILY_VARIABLES = (
     "temperature_mean_7d",
     "relative_humidity_mean_7d",
 )
-PRECIPITATION_WINDOWS = (1, 3, 7, 14, 30)
+PRECIPITATION_WINDOWS = (3, 7, 14, 30)
 DRY_DAY_THRESHOLD_MM = 1.0
 
 

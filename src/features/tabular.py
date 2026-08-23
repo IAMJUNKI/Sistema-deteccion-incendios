@@ -16,6 +16,26 @@ OUTCOME_COLUMNS = {
     "burned_area_ha",
     "large_fire_500ha",
 }
+NON_PREDICTOR_COLUMNS = OUTCOME_COLUMNS | {
+    "is_galicia",
+    "cell_id",
+    "year",
+    # Se mantienen para trazabilidad, pero no añaden señal al modelo actual.
+    "aspect_no_data_fraction",  # Constante a cero en la malla de Galicia.
+    "precipitation_sum_1d",  # Duplicado exacto de precipitation_sum.
+}
+
+
+def obtener_columnas_predictoras(data_variables: set[str]) -> list[str]:
+    """Devuelve las columnas del cubo permitidas como entrada de un modelo.
+
+    ``year`` se conserva en los Parquet para particionar y realizar los cortes
+    temporales, pero no puede ser un predictor: codificaría una tendencia de la
+    serie histórica que no está definida para un año futuro de producción. Las
+    columnas constantes o duplicadas se conservan en los datos para auditoría,
+    pero se excluyen del contrato de entrenamiento.
+    """
+    return sorted(data_variables - NON_PREDICTOR_COLUMNS)
 
 
 def exportar_datacubo_tabular(
@@ -54,7 +74,7 @@ def exportar_datacubo_tabular(
         )
         data = cube.assign(cell_id=cell_ids)
         dates = pd.DatetimeIndex(data.time.values)
-        predictors = sorted(set(data.data_vars) - OUTCOME_COLUMNS - {"is_galicia", "cell_id"})
+        predictors = obtener_columnas_predictoras(set(data.data_vars))
         part = 0
         dropped_incomplete = 0
 
@@ -90,9 +110,7 @@ def finalizar_exportacion_tabular(
     """Consolida un dataset tabular ya exportado y escribe sus metadatos."""
     output_dir = Path(output_dir)
     with xr.open_dataset(cube_path) as cube:
-        predictors = sorted(
-            set(cube.data_vars) - OUTCOME_COLUMNS - {"is_galicia", "cell_id"}
-        )
+        predictors = obtener_columnas_predictoras(set(cube.data_vars))
         time_contract = cube.attrs.get("time_contract")
     annual_files = _consolidar_partes_anuales(output_dir)
     metadata = {
