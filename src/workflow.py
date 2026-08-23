@@ -1,6 +1,7 @@
 """Orquestación reproducible de las fases dinámicas del datacubo histórico."""
 
 import argparse
+import shutil
 from pathlib import Path
 
 from src.config import (
@@ -30,6 +31,18 @@ from src.geospatial.pipeline import run_pipeline as construir_capas_estaticas
 from src.ingestion.ingest_egif import ultima_fecha_egif
 from src.ingestion.pipeline import ejecutar_pipeline_egif, ejecutar_pipeline_meteorologia
 from src.pipeline import construir_datacubo_completo
+
+
+def _limpiar_salidas_dinamicas(
+    meteorology_cube_path: str | Path, datacube_path: str | Path, tabular_output_dir: str | Path
+) -> None:
+    """Elimina únicamente salidas derivadas que el workflow vuelve a generar."""
+    for path in (Path(meteorology_cube_path), Path(datacube_path)):
+        if path.exists():
+            path.unlink()
+    output_dir = Path(tabular_output_dir)
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
 
 
 def ejecutar_workflow_historico(
@@ -74,6 +87,7 @@ def ejecutar_workflow_historico(
 
     time_cube_path = Path(time_cube_path)
     end_date = ultima_fecha_egif(egif_xml).date().isoformat()
+    _limpiar_salidas_dinamicas(meteorology_cube_path, datacube_path, tabular_output_dir)
     guardar_datacubo_temporal(crear_datacubo_temporal(DATACUBE_START, end_date), time_cube_path)
     ejecutar_pipeline_meteorologia(
         spatial_cube_path=spatial_cube_path,

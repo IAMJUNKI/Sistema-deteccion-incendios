@@ -52,3 +52,19 @@ def test_agregacion_corine_y_datacubo() -> None:
 def test_mapeo_corine_cubre_las_44_clases_oficiales() -> None:
     """La codificación 1--44 del GeoTIFF oficial no deja clases sin categoría."""
     assert set(RAW_CLC_TO_LANDCOVER) == set(range(1, 45))
+
+
+def test_celda_sin_corine_hereda_el_vector_del_vecino_mas_cercano() -> None:
+    grid = gpd.GeoDataFrame(
+        {"cell_id": [0, 1]},
+        geometry=[box(0, 0, 1000, 1000), box(1000, 0, 2000, 1000)],
+        crs="EPSG:3035",
+    )
+    profile = {"height": 10, "width": 20, "transform": from_origin(0, 1000, 100, 100), "nodata": -128}
+    corine = np.full((10, 20), -128, dtype=np.int16)
+    corine[:, :10] = 23
+
+    dataframe = extraer_variables_cobertura_suelo(grid, corine, profile)
+
+    assert np.allclose(dataframe[LANDCOVER_VARIABLES].sum(axis=1), 1.0)
+    assert dataframe.loc[1, "broadleaf_forest"] == 1.0

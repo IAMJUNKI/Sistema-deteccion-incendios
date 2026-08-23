@@ -208,11 +208,39 @@ def extraer_variables_cobertura_suelo(
         result[["broadleaf_forest", "coniferous_forest", "mixed_forest"]].sum(axis=1) * 100.0
     )
     result[FOREST_COVER_VARIABLE] = result["combustible_pct_forestal"] / 100.0
+    _rellenar_celdas_sin_corine_por_vecino(result, gdf_grid)
+    result["combustible_pct_forestal"] = (
+        result[["broadleaf_forest", "coniferous_forest", "mixed_forest"]].sum(axis=1) * 100.0
+    )
+    result[FOREST_COVER_VARIABLE] = result["combustible_pct_forestal"] / 100.0
     fractions = result[LANDCOVER_VARIABLES]
     has_landcover = fractions.notna().any(axis=1)
     dominant = fractions.fillna(-np.inf).idxmax(axis=1).where(has_landcover)
     result["combustible_clase"] = dominant.map(COMBUSTIBLE_NAMES)
     return result
+
+
+def _rellenar_celdas_sin_corine_por_vecino(
+    landcover: pd.DataFrame, gdf_grid: gpd.GeoDataFrame
+) -> None:
+    """Completa celdas CORINE sin píxeles válidos con su vecino válido más cercano.
+
+    Se copia el vector completo de nueve fracciones para mantener una composición
+    de cobertura coherente, especialmente en las escasas celdas costeras cuyo
+    centro pertenece a Galicia pero no intersecta ningún píxel CORINE válido.
+    """
+    missing = landcover[LANDCOVER_VARIABLES].isna().all(axis=1)
+    if not missing.any():
+        return
+
+    centroids = gdf_grid.set_index("cell_id").geometry.centroid
+    valid_ids = landcover.loc[~missing, "cell_id"].to_numpy()
+    valid_points = centroids.loc[valid_ids]
+    for index, cell_id in landcover.loc[missing, "cell_id"].items():
+        distances = valid_points.distance(centroids.loc[cell_id])
+        neighbor_id = distances.idxmin()
+        neighbor = landcover.loc[landcover["cell_id"] == neighbor_id, LANDCOVER_VARIABLES].iloc[0]
+        landcover.loc[index, LANDCOVER_VARIABLES] = neighbor.to_numpy()
 
 
 def crear_datacubo_cobertura_suelo(cube: xr.Dataset, landcover: pd.DataFrame) -> xr.Dataset:

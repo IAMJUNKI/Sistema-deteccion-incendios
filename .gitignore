@@ -73,7 +73,10 @@ secrets/
 # Usar DVC o documentar en docs/ dónde descargarlos.
 
 # Formatos geoespaciales / raster
-*.nc          # NetCDF (ERA5, Copernicus)
+# NetCDF (ERA5, Copernicus)
+*.nc
+# Cubo histórico local de comparación
+/galicia_wildfire_datacube.nc
 *.nc4
 *.hdf
 *.h5
@@ -83,7 +86,8 @@ secrets/
 *.tiff
 *.geotiff
 *.img
-*.gpkg         # GeoPackage (CORINE Land Cover, etc.)
+# GeoPackage (CORINE Land Cover, etc.)
+*.gpkg
 
 
 # Formatos vectoriales grandes
@@ -148,3 +152,4 @@ ehthumbs.db
 Thumbs.db
 
 misc/
+tmp/

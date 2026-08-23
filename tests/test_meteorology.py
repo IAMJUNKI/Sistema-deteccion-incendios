@@ -46,3 +46,21 @@ def test_acumulados_incluyen_el_dia_observado_sin_shift() -> None:
     assert result["precipitation_sum_3d"].sel(time="2020-01-31").item() == 2.0
     assert result["consecutive_dry_days"].sel(time="2020-01-30").item() == 30.0
     assert result["consecutive_dry_days"].sel(time="2020-01-31").item() == 0.0
+
+
+def test_medias_movil_de_temperatura_y_humedad_a_siete_dias() -> None:
+    time = pd.date_range("2020-01-01", periods=7, freq="D")
+    values = np.arange(7, dtype=np.float32).reshape(7, 1, 1)
+    daily = xr.Dataset(
+        {
+            "precipitation_sum": (("time", "latitude", "longitude"), values),
+            "temperature_mean": (("time", "latitude", "longitude"), values),
+            "relative_humidity_mean": (("time", "latitude", "longitude"), values + 50),
+        },
+        coords={"time": time, "latitude": [42.0], "longitude": [-8.0]},
+    )
+
+    result = add_meteorology_accumulations(daily)
+
+    assert result["temperature_mean_7d"].sel(time="2020-01-07").item() == 3.0
+    assert result["relative_humidity_mean_7d"].sel(time="2020-01-07").item() == 53.0

@@ -1,0 +1,424 @@
+{"kind":"deck","id":"pr/kq23wi","name":"Deck"}
+{"kind":"layout","layoutId":"90086ca6-49ab-4f5d-bf25-321aadb5cc8b","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"26f4e52a-3575-4e07-ac28-63cb5f658366","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/70feia","slide":1,"title":"TFM · SISTEMA DE DETECCIÓN DE INCENDIOS","textShapes":6}
+{"kind":"textbox","id":"sh/y9w3yp83","slide":1,"text":"TFM · SISTEMA DE DETECCIÓN DE INCENDIOS","textPreview":"TFM · SISTEMA DE DETECCIÓN DE INCENDIOS","textChars":39,"textLines":1,"bbox":[62,54,600,24]}
+{"kind":"textbox","id":"sh/lc72t47e","slide":1,"text":"Del grid vectorial\nal datacube espacial","textPreview":"Del grid vectorial | al datacube espacial","textChars":39,"textLines":2,"bbox":[62,133,620,150]}
+{"kind":"textbox","id":"sh/kbel0zqt","slide":1,"text":"Una infraestructura común de 1 km para integrar topografía, cobertura del suelo, meteorología e incendios.","textPreview":"Una infraestructura común de 1 km para integrar topografía, cobertura del suelo, meteorología e incendios.","textChars":106,"textLines":1,"bbox":[62,314,550,72]}
+{"kind":"textbox","id":"sh/7ypkvepk","slide":1,"text":"Galicia · EPSG:3035 · NetCDF + GeoPackage","textPreview":"Galicia · EPSG:3035 · NetCDF + GeoPackage","textChars":41,"textLines":1,"bbox":[62,603,520,28]}
+{"kind":"shape","id":"sh/6xg329oz","slide":1,"bbox":[742,78,420,544]}
+{"kind":"shape","id":"sh/t072x47q","slide":1,"bbox":[786,135,29.8,29.8]}
+{"kind":"shape","id":"sh/8zyl4j65","slide":1,"bbox":[817,135,29.8,29.8]}
+{"kind":"shape","id":"sh/n2lkjapg","slide":1,"bbox":[848,135,29.8,29.8]}
+{"kind":"shape","id":"sh/m1cjq58v","slide":1,"bbox":[879,135,29.8,29.8]}
+{"kind":"shape","id":"sh/obipgbeh","slide":1,"bbox":[910,135,29.8,29.8]}
+{"kind":"shape","id":"sh/pcr69gv2","slide":1,"bbox":[941,135,29.8,29.8]}
+{"kind":"shape","id":"sh/2907e1wr","slide":1,"bbox":[972,135,29.8,29.8]}
+{"kind":"shape","id":"sh/na9o76dc","slide":1,"bbox":[1003,135,29.8,29.8]}
+{"kind":"shape","id":"sh/czipkbet","slide":1,"bbox":[1034,135,29.8,29.8]}
+{"kind":"shape","id":"sh/x0r6dgve","slide":1,"bbox":[1065,135,29.8,29.8]}
+{"kind":"shape","id":"sh/ad07ilwn","slide":1,"bbox":[786,166,29.8,29.8]}
+{"kind":"shape","id":"sh/by9ob6d8","slide":1,"bbox":[817,166,29.8,29.8]}
+{"kind":"shape","id":"sh/s3yp8rep","slide":1,"bbox":[848,166,29.8,29.8]}
+{"kind":"shape","id":"sh/d4761wvu","slide":1,"bbox":[879,166,29.8,29.8]}
+{"kind":"shape","id":"sh/tofepo3m","slide":1,"bbox":[910,166,29.8,29.8]}
+{"kind":"shape","id":"sh/8n6dgj21","slide":1,"bbox":[941,166,29.8,29.8]}
+{"kind":"shape","id":"sh/7mxwnelg","slide":1,"bbox":[972,166,29.8,29.8]}
+{"kind":"shape","id":"sh/6love9kv","slide":1,"bbox":[1003,166,29.8,29.8]}
+{"kind":"shape","id":"sh/hszeto3i","slide":1,"bbox":[1034,166,29.8,29.8]}
+{"kind":"shape","id":"sh/gr6dkj2d","slide":1,"bbox":[1065,166,29.8,29.8]}
+{"kind":"shape","id":"sh/vqxwryls","slide":1,"bbox":[786,197,29.8,29.8]}
+{"kind":"shape","id":"sh/upovitk7","slide":1,"bbox":[817,197,29.8,29.8]}
+{"kind":"shape","id":"sh/5gzex83u","slide":1,"bbox":[848,197,29.8,29.8]}
+{"kind":"shape","id":"sh/4vqdo329","slide":1,"bbox":[879,197,29.8,29.8]}
+{"kind":"shape","id":"sh/21kbi50r","slide":1,"bbox":[910,197,29.8,29.8]}
+{"kind":"shape","id":"sh/n2tsra1c","slide":1,"bbox":[941,197,29.8,29.8]}
+{"kind":"shape","id":"sh/o32tkfix","slide":1,"bbox":[972,197,29.8,29.8]}
+{"kind":"shape","id":"sh/p4bat0ji","slide":1,"bbox":[1003,197,29.8,29.8]}
+{"kind":"shape","id":"sh/a5kbm50n","slide":1,"bbox":[1034,197,29.8,29.8]}
+{"kind":"shape","id":"sh/bqtsva18","slide":1,"bbox":[1065,197,29.8,29.8]}
+{"kind":"shape","id":"sh/cr2tofit","slide":1,"bbox":[786,228,29.8,29.8]}
+{"kind":"shape","id":"sh/xsbaxkje","slide":1,"bbox":[817,228,29.8,29.8]}
+{"kind":"shape","id":"sh/yt4bqp0z","slide":1,"bbox":[848,228,29.8,29.8]}
+{"kind":"shape","id":"sh/zudszu1k","slide":1,"bbox":[879,228,29.8,29.8]}
+{"kind":"shape","id":"sh/7q9s3uto","slide":1,"bbox":[910,228,29.8,29.8]}
+{"kind":"shape","id":"sh/6p0baps3","slide":1,"bbox":[941,228,29.8,29.8]}
+{"kind":"shape","id":"sh/tcra5kbu","slide":1,"bbox":[972,228,29.8,29.8]}
+{"kind":"shape","id":"sh/8bitcfa9","slide":1,"bbox":[1003,228,29.8,29.8]}
+{"kind":"shape","id":"sh/fe9s7u9k","slide":1,"bbox":[1034,228,29.8,29.8]}
+{"kind":"shape","id":"sh/ud0bepsz","slide":1,"bbox":[1065,228,29.8,29.8]}
+{"kind":"shape","id":"sh/hgba94rq","slide":1,"bbox":[786,259,29.8,29.8]}
+{"kind":"shape","id":"sh/gf2tgza5","slide":1,"bbox":[817,259,29.8,29.8]}
+{"kind":"shape","id":"sh/bipsvqtg","slide":1,"bbox":[848,259,29.8,29.8]}
+{"kind":"shape","id":"sh/ahgr25sv","slide":1,"bbox":[879,259,29.8,29.8]}
+{"kind":"shape","id":"sh/0nupcrqt","slide":1,"bbox":[910,259,29.8,29.8]}
+{"kind":"shape","id":"sh/1o3q5wre","slide":1,"bbox":[941,259,29.8,29.8]}
+{"kind":"shape","id":"sh/elc7a18n","slide":1,"bbox":[972,259,29.8,29.8]}
+{"kind":"shape","id":"sh/zml83698","slide":1,"bbox":[1003,259,29.8,29.8]}
+{"kind":"shape","id":"sh/czup8rqh","slide":1,"bbox":[1034,259,29.8,29.8]}
+{"kind":"shape","id":"sh/d03q1wr2","slide":1,"bbox":[1065,259,29.8,29.8]}
+{"kind":"shape","id":"sh/qxc76h8r","slide":1,"bbox":[786,290,29.8,29.8]}
+{"kind":"shape","id":"sh/rylozm9c","slide":1,"bbox":[817,290,29.8,29.8]}
+{"kind":"shape","id":"sh/wvepkbq1","slide":1,"bbox":[848,290,29.8,29.8]}
+{"kind":"shape","id":"sh/xw7qdg7m","slide":1,"bbox":[879,290,29.8,29.8]}
+{"kind":"shape","id":"sh/l0jyhwve","slide":1,"bbox":[910,290,29.8,29.8]}
+{"kind":"shape","id":"sh/kzah8ret","slide":1,"bbox":[941,290,29.8,29.8]}
+{"kind":"shape","id":"sh/jy1gfmd8","slide":1,"bbox":[972,290,29.8,29.8]}
+{"kind":"shape","id":"sh/yx8f6hwn","slide":1,"bbox":[1003,290,29.8,29.8]}
+{"kind":"shape","id":"sh/xwzydcv2","slide":1,"bbox":[1034,290,29.8,29.8]}
+{"kind":"shape","id":"sh/wvqx47ex","slide":1,"bbox":[1065,290,29.8,29.8]}
+{"kind":"shape","id":"sh/buhgb2dc","slide":1,"bbox":[786,321,29.8,29.8]}
+{"kind":"shape","id":"sh/a98f2xwr","slide":1,"bbox":[817,321,29.8,29.8]}
+{"kind":"shape","id":"sh/98zy9cf6","slide":1,"bbox":[848,321,29.8,29.8]}
+{"kind":"shape","id":"sh/o7qx07el","slide":1,"bbox":[879,321,29.8,29.8]}
+{"kind":"shape","id":"sh/ed4vadcj","slide":1,"bbox":[910,321,29.8,29.8]}
+{"kind":"shape","id":"sh/zexw3yt4","slide":1,"bbox":[941,321,29.8,29.8]}
+{"kind":"shape","id":"sh/0f6dc3up","slide":1,"bbox":[972,321,29.8,29.8]}
+{"kind":"shape","id":"sh/10fe58bu","slide":1,"bbox":[1003,321,29.8,29.8]}
+{"kind":"shape","id":"sh/q94v6tc7","slide":1,"bbox":[1034,321,29.8,29.8]}
+{"kind":"shape","id":"sh/radwzyds","slide":1,"bbox":[1065,321,29.8,29.8]}
+{"kind":"shape","id":"sh/cbmd83ud","slide":1,"bbox":[786,352,29.8,29.8]}
+{"kind":"shape","id":"sh/dcve18by","slide":1,"bbox":[817,352,29.8,29.8]}
+{"kind":"shape","id":"sh/25kv2tcb","slide":1,"bbox":[848,352,29.8,29.8]}
+{"kind":"shape","id":"sh/36tcbedw","slide":1,"bbox":[879,352,29.8,29.8]}
+{"kind":"shape","id":"sh/7axojm9o","slide":1,"bbox":[910,352,29.8,29.8]}
+{"kind":"shape","id":"sh/69onq1s3","slide":1,"bbox":[941,352,29.8,29.8]}
+{"kind":"shape","id":"sh/twf6lwru","slide":1,"bbox":[972,352,29.8,29.8]}
+{"kind":"shape","id":"sh/sv6psra9","slide":1,"bbox":[1003,352,29.8,29.8]}
+{"kind":"shape","id":"sh/j6dofm9s","slide":1,"bbox":[1034,352,29.8,29.8]}
+{"kind":"shape","id":"sh/i54nmhs7","slide":1,"bbox":[1065,352,29.8,29.8]}
+{"kind":"shape","id":"sh/58f6hwry","slide":1,"bbox":[786,383,29.8,29.8]}
+{"kind":"shape","id":"sh/k7m5orad","slide":1,"bbox":[817,383,29.8,29.8]}
+{"kind":"shape","id":"sh/32hor69w","slide":1,"bbox":[848,383,29.8,29.8]}
+{"kind":"shape","id":"sh/2187ylsb","slide":1,"bbox":[879,383,29.8,29.8]}
+{"kind":"shape","id":"sh/07ils3qt","slide":1,"bbox":[910,383,29.8,29.8]}
+{"kind":"shape","id":"sh/l8bml87e","slide":1,"bbox":[941,383,29.8,29.8]}
+{"kind":"shape","id":"sh/e503qd83","slide":1,"bbox":[972,383,29.8,29.8]}
+{"kind":"shape","id":"sh/z69kjip8","slide":1,"bbox":[1003,383,29.8,29.8]}
+{"kind":"shape","id":"sh/8b2lwnq5","slide":1,"bbox":[1034,383,29.8,29.8]}
+{"kind":"shape","id":"sh/9cbmps7q","slide":1,"bbox":[1065,383,29.8,29.8]}
+{"kind":"shape","id":"sh/m9k3ud8z","slide":1,"bbox":[786,414,29.8,29.8]}
+{"kind":"shape","id":"sh/nat4nipk","slide":1,"bbox":[817,414,29.8,29.8]}
+{"kind":"shape","id":"sh/wf2l0nq1","slide":1,"bbox":[848,414,29.8,29.8]}
+{"kind":"shape","id":"sh/xgvmts7m","slide":1,"bbox":[879,414,29.8,29.8]}
+{"kind":"shape","id":"sh/uhcrmlw7","slide":1,"bbox":[910,414,29.8,29.8]}
+{"kind":"shape","id":"sh/vil8f6ds","slide":1,"bbox":[941,414,29.8,29.8]}
+{"kind":"shape","id":"sh/gju9obed","slide":1,"bbox":[972,414,29.8,29.8]}
+{"kind":"shape","id":"sh/hk3qhgvy","slide":1,"bbox":[1003,414,29.8,29.8]}
+{"kind":"shape","id":"sh/ilcrqlwj","slide":1,"bbox":[1034,414,29.8,29.8]}
+{"kind":"shape","id":"sh/3ml8jqd4","slide":1,"bbox":[1065,414,29.8,29.8]}
+{"kind":"shape","id":"sh/4ne9svep","slide":1,"bbox":[786,445,29.8,29.8]}
+{"kind":"shape","id":"sh/5onal0vu","slide":1,"bbox":[817,445,29.8,29.8]}
+{"kind":"shape","id":"sh/q9wru5wf","slide":1,"bbox":[848,445,29.8,29.8]}
+{"kind":"shape","id":"sh/ra5snqd0","slide":1,"bbox":[879,445,29.8,29.8]}
+{"kind":"shape","id":"sh/147ud4f2","slide":1,"bbox":[910,445,29.8,29.8]}
+{"kind":"shape","id":"sh/03ytkzyx","slide":1,"bbox":[941,445,29.8,29.8]}
+{"kind":"shape","id":"sh/fipcbuxc","slide":1,"bbox":[972,445,29.8,29.8]}
+{"kind":"shape","id":"sh/ehgbipgr","slide":1,"bbox":[1003,445,29.8,29.8]}
+{"kind":"shape","id":"sh/p8ruh4fe","slide":1,"bbox":[1034,445,29.8,29.8]}
+{"kind":"shape","id":"sh/o7itozyt","slide":1,"bbox":[1065,445,29.8,29.8]}
+{"kind":"shape","id":"sh/n69cfux8","slide":1,"bbox":[786,476,29.8,29.8]}
+{"kind":"shape","id":"sh/25gbmpgn","slide":1,"bbox":[817,476,29.8,29.8]}
+{"kind":"shape","id":"sh/xcrulofa","slide":1,"bbox":[848,476,29.8,29.8]}
+{"kind":"shape","id":"sh/cbitsjy5","slide":1,"bbox":[879,476,29.8,29.8]}
+{"kind":"shape","id":"sh/gra54rad","slide":1,"bbox":[910,476,29.8,29.8]}
+{"kind":"shape","id":"sh/hsjmdcry","slide":1,"bbox":[941,476,29.8,29.8]}
+{"kind":"shape","id":"sh/upsn2hs7","slide":1,"bbox":[972,476,29.8,29.8]}
+{"kind":"shape","id":"sh/vq14bm9s","slide":1,"bbox":[1003,476,29.8,29.8]}
+{"kind":"shape","id":"sh/4vu58rq9","slide":1,"bbox":[1034,476,29.8,29.8]}
+{"kind":"shape","id":"sh/5w36hwru","slide":1,"bbox":[1065,476,29.8,29.8]}
+{"kind":"textbox","id":"sh/itsn6hsj","slide":1,"text":"rejilla rectangular","textPreview":"rejilla rectangular","textChars":19,"textLines":1,"bbox":[786,525,210,24]}
+{"kind":"textbox","id":"sh/3u14fm94","slide":1,"text":"is_galicia = 1","textPreview":"is_galicia = 1","textChars":14,"textLines":1,"bbox":[786,552,210,22]}
+{"kind":"notes","id":"nt/70feia","slide":1,"text":"Presentación de apoyo para explicar qué se está construyendo en la Fase 1 del TFM.\nLa idea central: todos los datos pasan a compartir una misma referencia espacial de celdas de 1 km.\n[Sources]\n- Código local: src/geospatial/grid.py y src/geospatial/pipeline.py."}
+{"kind":"slide","id":"sl/ug7ifg","slide":2,"title":"LA IDEA","textShapes":15}
+{"kind":"textbox","id":"sh/ze98zqdg","slide":2,"text":"LA IDEA","textPreview":"LA IDEA","textChars":7,"textLines":1,"bbox":[58,40,400,24]}
+{"kind":"textbox","id":"sh/kfipsve1","slide":2,"text":"Un pipeline que transforma fuentes heterogéneas en un único cubo espacial","textPreview":"Un pipeline que transforma fuentes heterogéneas en un único cubo espacial","textChars":73,"textLines":1,"bbox":[58,71,1130,52]}
+{"kind":"shape","id":"sh/lgbq10v6","slide":2,"bbox":[58,132,1164,0]}
+{"kind":"textbox","id":"sh/q907mlwj","slide":2,"text":"TFM · Predicción de incendios forestales · 2","textPreview":"TFM · Predicción de incendios forestales · 2","textChars":44,"textLines":1,"bbox":[58,682,570,18]}
+{"kind":"shape","id":"sh/ba9ovqd4","slide":2,"bbox":[242,348,65,0]}
+{"kind":"shape","id":"sh/cbipovep","slide":2,"bbox":[302,341,15,15]}
+{"kind":"shape","id":"sh/dcrqx0va","slide":2,"bbox":[470,348,65,0]}
+{"kind":"shape","id":"sh/2lg7ilwn","slide":2,"bbox":[530,341,15,15]}
+{"kind":"shape","id":"sh/3mpor6d8","slide":2,"bbox":[698,348,65,0]}
+{"kind":"shape","id":"sh/natcz69c","slide":2,"bbox":[758,341,15,15]}
+{"kind":"shape","id":"sh/m9kvq18r","slide":2,"bbox":[926,348,65,0]}
+{"kind":"shape","id":"sh/9cbu1gri","slide":2,"bbox":[986,341,15,15]}
+{"kind":"shape","id":"sh/ob2dsbqx","slide":2,"bbox":[74,276,158,143]}
+{"kind":"textbox","id":"sh/bedc3q98","slide":2,"text":"Límite","textPreview":"Límite","textChars":6,"textLines":1,"bbox":[92,302,122,28]}
+{"kind":"textbox","id":"sh/adkvul8n","slide":2,"text":"Galicia","textPreview":"Galicia","textChars":7,"textLines":1,"bbox":[92,342,124,43]}
+{"kind":"shape","id":"sh/xgvu5gre","slide":2,"bbox":[92,380,10,10]}
+{"kind":"shape","id":"sh/wfmdwvqt","slide":2,"bbox":[302,276,158,143]}
+{"kind":"textbox","id":"sh/ri9crm94","slide":2,"text":"Grid","textPreview":"Grid","textChars":4,"textLines":1,"bbox":[320,302,122,28]}
+{"kind":"textbox","id":"sh/qh0bih8j","slide":2,"text":"1 km · EPSG:3035","textPreview":"1 km · EPSG:3035","textChars":16,"textLines":1,"bbox":[320,342,124,43]}
+{"kind":"shape","id":"sh/e987mtwj","slide":2,"bbox":[320,380,10,10]}
+{"kind":"shape","id":"sh/fa1ofyxo","slide":2,"bbox":[530,276,158,143]}
+{"kind":"textbox","id":"sh/gbapoje9","slide":2,"text":"Variables","textPreview":"Variables","textChars":9,"textLines":1,"bbox":[548,302,122,28]}
+{"kind":"textbox","id":"sh/1cj6hofu","slide":2,"text":"topo · cobertura","textPreview":"topo · cobertura","textChars":16,"textLines":1,"bbox":[548,342,124,43]}
+{"kind":"shape","id":"sh/6l87i9w7","slide":2,"bbox":[548,380,10,10]}
+{"kind":"shape","id":"sh/rmhobexs","slide":2,"bbox":[758,276,158,143]}
+{"kind":"textbox","id":"sh/snqpkjed","slide":2,"text":"Cubo","textPreview":"Cubo","textChars":4,"textLines":1,"bbox":[776,302,122,28]}
+{"kind":"textbox","id":"sh/t8z6dofy","slide":2,"text":"x · y · tiempo","textPreview":"x · y · tiempo","textChars":14,"textLines":1,"bbox":[776,342,124,43]}
+{"kind":"shape","id":"sh/ihone9wb","slide":2,"bbox":[776,380,10,10]}
+{"kind":"shape","id":"sh/jixo7exw","slide":2,"bbox":[986,276,158,143]}
+{"kind":"textbox","id":"sh/lcnadcze","slide":2,"text":"Riesgo","textPreview":"Riesgo","textChars":6,"textLines":1,"bbox":[1004,302,122,28]}
+{"kind":"textbox","id":"sh/0be9k7yt","slide":2,"text":"mapa diario","textPreview":"mapa diario","textChars":11,"textLines":1,"bbox":[1004,342,124,43]}
+{"kind":"shape","id":"sh/za5sb2h8","slide":2,"bbox":[1004,380,10,10]}
+{"kind":"textbox","id":"sh/y9wrixgn","slide":2,"text":"La malla es el contrato espacial: permite que cada fuente se agregue, valide y compare sobre exactamente las mismas celdas.","textPreview":"La malla es el contrato espacial: permite que cada fuente se agregue, valide y compare sobre exactamente las mismas celdas.","textChars":123,"textLines":1,"bbox":[78,494,1050,58]}
+{"kind":"textbox","id":"sh/d83a9sz2","slide":2,"text":"Ahora estamos aquí","textPreview":"Ahora estamos aquí","textChars":18,"textLines":1,"bbox":[535,594,210,22]}
+{"kind":"shape","id":"sh/c7u9gnyh","slide":2,"bbox":[620,502,0,80]}
+{"kind":"notes","id":"nt/ug7ifg","slide":2,"text":"Explicar el pipeline de izquierda a derecha. La malla de 1 km no es un resultado final: es la estructura que hace compatibles todas las capas.\nLa prueba actual cubre especialmente el segundo y el tercer bloque: grid y topografía.\n[Sources]\n- Iberfire.pdf proporcionado por el usuario: la metodología trabaja con una rejilla espacial regular y variables explicativas por celda.\n- Código local: src/geospatial/pipeline.py."}
+{"kind":"slide","id":"sl/u39ogr","slide":3,"title":"CAMBIO CLAVE 1","textShapes":10}
+{"kind":"textbox","id":"sh/58zq1sfe","slide":3,"text":"CAMBIO CLAVE 1","textPreview":"CAMBIO CLAVE 1","textChars":14,"textLines":1,"bbox":[58,40,400,24]}
+{"kind":"textbox","id":"sh/i58r6dwn","slide":3,"text":"La malla pasa de ser un recorte vectorial a un datacube rectangular","textPreview":"La malla pasa de ser un recorte vectorial a un datacube rectangular","textChars":67,"textLines":1,"bbox":[58,71,1130,52]}
+{"kind":"shape","id":"sh/j6h8zix8","slide":3,"bbox":[58,132,1164,0]}
+{"kind":"textbox","id":"sh/sba9cnep","slide":3,"text":"TFM · Predicción de incendios forestales · 3","textPreview":"TFM · Predicción de incendios forestales · 3","textChars":44,"textLines":1,"bbox":[58,682,570,18]}
+{"kind":"textbox","id":"sh/tcjq5sfa","slide":3,"text":"ANTES","textPreview":"ANTES","textChars":5,"textLines":1,"bbox":[82,174,200,24]}
+{"kind":"textbox","id":"sh/69sraxwj","slide":3,"text":"Celdas filtradas por el límite","textPreview":"Celdas filtradas por el límite","textChars":30,"textLines":1,"bbox":[82,204,360,34]}
+{"kind":"shape","id":"sh/ra183ix4","slide":3,"bbox":[82,270,430,278]}
+{"kind":"shape","id":"sh/gfa9g7e1","slide":3,"bbox":[139,305,26.8,26.8]}
+{"kind":"shape","id":"sh/103q9cf6","slide":3,"bbox":[167,305,26.8,26.8]}
+{"kind":"shape","id":"sh/90vi503m","slide":3,"bbox":[195,305,26.8,26.8]}
+{"kind":"shape","id":"sh/8zmhcfm1","slide":3,"bbox":[223,305,26.8,26.8]}
+{"kind":"shape","id":"sh/nyt03alg","slide":3,"bbox":[251,305,26.8,26.8]}
+{"kind":"shape","id":"sh/mdkza54b","slide":3,"bbox":[279,305,26.8,26.8]}
+{"kind":"shape","id":"sh/x4vi9k3y","slide":3,"bbox":[307,305,26.8,26.8]}
+{"kind":"shape","id":"sh/w3mhgfmd","slide":3,"bbox":[335,305,26.8,26.8]}
+{"kind":"shape","id":"sh/v2d07als","slide":3,"bbox":[363,305,26.8,26.8]}
+{"kind":"shape","id":"sh/a14ze547","slide":3,"bbox":[391,305,26.8,26.8]}
+{"kind":"shape","id":"sh/d8byxg3e","slide":3,"bbox":[419,305,26.8,26.8]}
+{"kind":"shape","id":"sh/c7ih4bmt","slide":3,"bbox":[447,305,26.8,26.8]}
+{"kind":"shape","id":"sh/4rmhkvup","slide":3,"bbox":[139,333,26.8,26.8]}
+{"kind":"shape","id":"sh/psvit0ba","slide":3,"bbox":[167,333,26.8,26.8]}
+{"kind":"shape","id":"sh/2p4zilcz","slide":3,"bbox":[195,333,26.8,26.8]}
+{"kind":"shape","id":"sh/3qd0rqd4","slide":3,"bbox":[223,333,26.8,26.8]}
+{"kind":"shape","id":"sh/cf6hovu1","slide":3,"bbox":[251,333,26.8,26.8]}
+{"kind":"shape","id":"sh/dgfix0bm","slide":3,"bbox":[279,333,26.8,26.8]}
+{"kind":"shape","id":"sh/qtozmlcv","slide":3,"bbox":[307,333,26.8,26.8]}
+{"kind":"shape","id":"sh/rex0vqtg","slide":3,"bbox":[335,333,26.8,26.8]}
+{"kind":"shape","id":"sh/0j6hsfux","slide":3,"bbox":[363,333,26.8,26.8]}
+{"kind":"shape","id":"sh/1kzi1kbi","slide":3,"bbox":[391,333,26.8,26.8]}
+{"kind":"shape","id":"sh/vqlc7yhw","slide":3,"bbox":[419,333,26.8,26.8]}
+{"kind":"shape","id":"sh/apcbet0b","slide":3,"bbox":[447,333,26.8,26.8]}
+{"kind":"shape","id":"sh/xs3u98z2","slide":3,"bbox":[139,361,26.8,26.8]}
+{"kind":"shape","id":"sh/wrutg3ih","slide":3,"bbox":[167,361,26.8,26.8]}
+{"kind":"shape","id":"sh/nm1c3y10","slide":3,"bbox":[195,361,26.8,26.8]}
+{"kind":"shape","id":"sh/mlsbat0f","slide":3,"bbox":[223,361,26.8,26.8]}
+{"kind":"shape","id":"sh/9oju58jq","slide":3,"bbox":[251,361,26.8,26.8]}
+{"kind":"shape","id":"sh/8natc3il","slide":3,"bbox":[279,361,26.8,26.8]}
+{"kind":"shape","id":"sh/7i5cfih4","slide":3,"bbox":[307,361,26.8,26.8]}
+{"kind":"shape","id":"sh/6hwbmd0j","slide":3,"bbox":[335,361,26.8,26.8]}
+{"kind":"shape","id":"sh/e5cfahw3","slide":3,"bbox":[363,361,26.8,26.8]}
+{"kind":"shape","id":"sh/f6lg3mx8","slide":3,"bbox":[391,361,26.8,26.8]}
+{"kind":"shape","id":"sh/0ruxcret","slide":3,"bbox":[419,361,26.8,26.8]}
+{"kind":"shape","id":"sh/1s3y5wfe","slide":3,"bbox":[447,361,26.8,26.8]}
+{"kind":"shape","id":"sh/61sf6xwr","slide":3,"bbox":[139,389,26.8,26.8]}
+{"kind":"shape","id":"sh/r21wz2xc","slide":3,"bbox":[167,389,26.8,26.8]}
+{"kind":"shape","id":"sh/s3ax87ex","slide":3,"bbox":[195,389,26.8,26.8]}
+{"kind":"shape","id":"sh/t43e1cfi","slide":3,"bbox":[223,389,26.8,26.8]}
+{"kind":"shape","id":"sh/axwfi1wv","slide":3,"bbox":[251,389,26.8,26.8]}
+{"kind":"shape","id":"sh/by5gb6xg","slide":3,"bbox":[279,389,26.8,26.8]}
+{"kind":"shape","id":"sh/ls7i10zy","slide":3,"bbox":[307,389,26.8,26.8]}
+{"kind":"shape","id":"sh/kryh8vyd","slide":3,"bbox":[335,389,26.8,26.8]}
+{"kind":"shape","id":"sh/zqp0zqhs","slide":3,"bbox":[363,389,26.8,26.8]}
+{"kind":"shape","id":"sh/ypgz6lg7","slide":3,"bbox":[391,389,26.8,26.8]}
+{"kind":"shape","id":"sh/xo7ix0zm","slide":3,"bbox":[419,389,26.8,26.8]}
+{"kind":"shape","id":"sh/cnyh4vy1","slide":3,"bbox":[447,389,26.8,26.8]}
+{"kind":"shape","id":"sh/bm50vqhg","slide":3,"bbox":[139,417,26.8,26.8]}
+{"kind":"shape","id":"sh/alwz2lgb","slide":3,"bbox":[167,417,26.8,26.8]}
+{"kind":"shape","id":"sh/hkri9kfq","slide":3,"bbox":[195,417,26.8,26.8]}
+{"kind":"shape","id":"sh/wji1gfyl","slide":3,"bbox":[223,417,26.8,26.8]}
+{"kind":"shape","id":"sh/g3qlcj6h","slide":3,"bbox":[251,417,26.8,26.8]}
+{"kind":"shape","id":"sh/hoz2lon2","slide":3,"bbox":[279,417,26.8,26.8]}
+{"kind":"shape","id":"sh/u183ator","slide":3,"bbox":[307,417,26.8,26.8]}
+{"kind":"shape","id":"sh/f2hkjy5w","slide":3,"bbox":[335,417,26.8,26.8]}
+{"kind":"shape","id":"sh/szql8j6l","slide":3,"bbox":[363,417,26.8,26.8]}
+{"kind":"shape","id":"sh/t0z2hon6","slide":3,"bbox":[391,417,26.8,26.8]}
+{"kind":"shape","id":"sh/6xoj69of","slide":3,"bbox":[419,417,26.8,26.8]}
+{"kind":"shape","id":"sh/7yhkfe50","slide":3,"bbox":[447,417,26.8,26.8]}
+{"kind":"shape","id":"sh/kv614z69","slide":3,"bbox":[139,445,26.8,26.8]}
+{"kind":"shape","id":"sh/5wf2d4nu","slide":3,"bbox":[167,445,26.8,26.8]}
+{"kind":"shape","id":"sh/n6d4nu9w","slide":3,"bbox":[195,445,26.8,26.8]}
+{"kind":"shape","id":"sh/m543e98b","slide":3,"bbox":[223,445,26.8,26.8]}
+{"kind":"shape","id":"sh/9sfmp4rm","slide":3,"bbox":[251,445,26.8,26.8]}
+{"kind":"shape","id":"sh/8r6lgzqh","slide":3,"bbox":[279,445,26.8,26.8]}
+{"kind":"shape","id":"sh/vux4re9s","slide":3,"bbox":[307,445,26.8,26.8]}
+{"kind":"shape","id":"sh/ato3i987","slide":3,"bbox":[335,445,26.8,26.8]}
+{"kind":"shape","id":"sh/xwfmtory","slide":3,"bbox":[363,445,26.8,26.8]}
+{"kind":"shape","id":"sh/wv6lkjqd","slide":3,"bbox":[391,445,26.8,26.8]}
+{"kind":"shape","id":"sh/jyx4ve94","slide":3,"bbox":[419,445,26.8,26.8]}
+{"kind":"shape","id":"sh/ixo3mt8j","slide":3,"bbox":[447,445,26.8,26.8]}
+{"kind":"shape","id":"sh/6547ad4n","slide":3,"bbox":[139,473,26.8,26.8]}
+{"kind":"shape","id":"sh/r6xoji58","slide":3,"bbox":[167,473,26.8,26.8]}
+{"kind":"shape","id":"sh/s76pcnmt","slide":3,"bbox":[195,473,26.8,26.8]}
+{"kind":"shape","id":"sh/t8f6lsne","slide":3,"bbox":[223,473,26.8,26.8]}
+{"kind":"shape","id":"sh/e9o7ex4z","slide":3,"bbox":[251,473,26.8,26.8]}
+{"kind":"shape","id":"sh/fax8ni54","slide":3,"bbox":[279,473,26.8,26.8]}
+{"kind":"shape","id":"sh/gb6pgnmp","slide":3,"bbox":[307,473,26.8,26.8]}
+{"kind":"shape","id":"sh/1cfqpsna","slide":3,"bbox":[335,473,26.8,26.8]}
+{"kind":"shape","id":"sh/2d87ix4v","slide":3,"bbox":[363,473,26.8,26.8]}
+{"kind":"shape","id":"sh/neh8r25g","slide":3,"bbox":[391,473,26.8,26.8]}
+{"kind":"shape","id":"sh/x43ix0bu","slide":3,"bbox":[419,473,26.8,26.8]}
+{"kind":"shape","id":"sh/wju14va9","slide":3,"bbox":[447,473,26.8,26.8]}
+{"kind":"textbox","id":"sh/bil0vqto","slide":3,"text":"Solo sobreviven las celdas dentro de Galicia","textPreview":"Solo sobreviven las celdas dentro de Galicia","textChars":44,"textLines":1,"bbox":[104,570,390,26]}
+{"kind":"shape","id":"sh/ahsj2ls3","slide":3,"bbox":[548,403,139,0]}
+{"kind":"shape","id":"sh/l83i10bq","slide":3,"bbox":[682,396,15,15]}
+{"kind":"textbox","id":"sh/k7u18va5","slide":3,"text":"AHORA","textPreview":"AHORA","textChars":5,"textLines":1,"bbox":[770,174,200,24]}
+{"kind":"textbox","id":"sh/j6l0zqt0","slide":3,"text":"Rectángulo completo + máscara","textPreview":"Rectángulo completo + máscara","textChars":29,"textLines":1,"bbox":[770,204,400,34]}
+{"kind":"shape","id":"sh/y5cj65sf","slide":3,"bbox":[770,270,430,278]}
+{"kind":"shape","id":"sh/tcn25kb2","slide":3,"bbox":[827,305,26.8,26.8]}
+{"kind":"shape","id":"sh/8be1cfah","slide":3,"bbox":[855,305,26.8,26.8]}
+{"kind":"shape","id":"sh/h8vadkre","slide":3,"bbox":[883,305,26.8,26.8]}
+{"kind":"shape","id":"sh/w7m94zat","slide":3,"bbox":[911,305,26.8,26.8]}
+{"kind":"shape","id":"sh/v6dsbu9o","slide":3,"bbox":[939,305,26.8,26.8]}
+{"kind":"shape","id":"sh/u54r2ps3","slide":3,"bbox":[967,305,26.8,26.8]}
+{"kind":"shape","id":"sh/5wfah4rq","slide":3,"bbox":[995,305,26.8,26.8]}
+{"kind":"shape","id":"sh/4vm98za5","slide":3,"bbox":[1023,305,26.8,26.8]}
+{"kind":"shape","id":"sh/jadsfu9k","slide":3,"bbox":[1051,305,26.8,26.8]}
+{"kind":"shape","id":"sh/i94r6psz","slide":3,"bbox":[1079,305,26.8,26.8]}
+{"kind":"shape","id":"sh/t0fal4rm","slide":3,"bbox":[1107,305,26.8,26.8]}
+{"kind":"shape","id":"sh/sz69cja1","slide":3,"bbox":[1135,305,26.8,26.8]}
+{"kind":"shape","id":"sh/qlg7618j","slide":3,"bbox":[827,333,26.8,26.8]}
+{"kind":"shape","id":"sh/b69of694","slide":3,"bbox":[855,333,26.8,26.8]}
+{"kind":"shape","id":"sh/c7ip8bqp","slide":3,"bbox":[883,333,26.8,26.8]}
+{"kind":"shape","id":"sh/d8r6hg7a","slide":3,"bbox":[911,333,26.8,26.8]}
+{"kind":"shape","id":"sh/y907al8v","slide":3,"bbox":[939,333,26.8,26.8]}
+{"kind":"shape","id":"sh/za9ojqpg","slide":3,"bbox":[967,333,26.8,26.8]}
+{"kind":"shape","id":"sh/kbipcvql","slide":3,"bbox":[995,333,26.8,26.8]}
+{"kind":"shape","id":"sh/lcr6l076","slide":3,"bbox":[1023,333,26.8,26.8]}
+{"kind":"shape","id":"sh/mdk7el8r","slide":3,"bbox":[1051,333,26.8,26.8]}
+{"kind":"shape","id":"sh/7etonqpc","slide":3,"bbox":[1079,333,26.8,26.8]}
+{"kind":"shape","id":"sh/jitovq5k","slide":3,"bbox":[1107,333,26.8,26.8]}
+{"kind":"shape","id":"sh/ihkn25oz","slide":3,"bbox":[1135,333,26.8,26.8]}
+{"kind":"shape","id":"sh/54v6x0nq","slide":3,"bbox":[827,361,26.8,26.8]}
+{"kind":"shape","id":"sh/43254v65","slide":3,"bbox":[855,361,26.8,26.8]}
+{"kind":"shape","id":"sh/vetorq58","slide":3,"bbox":[883,361,26.8,26.8]}
+{"kind":"shape","id":"sh/udknylo3","slide":3,"bbox":[911,361,26.8,26.8]}
+{"kind":"shape","id":"sh/hgb6t0ne","slide":3,"bbox":[939,361,26.8,26.8]}
+{"kind":"shape","id":"sh/wf250v6t","slide":3,"bbox":[967,361,26.8,26.8]}
+{"kind":"shape","id":"sh/7a94n65c","slide":3,"bbox":[995,361,26.8,26.8]}
+{"kind":"shape","id":"sh/m90nulor","slide":3,"bbox":[1023,361,26.8,26.8]}
+{"kind":"shape","id":"sh/cfyl47mp","slide":3,"bbox":[1051,361,26.8,26.8]}
+{"kind":"shape","id":"sh/dg72xc3a","slide":3,"bbox":[1079,361,26.8,26.8]}
+{"kind":"shape","id":"sh/qdw32h4j","slide":3,"bbox":[1107,361,26.8,26.8]}
+{"kind":"shape","id":"sh/bepkvml4","slide":3,"bbox":[1135,361,26.8,26.8]}
+{"kind":"shape","id":"sh/0jyl8rml","slide":3,"bbox":[827,389,26.8,26.8]}
+{"kind":"shape","id":"sh/lk721w36","slide":3,"bbox":[855,389,26.8,26.8]}
+{"kind":"shape","id":"sh/yhg36h4v","slide":3,"bbox":[883,389,26.8,26.8]}
+{"kind":"shape","id":"sh/zipkzml0","slide":3,"bbox":[911,389,26.8,26.8]}
+{"kind":"shape","id":"sh/gne1wnmh","slide":3,"bbox":[939,389,26.8,26.8]}
+{"kind":"shape","id":"sh/1on2ps32","slide":3,"bbox":[967,389,26.8,26.8]}
+{"kind":"shape","id":"sh/9kzu5s36","slide":3,"bbox":[995,389,26.8,26.8]}
+{"kind":"shape","id":"sh/8jqdwnml","slide":3,"bbox":[1023,389,26.8,26.8]}
+{"kind":"shape","id":"sh/7ihc3ilg","slide":3,"bbox":[1051,389,26.8,26.8]}
+{"kind":"shape","id":"sh/mhobux4v","slide":3,"bbox":[1079,389,26.8,26.8]}
+{"kind":"shape","id":"sh/lgfu1s3a","slide":3,"bbox":[1107,389,26.8,26.8]}
+{"kind":"shape","id":"sh/kf6tsnmp","slide":3,"bbox":[1135,389,26.8,26.8]}
+{"kind":"shape","id":"sh/zexczil4","slide":3,"bbox":[827,417,26.8,26.8]}
+{"kind":"shape","id":"sh/ydobqd4j","slide":3,"bbox":[855,417,26.8,26.8]}
+{"kind":"shape","id":"sh/xcfux83y","slide":3,"bbox":[883,417,26.8,26.8]}
+{"kind":"shape","id":"sh/cb6to3md","slide":3,"bbox":[911,417,26.8,26.8]}
+{"kind":"shape","id":"sh/2hkry9kb","slide":3,"bbox":[939,417,26.8,26.8]}
+{"kind":"shape","id":"sh/nits7e1w","slide":3,"bbox":[967,417,26.8,26.8]}
+{"kind":"shape","id":"sh/ojm90j2h","slide":3,"bbox":[995,417,26.8,26.8]}
+{"kind":"shape","id":"sh/pkva9oj2","slide":3,"bbox":[1023,417,26.8,26.8]}
+{"kind":"shape","id":"sh/etkru9kf","slide":3,"bbox":[1051,417,26.8,26.8]}
+{"kind":"shape","id":"sh/fut83e10","slide":3,"bbox":[1079,417,26.8,26.8]}
+{"kind":"shape","id":"sh/0v29wz25","slide":3,"bbox":[1107,417,26.8,26.8]}
+{"kind":"shape","id":"sh/1gba54jq","slide":3,"bbox":[1135,417,26.8,26.8]}
+{"kind":"shape","id":"sh/qp0rqpk3","slide":3,"bbox":[827,445,26.8,26.8]}
+{"kind":"shape","id":"sh/rq98zu1o","slide":3,"bbox":[855,445,26.8,26.8]}
+{"kind":"shape","id":"sh/vuporqhg","slide":3,"bbox":[883,445,26.8,26.8]}
+{"kind":"shape","id":"sh/utg7yl0v","slide":3,"bbox":[911,445,26.8,26.8]}
+{"kind":"shape","id":"sh/hw76t0zm","slide":3,"bbox":[939,445,26.8,26.8]}
+{"kind":"shape","id":"sh/gvyp0vi1","slide":3,"bbox":[967,445,26.8,26.8]}
+{"kind":"shape","id":"sh/3ypovahs","slide":3,"bbox":[995,445,26.8,26.8]}
+{"kind":"shape","id":"sh/ixg72507","slide":3,"bbox":[1023,445,26.8,26.8]}
+{"kind":"shape","id":"sh/50r6x0zi","slide":3,"bbox":[1051,445,26.8,26.8]}
+{"kind":"shape","id":"sh/4zyp4fix","slide":3,"bbox":[1079,445,26.8,26.8]}
+{"kind":"shape","id":"sh/z25oj6h8","slide":3,"bbox":[1107,445,26.8,26.8]}
+{"kind":"shape","id":"sh/y1wnq10n","slide":3,"bbox":[1135,445,26.8,26.8]}
+{"kind":"shape","id":"sh/o7al07yl","slide":3,"bbox":[827,473,26.8,26.8]}
+{"kind":"shape","id":"sh/p8jmtcf6","slide":3,"bbox":[855,473,26.8,26.8]}
+{"kind":"shape","id":"sh/25s3yxgf","slide":3,"bbox":[883,473,26.8,26.8]}
+{"kind":"shape","id":"sh/n614r2x0","slide":3,"bbox":[911,473,26.8,26.8]}
+{"kind":"shape","id":"sh/03alw7yp","slide":3,"bbox":[939,473,26.8,26.8]}
+{"kind":"shape","id":"sh/14j2psfa","slide":3,"bbox":[967,473,26.8,26.8]}
+{"kind":"shape","id":"sh/e1s3uxgj","slide":3,"bbox":[995,473,26.8,26.8]}
+{"kind":"shape","id":"sh/f21kn2x4","slide":3,"bbox":[1023,473,26.8,26.8]}
+{"kind":"shape","id":"sh/kzul8ryt","slide":3,"bbox":[1051,473,26.8,26.8]}
+{"kind":"shape","id":"sh/l0nm1wfe","slide":3,"bbox":[1079,473,26.8,26.8]}
+{"kind":"shape","id":"sh/tg7y187i","slide":3,"bbox":[1107,473,26.8,26.8]}
+{"kind":"shape","id":"sh/sfyh83qd","slide":3,"bbox":[1135,473,26.8,26.8]}
+{"kind":"textbox","id":"sh/7e5gzyps","slide":3,"text":"Todas las posiciones x/y existen; is_galicia indica las activas","textPreview":"Todas las posiciones x/y existen; is_galicia indica las activas","textChars":63,"textLines":1,"bbox":[790,570,410,33]}
+{"kind":"textbox","id":"sh/6dwz6t87","slide":3,"text":"Ventaja: datos ordenados, arrays consistentes y posibilidad de añadir dimensión temporal sin deformar la malla.","textPreview":"Ventaja: datos ordenados, arrays consistentes y posibilidad de añadir dimensión temporal sin deformar la malla.","textChars":111,"textLines":1,"bbox":[82,626,1080,29]}
+{"kind":"notes","id":"nt/u39ogr","slide":3,"text":"Este es el cambio de arquitectura más importante. Antes el resultado era una colección de polígonos; ahora es un array rectangular de posiciones x/y con una máscara.\nLas celdas fuera de Galicia siguen existiendo en el cubo, pero no se procesan en las capas temáticas.\n[Sources]\n- Código local: src/geospatial/grid.py (is_galicia, coordenadas regularizadas y exportación del grid).\n- Iberfire.pdf proporcionado por el usuario: malla rectangular de 1 km en una proyección europea de referencia."}
+{"kind":"slide","id":"sl/zf93oj","slide":4,"title":"CAMBIO CLAVE 2","textShapes":14}
+{"kind":"textbox","id":"sh/583698ra","slide":4,"text":"CAMBIO CLAVE 2","textPreview":"CAMBIO CLAVE 2","textChars":14,"textLines":1,"bbox":[58,40,400,24]}
+{"kind":"textbox","id":"sh/ilc7etsz","slide":4,"text":"La topografía deja de ser una capa visual: se convierte en 15 variables por celda","textPreview":"La topografía deja de ser una capa visual: se convierte en 15 variables por celda","textChars":81,"textLines":1,"bbox":[58,71,1130,52]}
+{"kind":"shape","id":"sh/j6lo7y9k","slide":4,"bbox":[58,132,1164,0]}
+{"kind":"textbox","id":"sh/sbepkna1","slide":4,"text":"TFM · Predicción de incendios forestales · 4","textPreview":"TFM · Predicción de incendios forestales · 4","textChars":44,"textLines":1,"bbox":[58,682,570,18]}
+{"kind":"shape","id":"sh/tcnqdsrm","slide":4,"bbox":[305,355,114,0]}
+{"kind":"shape","id":"sh/69c7idsv","slide":4,"bbox":[414,348,15,15]}
+{"kind":"shape","id":"sh/7alobi9g","slide":4,"bbox":[718,355,114,0]}
+{"kind":"shape","id":"sh/gfeponad","slide":4,"bbox":[827,348,15,15]}
+{"kind":"shape","id":"sh/hgnqhsri","slide":4,"bbox":[66,243,238,235]}
+{"kind":"textbox","id":"sh/xcjmds7y","slide":4,"text":"DEM","textPreview":"DEM","textChars":3,"textLines":1,"bbox":[91,278,170,35]}
+{"kind":"textbox","id":"sh/wba54nqd","slide":4,"text":"Copernicus GLO-30\nresolución ~30 m","textPreview":"Copernicus GLO-30 | resolución ~30 m","textChars":34,"textLines":2,"bbox":[91,332,175,56]}
+{"kind":"shape","id":"sh/ba14bips","slide":4,"bbox":[91,405,16.8,16.8]}
+{"kind":"shape","id":"sh/a9s32d8n","slide":4,"bbox":[109,405,16.8,16.8]}
+{"kind":"shape","id":"sh/lg3mhs7a","slide":4,"bbox":[127,405,16.8,16.8]}
+{"kind":"shape","id":"sh/kfa587qp","slide":4,"bbox":[145,405,16.8,16.8]}
+{"kind":"shape","id":"sh/je14f2p4","slide":4,"bbox":[163,405,16.8,16.8]}
+{"kind":"shape","id":"sh/ydsn6x8j","slide":4,"bbox":[181,405,16.8,16.8]}
+{"kind":"shape","id":"sh/1kzm58rq","slide":4,"bbox":[199,405,16.8,16.8]}
+{"kind":"shape","id":"sh/0jqlw3q5","slide":4,"bbox":[91,423,16.8,16.8]}
+{"kind":"shape","id":"sh/czud872d","slide":4,"bbox":[109,423,16.8,16.8]}
+{"kind":"shape","id":"sh/d0ne1c3y","slide":4,"bbox":[127,423,16.8,16.8]}
+{"kind":"shape","id":"sh/qdcv6xk7","slide":4,"bbox":[145,423,16.8,16.8]}
+{"kind":"shape","id":"sh/rylwz2ls","slide":4,"bbox":[163,423,16.8,16.8]}
+{"kind":"shape","id":"sh/03edc72p","slide":4,"bbox":[181,423,16.8,16.8]}
+{"kind":"shape","id":"sh/14ne5c3u","slide":4,"bbox":[199,423,16.8,16.8]}
+{"kind":"shape","id":"sh/e1wvahkj","slide":4,"bbox":[91,441,16.8,16.8]}
+{"kind":"shape","id":"sh/z25w32l4","slide":4,"bbox":[109,441,16.8,16.8]}
+{"kind":"shape","id":"sh/o7ydgr2l","slide":4,"bbox":[127,441,16.8,16.8]}
+{"kind":"shape","id":"sh/987e9w36","slide":4,"bbox":[145,441,16.8,16.8]}
+{"kind":"shape","id":"sh/j29gzq58","slide":4,"bbox":[163,441,16.8,16.8]}
+{"kind":"shape","id":"sh/i10z6l4n","slide":4,"bbox":[181,441,16.8,16.8]}
+{"kind":"shape","id":"sh/5ory10ne","slide":4,"bbox":[199,441,16.8,16.8]}
+{"kind":"shape","id":"sh/knih8vmt","slide":4,"bbox":[430,243,287,235]}
+{"kind":"textbox","id":"sh/bypgv65c","slide":4,"text":"Agregación","textPreview":"Agregación","textChars":10,"textLines":1,"bbox":[455,278,210,35]}
+{"kind":"textbox","id":"sh/axgf214r","slide":4,"text":"Cada celda de 1 km resume\nlos píxeles del DEM","textPreview":"Cada celda de 1 km resume | los píxeles del DEM","textChars":45,"textLines":2,"bbox":[455,332,220,56]}
+{"kind":"textbox","id":"sh/x0ryxgn2","slide":4,"text":"media · desviación · proporción","textPreview":"media · desviación · proporción","textChars":31,"textLines":1,"bbox":[455,417,220,28]}
+{"kind":"shape","id":"sh/wzix4bmx","slide":4,"bbox":[843,206,355,320]}
+{"kind":"textbox","id":"sh/futg7alg","slide":4,"text":"15 variables","textPreview":"15 variables","textChars":12,"textLines":1,"bbox":[874,244,260,38]}
+{"kind":"textbox","id":"sh/utkze54v","slide":4,"text":"6 numéricas","textPreview":"6 numéricas","textChars":11,"textLines":1,"bbox":[874,304,125,24]}
+{"kind":"textbox","id":"sh/210j290z","slide":4,"text":"elevación · pendiente · rugosidad\n(media y desviación)","textPreview":"elevación · pendiente · rugosidad | (media y desviación)","textChars":54,"textLines":2,"bbox":[874,333,270,48]}
+{"kind":"textbox","id":"sh/329kbu1k","slide":4,"text":"9 de orientación","textPreview":"9 de orientación","textChars":16,"textLines":1,"bbox":[874,411,170,24]}
+{"kind":"textbox","id":"sh/o3i14zi5","slide":4,"text":"8 franjas de 45° + sin datos\n(proporción de área)","textPreview":"8 franjas de 45° + sin datos | (proporción de área)","textChars":49,"textLines":2,"bbox":[874,440,270,48]}
+{"kind":"textbox","id":"sh/p4r2d4jq","slide":4,"text":"Además, la rugosidad se calcula como la desviación local de elevación en una ventana 3×3.","textPreview":"Además, la rugosidad se calcula como la desviación local de elevación en una ventana 3×3.","textChars":89,"textLines":1,"bbox":[82,588,1050,32]}
+{"kind":"notes","id":"nt/zf93oj","slide":4,"text":"Una fila del cubo ya no contiene una orientación media poco interpretable; contiene proporciones de ocho franjas de 45 grados y una categoría sin datos.\nEsto conserva la información direccional y permite al modelo aprender relaciones no lineales.\n[Sources]\n- Iberfire.pdf proporcionado por el usuario: quince variables topográficas (estadísticos de elevación, pendiente y rugosidad; ocho clases de orientación y NODATA).\n- Código local: src/geospatial/topography.py (GLO-30, agregación por cell_id y ventana 3×3 para rugosidad)."}
+{"kind":"slide","id":"sl/4dh0ss","slide":5,"title":"PRIMERA VERIFICACIÓN","textShapes":15}
+{"kind":"textbox","id":"sh/cva10jyp","slide":5,"text":"PRIMERA VERIFICACIÓN","textPreview":"PRIMERA VERIFICACIÓN","textChars":20,"textLines":1,"bbox":[58,40,400,24]}
+{"kind":"textbox","id":"sh/bu1krex4","slide":5,"text":"Prueba topográfica: estructura verificada","textPreview":"Prueba topográfica: estructura verificada","textChars":41,"textLines":1,"bbox":[58,71,1130,52]}
+{"kind":"shape","id":"sh/atsjy9gj","slide":5,"bbox":[58,132,1164,0]}
+{"kind":"textbox","id":"sh/lk32xof6","slide":5,"text":"TFM · Predicción de incendios forestales · 5","textPreview":"TFM · Predicción de incendios forestales · 5","textChars":44,"textLines":1,"bbox":[58,682,570,18]}
+{"kind":"shape","id":"sh/kju14jyl","slide":5,"bbox":[70,194,342,195]}
+{"kind":"textbox","id":"sh/zilkvex0","slide":5,"text":"225 × 203","textPreview":"225 × 203","textChars":9,"textLines":1,"bbox":[96,229,290,50]}
+{"kind":"textbox","id":"sh/yhcj29gf","slide":5,"text":"dimensiones x/y\ndel cubo de prueba","textPreview":"dimensiones x/y | del cubo de prueba","textChars":34,"textLines":2,"bbox":[97,301,270,50]}
+{"kind":"shape","id":"sh/9on21of2","slide":5,"bbox":[464,194,342,195]}
+{"kind":"textbox","id":"sh/8nuls3eh","slide":5,"text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[490,229,290,50]}
+{"kind":"textbox","id":"sh/ytc3ax0f","slide":5,"text":"variables topográficas\npor celda activa","textPreview":"variables topográficas | por celda activa","textChars":39,"textLines":2,"bbox":[491,301,270,50]}
+{"kind":"shape","id":"sh/zu5k321k","slide":5,"bbox":[858,194,342,195]}
+{"kind":"textbox","id":"sh/0felc7i5","slide":5,"text":"1,8 × 10⁻⁷","textPreview":"1,8 × 10⁻⁷","textChars":10,"textLines":1,"bbox":[884,229,290,50]}
+{"kind":"textbox","id":"sh/lgn25cjq","slide":5,"text":"error máximo de cierre\nde las orientaciones","textPreview":"error máximo de cierre | de las orientaciones","textChars":43,"textLines":2,"bbox":[885,301,270,50]}
+{"kind":"textbox","id":"sh/mhw3ex0b","slide":5,"text":"Siguiente tramo","textPreview":"Siguiente tramo","textChars":15,"textLines":1,"bbox":[70,455,260,32]}
+{"kind":"shape","id":"sh/ni5k721w","slide":5,"bbox":[75,509,12,12]}
+{"kind":"textbox","id":"sh/8jelg7ih","slide":5,"text":"Incorporar CORINE sobre la misma rejilla","textPreview":"Incorporar CORINE sobre la misma rejilla","textChars":40,"textLines":1,"bbox":[103,505,760,26]}
+{"kind":"shape","id":"sh/9knm9cj2","slide":5,"bbox":[75,552,12,12]}
+{"kind":"textbox","id":"sh/2ls32d07","slide":5,"text":"Añadir dimensiones temporales: clima e incendios","textPreview":"Añadir dimensiones temporales: clima e incendios","textChars":48,"textLines":1,"bbox":[103,548,760,26]}
+{"kind":"shape","id":"sh/3mlkbi1s","slide":5,"bbox":[75,595,12,12]}
+{"kind":"textbox","id":"sh/7ex8nad8","slide":5,"text":"Construir el dataset maestro sin data leakage","textPreview":"Construir el dataset maestro sin data leakage","textChars":45,"textLines":1,"bbox":[103,591,760,26]}
+{"kind":"shape","id":"sh/6toru5cn","slide":5,"bbox":[920,452,274,154]}
+{"kind":"textbox","id":"sh/tgfqpkve","slide":5,"text":"Resultado","textPreview":"Resultado","textChars":9,"textLines":1,"bbox":[946,480,200,25]}
+{"kind":"textbox","id":"sh/sf69gfut","slide":5,"text":"Una base espacial reproducible para el modelo de riesgo.","textPreview":"Una base espacial reproducible para el modelo de riesgo.","textChars":56,"textLines":1,"bbox":[946,518,210,62]}
+{"kind":"notes","id":"nt/4dh0ss","slide":5,"text":"La prueba se ejecutó realmente y se validó que las proporciones de orientación cierran aproximadamente a uno. El error mostrado es puramente numérico de coma flotante.\nLos próximos pasos usan la misma malla: primero cobertura del suelo y luego variables temporales.\n[Sources]\n- Resultado local: data/processed/topography_test.nc; dimensiones y=225, x=203.\n- Validación local de proporciones de orientación: error máximo 1.788e-7.\n- Código local: tests/test_topography.py y notebooks/prueba_topografia.ipynb."}

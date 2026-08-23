@@ -35,6 +35,8 @@ DAILY_VARIABLES = (
     "precipitation_sum_14d",
     "precipitation_sum_30d",
     "consecutive_dry_days",
+    "temperature_mean_7d",
+    "relative_humidity_mean_7d",
 )
 PRECIPITATION_WINDOWS = (1, 3, 7, 14, 30)
 DRY_DAY_THRESHOLD_MM = 1.0
@@ -106,6 +108,16 @@ def add_meteorology_accumulations(daily: xr.Dataset) -> xr.Dataset:
             "time_contract": f"Includes the observation date and the preceding {window - 1} days.",
         }
 
+    for variable in ("temperature_mean", "relative_humidity_mean"):
+        if variable not in output:
+            continue
+        name = f"{variable}_7d"
+        output[name] = output[variable].rolling(time=7, min_periods=7).mean().astype(np.float32)
+        output[name].attrs = {
+            "long_name": f"Seven-day mean of {variable}",
+            "time_contract": "Includes the observation date and the preceding 6 days.",
+        }
+
     values = precipitation.values
     dry_days = np.zeros(values.shape, dtype=np.float32)
     streak = np.zeros(values.shape[1:], dtype=np.float32)
@@ -170,12 +182,14 @@ def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
         "temperature_min",
         "temperature_max",
         "temperature_max_12_18h",
+        "temperature_mean_7d",
     ):
         output[name].attrs["units"] = "degC"
     for name in (
         "relative_humidity_mean",
         "relative_humidity_min",
         "relative_humidity_min_12_18h",
+        "relative_humidity_mean_7d",
     ):
         output[name].attrs["units"] = "%"
     for name in ("wind_speed_mean", "wind_speed_max", "wind_speed_max_12_18h"):
@@ -238,9 +252,22 @@ def interpolar_al_grid(
         for name in daily.data_vars:
             if name in completed:
                 continue
-            source = daily[name].dropna(dim="latitude", how="all").dropna(dim="longitude", how="all")
+            source = (
+                daily[name]
+                .dropna(dim="latitude", how="all")
+                .dropna(dim="longitude", how="all")
+                .sortby("latitude")
+                .sortby("longitude")
+            )
             linear = source.interp(latitude=latitude, longitude=longitude, method="linear")
-            nearest = source.sel(latitude=latitude, longitude=longitude, method="nearest")
+            # ERA5-Land contiene píxeles marítimos nulos. Antes de pedir el vecino
+            # más cercano, se rellenan esos huecos espaciales con el píxel terrestre
+            # válido más próximo para que las celdas costeras de Galicia no queden
+            # fuera del dominio tabular por falta de meteorología.
+            nearest_source = source.interpolate_na(
+                dim="latitude", method="nearest", fill_value="extrapolate"
+            ).interpolate_na(dim="longitude", method="nearest", fill_value="extrapolate")
+            nearest = nearest_source.sel(latitude=latitude, longitude=longitude, method="nearest")
             values = linear.where(linear.notnull(), nearest).values.astype(np.float32)
             full = np.full(
                 (len(daily.time), cube.sizes["y"], cube.sizes["x"]), np.nan, dtype=np.float32

@@ -15,8 +15,8 @@ DEM GLO-30, CORINE Land Cover 2018 y ERA5-Land.
   mismo día `T`; este producto es un **nowcast/análisis diario**, no una
   previsión a 24 horas.
 
-La arquitectura y el diccionario de datos se documentan en
-[docs/architecture/datacube.md](docs/architecture/datacube.md).
+Consulta [las variables](docs/variables.md) y la guía para
+[ejecutar el pipeline](docs/ejecutar_pipeline.md).
 
 ## Estructura
 
@@ -29,19 +29,6 @@ data/raw/         fuentes originales locales
 data/processed/   productos generados (ignorados por Git)
 archive/          código FIRMS/Mikel histórico, fuera de la ruta operativa
 ```
-
-## Ejecución
-
-Activa el entorno `incendios-forestales` y ejecuta, desde la raíz:
-
-```powershell
-& C:\Users\alfon\anaconda3\envs\incendios-forestales\python.exe -m src.workflow `
-  --egif-xml data/raw/fire_history/Xml_20260821_223019_1.xml
-```
-
-El workflow reutiliza las capas estáticas, ERA5 y EGIF ya disponibles de forma
-local; no vuelve a descargar fuentes. Genera el NetCDF final y un Parquet
-tabular consolidado por año para cada año de datos.
 
 ## Validación
 
