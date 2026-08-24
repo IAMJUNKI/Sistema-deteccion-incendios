@@ -13,6 +13,7 @@ def test_year_es_columna_de_particion_no_predictor() -> None:
             "target_ignicion",
             "burned_area_ha",
             "large_fire_500ha",
+            "is_near_ignition_25x25_10d",
             "is_galicia",
             "cell_id",
         }

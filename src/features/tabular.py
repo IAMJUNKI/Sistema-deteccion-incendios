@@ -16,6 +16,9 @@ OUTCOME_COLUMNS = {
     "burned_area_ha",
     "large_fire_500ha",
 }
+SAMPLING_AUXILIARY_COLUMNS = {
+    "is_near_ignition_25x25_10d",
+}
 NON_PREDICTOR_COLUMNS = OUTCOME_COLUMNS | {
     "is_galicia",
     "cell_id",
@@ -23,7 +26,7 @@ NON_PREDICTOR_COLUMNS = OUTCOME_COLUMNS | {
     # Se mantienen para trazabilidad, pero no añaden señal al modelo actual.
     "aspect_no_data_fraction",  # Constante a cero en la malla de Galicia.
     "precipitation_sum_1d",  # Duplicado exacto de precipitation_sum.
-}
+} | SAMPLING_AUXILIARY_COLUMNS
 
 
 def obtener_columnas_predictoras(data_variables: set[str]) -> list[str]:
@@ -117,6 +120,7 @@ def finalizar_exportacion_tabular(
             "row_definition": "One active 1 km Galicia cell on one EGIF-covered date with complete predictors.",
             "target": "target_ignicion (EGIF-MITECO)",
             "outcome_columns_not_predictors": sorted(OUTCOME_COLUMNS),
+            "sampling_auxiliary_columns_not_predictors": sorted(SAMPLING_AUXILIARY_COLUMNS),
             "predictor_columns": predictors,
             "partitioning": "year=YYYY/dataset_YYYY.parquet",
             "annual_files": annual_files,

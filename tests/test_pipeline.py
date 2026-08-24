@@ -2,7 +2,33 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from src.pipeline import construir_datacubo_completo
+from src.pipeline import _calcular_vecindad_igniciones, construir_datacubo_completo
+
+
+def test_vecindad_igniciones_marca_25x25_y_diez_dias_anteriores() -> None:
+    target = np.zeros((12, 30, 30), dtype=np.float32)
+    target[10, 15, 15] = 1
+    active = np.ones((30, 30), dtype=bool)
+
+    near = _calcular_vecindad_igniciones(target, active)
+
+    assert near[0, 3, 3] == 1
+    assert near[10, 27, 27] == 1
+    assert near[11].sum() == 0
+    assert near[0, 2, 2] == 0
+
+
+def test_vecindad_igniciones_se_recorta_en_bordes_y_fuera_de_galicia() -> None:
+    target = np.zeros((3, 4, 4), dtype=np.float32)
+    target[2, 0, 0] = 1
+    active = np.ones((4, 4), dtype=bool)
+    active[0, 1] = False
+
+    near = _calcular_vecindad_igniciones(target, active)
+
+    assert near[1, 3, 3] == 1
+    assert near[1, 0, 1] == 0
+    assert near[2, 0, 0] == 1
 
 
 def test_construir_datacubo_asigna_ceros_fuera_de_las_igniciones(tmp_path) -> None:
@@ -62,6 +88,7 @@ def test_construir_datacubo_asigna_ceros_fuera_de_las_igniciones(tmp_path) -> No
     with xr.open_dataset(paths["output"]) as result:
         assert result["target_ignicion"].sel(time="2020-01-01").item() == 1
         assert result["target_ignicion"].sel(time="2020-01-02").item() == 0
+        assert result["is_near_ignition_25x25_10d"].sel(time="2020-01-01").item() == 1
         assert "egif_observed" not in result
         assert "aspect_no_data_fraction" not in result
         assert "precipitation_sum_1d" not in result

@@ -24,6 +24,7 @@ Consulta [las variables](docs/variables.md) y la guía para
 src/geospatial/   rejilla, DEM y CORINE
 src/ingestion/    ERA5-Land y EGIF
 src/features/     calendario y exportación tabular
+src/modeling/     carga, selección y evaluación temporal de modelos
 src/workflow.py   orquestación completa
 data/raw/         fuentes originales locales
 data/processed/   productos generados (ignorados por Git)
@@ -44,3 +45,10 @@ Para validar los productos generados sin descargar ni modificar datos, ejecutar:
   target, meteorologia y preparacion de los Parquet para ML.
 - `notebooks/09_exploracion_y_seleccion_features.ipynb`: exploración reproducible,
   señal univariante, redundancia y definición de conjuntos de predictores para modelado.
+- `notebooks/10_experimentos_feature_selection.ipynb`: comparación temporal
+  controlada de conjuntos de variables con LightGBM, usando 2022 como validación.
+- `notebooks/11_validacion_robusta_modelo.ipynb`: réplica con varios subconjuntos
+  de negativos y revisión mensual antes de desbloquear el test de 2023.
+
+La fase posterior de selección y evaluación está descrita en
+[modelado](docs/modeling.md). No forma parte del pipeline de construcción de datos.

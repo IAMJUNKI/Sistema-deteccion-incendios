@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xarray as xr
+from scipy.ndimage import maximum_filter
 
 from src.config import (
     DATACUBE_END,
@@ -28,6 +29,26 @@ DEFAULT_EGIF_TARGET = EGIF_TARGET_PATH
 DEFAULT_OUTPUT = DATACUBE_PATH
 DATACUBE_START_DATE = DATACUBE_START
 DATACUBE_END_DATE = DATACUBE_END
+
+
+def _calcular_vecindad_igniciones(
+    target_values: np.ndarray, active: np.ndarray, radius_cells: int = 12, lookback_days: int = 10
+) -> np.ndarray:
+    """Marca la vecindad espacio-temporal de las igniciones observadas.
+
+    Es una capa auxiliar construida *a posteriori* con EGIF: para cada
+    ignición, marca el cuadrado de ``(2 * radius_cells + 1)`` celdas el día de
+    la ignición y los ``lookback_days`` días anteriores. En un borde de la
+    rejilla o de Galicia, la ventana se recorta a las celdas activas. No es una
+    variable disponible en producción ni puede emplearse como predictor.
+    """
+    fires = np.nan_to_num(target_values, nan=0.0) > 0
+    side = 2 * radius_cells + 1
+    spatial_neighbourhood = maximum_filter(fires, size=(1, side, side), mode="constant")
+    near = spatial_neighbourhood.copy()
+    for days_before in range(1, lookback_days + 1):
+        near[:-days_before] |= spatial_neighbourhood[days_before:]
+    return np.where(active[np.newaxis, :, :], near, False).astype(np.uint8)
 
 
 def construir_datacubo_completo(
@@ -90,11 +111,17 @@ def construir_datacubo_completo(
                 burned_area_values[date_positions[date], row, col] = area
                 large_fire_values[date_positions[date], row, col] = float(area >= 500.0)
 
+        near_ignition_values = _calcular_vecindad_igniciones(target_values, active)
+
         target_cube = xr.Dataset(
             {
                 "target_ignicion": (("time", "y", "x"), target_values),
                 "burned_area_ha": (("time", "y", "x"), burned_area_values),
                 "large_fire_500ha": (("time", "y", "x"), large_fire_values),
+                "is_near_ignition_25x25_10d": (
+                    ("time", "y", "x"),
+                    near_ignition_values,
+                ),
             },
             coords={"time": meteorology.time, "y": meteorology.y, "x": meteorology.x},
         )
@@ -112,6 +139,16 @@ def construir_datacubo_completo(
             "long_name": "Large-fire outcome indicator",
             "description": "1 when total burned area in the cell/day is at least 500 ha.",
             "role": "Outcome only; never use as a predictor.",
+        }
+        target_cube["is_near_ignition_25x25_10d"].attrs = {
+            "long_name": "Auxiliary EGIF ignition neighbourhood mask",
+            "description": (
+                "1 if the cell lies in a 25x25-cell square around an observed ignition "
+                "on that ignition date and on each of the ten preceding days; 0 otherwise. "
+                "The square is clipped at grid and Galicia boundaries."
+            ),
+            "role": "Historical sampling auxiliary only; never use as a predictor or production input.",
+            "source": "Derived from EGIF-MITECO target, following IberFire-style negative filtering.",
         }
         complete = xr.merge(
             [spatial, topography, landcover, temporal, meteorology, target_cube],

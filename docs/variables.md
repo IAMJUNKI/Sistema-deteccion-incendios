@@ -43,6 +43,13 @@ terrestre ERA5-Land más cercano.
   si no hay ninguna.
 - `burned_area_ha`: superficie quemada asociada en hectáreas.
 - `large_fire_500ha`: 1 si la superficie asociada alcanza 500 ha.
+- `is_near_ignition_25x25_10d`: auxiliar histórico. Vale 1 en el cuadrado
+  de 25 × 25 celdas alrededor de una ignición durante el día del evento y los
+  diez días anteriores (11 fechas en total; el cuadrado se recorta en la
+  frontera de la rejilla y de Galicia).
+  **Solo se usa como filtro de negativos históricos** al reproducir el
+  protocolo de IberFire; nunca se usa como predictor ni estará disponible en
+  producción.
 
-`burned_area_ha`, `large_fire_500ha` y `target_ignicion` son resultados; deben
-excluirse de la matriz de predictores para entrenar el modelo de ignición.
+`burned_area_ha`, `large_fire_500ha`, `target_ignicion` y
+`is_near_ignition_25x25_10d` se excluyen de la matriz de predictores.
