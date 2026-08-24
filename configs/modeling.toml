@@ -1,0 +1,17 @@
+[temporal_split]
+train_years = [2019, 2020, 2021]
+validation_years = [2022]
+test_years = [2023]
+
+[evaluation]
+top_fraction = 0.01
+primary_metric = "pr_auc"
+
+# Se comparan en 2022; 2023 permanece ciego hasta fijar el modelo final.
+[feature_sets]
+baseline = "completo"
+ablation_topography = "sin_topografia_redundante"
+ablation_calendar = "sin_calendario_redundante"
+compact_calendar = "temporal_compacto"
+compact_daily_meteorology = "temporal_compacto_meteo_diaria"
+compact_critical_window = "temporal_compacto_meteo_ventana"
