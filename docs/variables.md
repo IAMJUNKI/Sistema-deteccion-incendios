@@ -1,5 +1,13 @@
 # Variables del datacubo
 
+## Metadatos de las variables
+
+Cada variable del NetCDF incluye `long_name` (nombre legible), `units` y, cuando
+es necesario, `description` o el contrato temporal. Esto permite interpretar el
+cubo sin depender del código. Las unidades principales son `degC` (temperatura),
+`%` (humedad relativa), `km h-1` (viento), `mm` (precipitación), `m`/`km`
+(distancias y topografía), `fraction` (proporciones) y `1` (indicadores binarios).
+
 Cada fila del Parquet representa una celda de 1 km de Galicia y una fecha. El
 NetCDF conserva además la rejilla rectangular completa y la máscara `is_galicia`.
 
@@ -25,6 +33,15 @@ Las fracciones `artificial`, `agriculture`, `broadleaf_forest`,
 suma de los tres tipos de bosque. Cuando una celda costera no tiene píxeles
 CORINE válidos, se copia el vector completo de la celda válida más próxima.
 
+## Actividad humana (OpenStreetMap, instantánea 2022-01-01)
+
+`distance_to_road_m` es la distancia desde el polígono de la celda a la vía
+seleccionada más cercana y vale 0 si esta la intersecta. `road_length_km` suma
+los kilómetros de vías seleccionadas dentro de la celda.
+`distance_to_residential_area_m` mide la distancia al área residencial o núcleo
+poblado OSM más cercano. Son variables estáticas calculadas una sola vez y
+estarán disponibles igualmente en producción.
+
 ## Meteorología (ERA5-Land)
 
 | Grupo | Variables |
@@ -36,6 +53,9 @@ CORINE válidos, se copia el vector completo de la celda válida más próxima.
 Los acumulados y las medias móviles incluyen la fecha T y los días anteriores.
 Las celdas de borde sin interpolación lineal válida se completan con el píxel
 terrestre ERA5-Land más cercano.
+
+La coordenada escalar `number` de ERA5 no se conserva: identificaba un único
+miembro de ensemble y no tenía significado espacial, temporal ni predictivo.
 
 ## Resultados EGIF: no usar como predictores
 

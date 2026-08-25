@@ -263,6 +263,7 @@ def crear_datacubo_cobertura_suelo(cube: xr.Dataset, landcover: pd.DataFrame) ->
         output[variable].attrs = {
             "long_name": LANDCOVER_METADATA.get(variable, "Total forest cover"),
             "units": "fraction",
+            "description": "Fraction of the 1 km cell classified in CORINE Land Cover 2018.",
         }
     output.attrs = {
         "title": "Land cover variables",

@@ -74,7 +74,8 @@ Dentro del repositorio crea, si no existen, estas carpetas:
 data/raw/
 ├── corine/
 ├── fire_history/
-└── meteorology/era5/
+├── meteorology/era5/
+└── human_activity/  # La crea el pipeline para OpenStreetMap
 ```
 
 Coloca los dos ficheros que el proyecto **no descarga automáticamente**:
@@ -86,7 +87,10 @@ Coloca los dos ficheros que el proyecto **no descarga automáticamente**:
 
 El límite de Galicia se descarga automáticamente si falta cuando se usa
 `--rebuild-static`. El DEM Copernicus GLO-30 también se descarga automáticamente
-en esa primera construcción. Ambos necesitan conexión a internet.
+en esa primera construcción. Ambos necesitan conexión a internet. La capa de
+carreteras y zonas residenciales se descarga también automáticamente desde un
+extracto Shapefile versionado de OpenStreetMap si falta; se guarda en
+`data/raw/human_activity/` y no se vuelve a descargar.
 
 ## Paso 5. Descargar ERA5-Land (solo si aún no está en el equipo)
 
@@ -122,7 +126,8 @@ python -m src.workflow `
 ```
 
 La primera vez tarda bastante: crea la rejilla, descarga el DEM, procesa CORINE,
-procesa ERA5, asigna las igniciones EGIF, crea el NetCDF y exporta los Parquet.
+descarga/procesa la capa estática de actividad humana, procesa ERA5, asigna las
+igniciones EGIF, crea el NetCDF y exporta los Parquet.
 No cierres PowerShell mientras se ejecuta.
 
 ## Paso 7. Ejecutarlo otra vez cuando ya existen los datos
@@ -138,6 +143,9 @@ python -m src.workflow `
 
 El workflow reemplaza sus salidas generadas anteriores, pero nunca borra los
 datos originales de `data/raw/`.
+
+Para recalcular solo las variables estáticas de carreteras y zonas residenciales
+con el mismo extracto OSM local, añade `--rebuild-human-activity` al comando.
 
 ## Paso 8. Comprobar el resultado
 

@@ -40,6 +40,36 @@ DAILY_VARIABLES = (
 PRECIPITATION_WINDOWS = (3, 7, 14, 30)
 DRY_DAY_THRESHOLD_MM = 1.0
 
+METEOROLOGY_METADATA = {
+    "temperature_mean": ("Daily mean 2 m air temperature", "degC"),
+    "temperature_min": ("Daily minimum 2 m air temperature", "degC"),
+    "temperature_max": ("Daily maximum 2 m air temperature", "degC"),
+    "temperature_max_12_18h": (
+        "Maximum 2 m air temperature from 12:00 to 18:00 Europe/Madrid",
+        "degC",
+    ),
+    "relative_humidity_mean": ("Daily mean relative humidity at 2 m", "%"),
+    "relative_humidity_min": ("Daily minimum relative humidity at 2 m", "%"),
+    "relative_humidity_min_12_18h": (
+        "Minimum relative humidity from 12:00 to 18:00 Europe/Madrid",
+        "%",
+    ),
+    "wind_speed_mean": ("Daily mean 10 m wind speed", "km h-1"),
+    "wind_speed_max": ("Daily maximum 10 m wind speed", "km h-1"),
+    "wind_speed_max_12_18h": (
+        "Maximum 10 m wind speed from 12:00 to 18:00 Europe/Madrid",
+        "km h-1",
+    ),
+    "precipitation_sum": ("Daily total precipitation", "mm"),
+    "precipitation_sum_3d": ("Precipitation accumulated over 3 days", "mm"),
+    "precipitation_sum_7d": ("Precipitation accumulated over 7 days", "mm"),
+    "precipitation_sum_14d": ("Precipitation accumulated over 14 days", "mm"),
+    "precipitation_sum_30d": ("Precipitation accumulated over 30 days", "mm"),
+    "temperature_mean_7d": ("Seven-day mean 2 m air temperature", "degC"),
+    "relative_humidity_mean_7d": ("Seven-day mean relative humidity at 2 m", "%"),
+    "consecutive_dry_days": ("Consecutive days with precipitation below 1 mm", "days"),
+}
+
 
 def listar_archivos_era5(
     raw_dir: str | Path = DEFAULT_RAW_DIR,
@@ -174,26 +204,8 @@ def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
         "critical_window": "12:00-18:00 Europe/Madrid",
         "precipitation_method": "Daily maximum of ERA5-Land hourly accumulation in mm.",
     }
-    for name in DAILY_VARIABLES:
-        output[name].attrs["long_name"] = name.replace("_", " ")
-    for name in (
-        "temperature_mean",
-        "temperature_min",
-        "temperature_max",
-        "temperature_max_12_18h",
-        "temperature_mean_7d",
-    ):
-        output[name].attrs["units"] = "degC"
-    for name in (
-        "relative_humidity_mean",
-        "relative_humidity_min",
-        "relative_humidity_min_12_18h",
-        "relative_humidity_mean_7d",
-    ):
-        output[name].attrs["units"] = "%"
-    for name in ("wind_speed_mean", "wind_speed_max", "wind_speed_max_12_18h"):
-        output[name].attrs["units"] = "km h-1"
-    output["precipitation_sum"].attrs["units"] = "mm"
+    for name, (long_name, units) in METEOROLOGY_METADATA.items():
+        output[name].attrs.update({"long_name": long_name, "units": units})
     return output
 
 
@@ -272,7 +284,12 @@ def interpolar_al_grid(
                 (len(daily.time), cube.sizes["y"], cube.sizes["x"]), np.nan, dtype=np.float32
             )
             full[:, rows, cols] = values
-            xr.Dataset({name: (("time", "y", "x"), full)}).to_netcdf(
+            interpolated = xr.Dataset({name: (("time", "y", "x"), full)})
+            interpolated[name].attrs = dict(daily[name].attrs)
+            interpolated[name].attrs["spatial_interpolation"] = (
+                "Linear interpolation; nearest valid ERA5-Land pixel used for missing values."
+            )
+            interpolated.to_netcdf(
                 destination,
                 mode="a",
                 encoding={name: {"zlib": True, "complevel": 4, "dtype": "float32"}},

@@ -19,14 +19,18 @@ OUTCOME_COLUMNS = {
 SAMPLING_AUXILIARY_COLUMNS = {
     "is_near_ignition_25x25_10d",
 }
-NON_PREDICTOR_COLUMNS = OUTCOME_COLUMNS | {
-    "is_galicia",
-    "cell_id",
-    "year",
-    # Se mantienen para trazabilidad, pero no añaden señal al modelo actual.
-    "aspect_no_data_fraction",  # Constante a cero en la malla de Galicia.
-    "precipitation_sum_1d",  # Duplicado exacto de precipitation_sum.
-} | SAMPLING_AUXILIARY_COLUMNS
+NON_PREDICTOR_COLUMNS = (
+    OUTCOME_COLUMNS
+    | {
+        "is_galicia",
+        "cell_id",
+        "year",
+        # Se mantienen para trazabilidad, pero no añaden señal al modelo actual.
+        "aspect_no_data_fraction",  # Constante a cero en la malla de Galicia.
+        "precipitation_sum_1d",  # Duplicado exacto de precipitation_sum.
+    }
+    | SAMPLING_AUXILIARY_COLUMNS
+)
 
 
 def obtener_columnas_predictoras(data_variables: set[str]) -> list[str]:
@@ -89,6 +93,9 @@ def exportar_datacubo_tabular(
                 .isel(cell=active_positions)
             )
             frame = block.to_dataframe().reset_index()
+            # Coordenada escalar residual de ERA5: identifica un único miembro
+            # de ensemble y no describe la celda ni la fecha.
+            frame.drop(columns="number", errors="ignore", inplace=True)
             frame = frame.loc[frame["target_ignicion"].notna()].copy()
             frame.rename(columns={"time": "fecha"}, inplace=True)
             frame["target_ignicion"] = frame["target_ignicion"].astype(np.uint8)
@@ -117,17 +124,17 @@ def finalizar_exportacion_tabular(
         time_contract = cube.attrs.get("time_contract")
     annual_files = _consolidar_partes_anuales(output_dir)
     metadata = {
-            "row_definition": "One active 1 km Galicia cell on one EGIF-covered date with complete predictors.",
-            "target": "target_ignicion (EGIF-MITECO)",
-            "outcome_columns_not_predictors": sorted(OUTCOME_COLUMNS),
-            "sampling_auxiliary_columns_not_predictors": sorted(SAMPLING_AUXILIARY_COLUMNS),
-            "predictor_columns": predictors,
-            "partitioning": "year=YYYY/dataset_YYYY.parquet",
-            "annual_files": annual_files,
-            "dropped_rows_incomplete_predictors": dropped_incomplete_predictors,
-            "source_datacube": str(cube_path),
-            "time_contract": time_contract,
-        }
+        "row_definition": "One active 1 km Galicia cell on one EGIF-covered date with complete predictors.",
+        "target": "target_ignicion (EGIF-MITECO)",
+        "outcome_columns_not_predictors": sorted(OUTCOME_COLUMNS),
+        "sampling_auxiliary_columns_not_predictors": sorted(SAMPLING_AUXILIARY_COLUMNS),
+        "predictor_columns": predictors,
+        "partitioning": "year=YYYY/dataset_YYYY.parquet",
+        "annual_files": annual_files,
+        "dropped_rows_incomplete_predictors": dropped_incomplete_predictors,
+        "source_datacube": str(cube_path),
+        "time_contract": time_contract,
+    }
     (output_dir / "metadata.json").write_text(
         json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8"
     )
@@ -156,7 +163,9 @@ def _consolidar_partes_anuales(output_dir: Path) -> dict[str, int]:
                 try:
                     for batch in parquet.iter_batches(batch_size=250_000):
                         if writer is None:
-                            writer = pq.ParquetWriter(temporary, batch.schema, compression="snappy")
+                            writer = pq.ParquetWriter(
+                                temporary, batch.schema, compression="snappy"
+                            )
                         writer.write_batch(batch)
                         rows += batch.num_rows
                 finally:

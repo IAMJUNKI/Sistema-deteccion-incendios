@@ -43,6 +43,21 @@ TOPOGRAPHY_VARIABLES = [
     *ASPECT_VARIABLES,
     ASPECT_NODATA_VARIABLE,
 ]
+TOPOGRAPHY_METADATA = {
+    "elevation_mean": ("Mean terrain elevation", "m"),
+    "elevation_std": ("Terrain elevation standard deviation", "m"),
+    "slope_mean": ("Mean terrain slope", "degrees"),
+    "slope_std": ("Terrain slope standard deviation", "degrees"),
+    "roughness_mean": ("Mean local terrain roughness", "m"),
+    "roughness_std": ("Local terrain roughness standard deviation", "m"),
+    ASPECT_NODATA_VARIABLE: ("Fraction of pixels without valid terrain aspect", "fraction"),
+}
+TOPOGRAPHY_METADATA.update(
+    {
+        variable: (f"Fraction of pixels with aspect from {start} to {end} degrees", "fraction")
+        for variable, (start, end) in zip(ASPECT_VARIABLES, ASPECT_RANGES, strict=True)
+    }
+)
 
 
 def descargar_dem_galicia(
@@ -272,12 +287,8 @@ def crear_datacubo_topografia(cube: xr.Dataset, topografia: pd.DataFrame) -> xr.
         "spatial_resolution": cube.attrs["spatial_resolution"],
         "roughness_method": "3x3 local elevation standard deviation",
     }
-    for variable in TOPOGRAPHY_VARIABLES:
-        topography[variable].attrs = {
-            "units": "fraction" if variable.startswith("aspect_") else "m",
-        }
-    topography["slope_mean"].attrs["units"] = "degrees"
-    topography["slope_std"].attrs["units"] = "degrees"
+    for variable, (long_name, units) in TOPOGRAPHY_METADATA.items():
+        topography[variable].attrs = {"long_name": long_name, "units": units}
     return topography
 
 

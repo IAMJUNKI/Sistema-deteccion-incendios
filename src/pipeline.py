@@ -6,13 +6,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xarray as xr
-from scipy.ndimage import maximum_filter
 
 from src.config import (
     DATACUBE_END,
     DATACUBE_PATH,
     DATACUBE_START,
     EGIF_TARGET_PATH,
+    HUMAN_ACTIVITY_CUBE_PATH,
     LANDCOVER_CUBE_PATH,
     METEOROLOGY_CUBE_PATH,
     SPATIAL_CUBE_PATH,
@@ -23,6 +23,7 @@ from src.config import (
 DEFAULT_SPATIAL_CUBE = SPATIAL_CUBE_PATH
 DEFAULT_TOPOGRAPHY_CUBE = TOPOGRAPHY_CUBE_PATH
 DEFAULT_LANDCOVER_CUBE = LANDCOVER_CUBE_PATH
+DEFAULT_HUMAN_ACTIVITY_CUBE = HUMAN_ACTIVITY_CUBE_PATH
 DEFAULT_TIME_CUBE = TIME_CUBE_PATH
 DEFAULT_METEOROLOGY_CUBE = METEOROLOGY_CUBE_PATH
 DEFAULT_EGIF_TARGET = EGIF_TARGET_PATH
@@ -43,11 +44,18 @@ def _calcular_vecindad_igniciones(
     variable disponible en producción ni puede emplearse como predictor.
     """
     fires = np.nan_to_num(target_values, nan=0.0) > 0
-    side = 2 * radius_cells + 1
-    spatial_neighbourhood = maximum_filter(fires, size=(1, side, side), mode="constant")
-    near = spatial_neighbourhood.copy()
-    for days_before in range(1, lookback_days + 1):
-        near[:-days_before] |= spatial_neighbourhood[days_before:]
+    near = np.zeros_like(fires, dtype=bool)
+    n_times, n_rows, n_columns = fires.shape
+    # Es mucho más eficiente marcar directamente las ventanas de las escasas
+    # igniciones que filtrar toda la matriz espacio-temporal de cinco años.
+    for time_index, row, column in np.argwhere(fires):
+        row_start = max(0, row - radius_cells)
+        row_stop = min(n_rows, row + radius_cells + 1)
+        column_start = max(0, column - radius_cells)
+        column_stop = min(n_columns, column + radius_cells + 1)
+        time_start = max(0, time_index - lookback_days)
+        time_stop = min(n_times, time_index + 1)
+        near[time_start:time_stop, row_start:row_stop, column_start:column_stop] = True
     return np.where(active[np.newaxis, :, :], near, False).astype(np.uint8)
 
 
@@ -55,6 +63,7 @@ def construir_datacubo_completo(
     spatial_cube_path: str | Path,
     topography_cube_path: str | Path,
     landcover_cube_path: str | Path,
+    human_activity_cube_path: str | Path,
     time_cube_path: str | Path,
     meteorology_cube_path: str | Path,
     egif_target_path: str | Path,
@@ -62,7 +71,7 @@ def construir_datacubo_completo(
     start_date: str = DATACUBE_START_DATE,
     end_date: str = DATACUBE_END_DATE,
 ) -> None:
-    """Une las capas estáticas, temporales, meteorológicas y el target EGIF.
+    """Une capas estáticas, temporales, meteorológicas y el target EGIF.
 
     El intervalo termina en la última fecha del XML EGIF, por lo que el target
     vale 0 en toda celda activa sin ignición y no necesita un indicador de cobertura.
@@ -73,6 +82,7 @@ def construir_datacubo_completo(
         xr.open_dataset(spatial_cube_path) as spatial,
         xr.open_dataset(topography_cube_path) as topography,
         xr.open_dataset(landcover_cube_path) as landcover,
+        xr.open_dataset(human_activity_cube_path) as human_activity,
         xr.open_dataset(time_cube_path) as temporal,
         xr.open_dataset(meteorology_cube_path) as meteorology,
     ):
@@ -83,7 +93,7 @@ def construir_datacubo_completo(
         topography = topography.drop_vars("aspect_no_data_fraction", errors="ignore")
         # La acumulación de un día era un duplicado exacto de la precipitación
         # diaria; se descarta también si se reutiliza una capa meteorológica antigua.
-        meteorology = meteorology.drop_vars("precipitation_sum_1d", errors="ignore")
+        meteorology = meteorology.drop_vars(["precipitation_sum_1d", "number"], errors="ignore")
         target_values = np.full(
             (meteorology.sizes["time"], meteorology.sizes["y"], meteorology.sizes["x"]),
             np.nan,
@@ -128,6 +138,7 @@ def construir_datacubo_completo(
         target_cube["target_ignicion"].attrs = {
             "long_name": "Official EGIF ignition target",
             "description": "1=one or more ignitions in the cell/day; 0=no ignition.",
+            "units": "1",
             "source": "EGIF-MITECO",
         }
         target_cube["burned_area_ha"].attrs = {
@@ -138,6 +149,7 @@ def construir_datacubo_completo(
         target_cube["large_fire_500ha"].attrs = {
             "long_name": "Large-fire outcome indicator",
             "description": "1 when total burned area in the cell/day is at least 500 ha.",
+            "units": "1",
             "role": "Outcome only; never use as a predictor.",
         }
         target_cube["is_near_ignition_25x25_10d"].attrs = {
@@ -147,11 +159,12 @@ def construir_datacubo_completo(
                 "on that ignition date and on each of the ten preceding days; 0 otherwise. "
                 "The square is clipped at grid and Galicia boundaries."
             ),
+            "units": "1",
             "role": "Historical sampling auxiliary only; never use as a predictor or production input.",
             "source": "Derived from EGIF-MITECO target, following IberFire-style negative filtering.",
         }
         complete = xr.merge(
-            [spatial, topography, landcover, temporal, meteorology, target_cube],
+            [spatial, topography, landcover, human_activity, temporal, meteorology, target_cube],
             compat="equals",
             combine_attrs="drop_conflicts",
         )
@@ -177,6 +190,7 @@ def main() -> None:
     parser.add_argument("--spatial-cube", default=str(DEFAULT_SPATIAL_CUBE))
     parser.add_argument("--topography-cube", default=str(DEFAULT_TOPOGRAPHY_CUBE))
     parser.add_argument("--landcover-cube", default=str(DEFAULT_LANDCOVER_CUBE))
+    parser.add_argument("--human-activity-cube", default=str(DEFAULT_HUMAN_ACTIVITY_CUBE))
     parser.add_argument("--time-cube", default=str(DEFAULT_TIME_CUBE))
     parser.add_argument("--meteorology-cube", default=str(DEFAULT_METEOROLOGY_CUBE))
     parser.add_argument("--egif-target", default=str(DEFAULT_EGIF_TARGET))
@@ -198,6 +212,7 @@ def main() -> None:
         args.spatial_cube,
         args.topography_cube,
         args.landcover_cube,
+        args.human_activity_cube,
         args.time_cube,
         args.meteorology_cube,
         args.egif_target,

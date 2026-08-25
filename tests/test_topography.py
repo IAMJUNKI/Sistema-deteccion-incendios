@@ -43,3 +43,5 @@ def test_agregacion_topografica_y_datacubo() -> None:
     assert topography["elevation_mean"].shape == (1, 2)
     assert topography["aspect_000_045_fraction"].values.tolist() == [[1.0, 0.0]]
     assert topography["aspect_045_090_fraction"].values.tolist() == [[0.0, 1.0]]
+    assert topography["elevation_mean"].attrs["units"] == "m"
+    assert topography["slope_mean"].attrs["long_name"] == "Mean terrain slope"

@@ -17,6 +17,8 @@ from src.config import (
     GRID_CELL_SIZE_M,
     GRID_DIR,
     GRID_PATH,
+    HUMAN_ACTIVITY_CUBE_PATH,
+    HUMAN_ACTIVITY_RAW_DIR,
     LANDCOVER_CUBE_PATH,
     METEOROLOGY_CONTEXT_START,
     METEOROLOGY_CUBE_PATH,
@@ -27,6 +29,7 @@ from src.config import (
 )
 from src.features.tabular import exportar_datacubo_tabular
 from src.features.time import crear_datacubo_temporal, guardar_datacubo_temporal
+from src.geospatial.human_activity import construir_capa_actividad_humana
 from src.geospatial.pipeline import run_pipeline as construir_capas_estaticas
 from src.ingestion.ingest_egif import ultima_fecha_egif
 from src.ingestion.pipeline import ejecutar_pipeline_egif, ejecutar_pipeline_meteorologia
@@ -59,6 +62,7 @@ def ejecutar_workflow_historico(
     daily_meteorology_path: str | Path = ERA5_DAILY_PATH,
     skip_daily_meteorology: bool = False,
     rebuild_static: bool = False,
+    rebuild_human_activity: bool = False,
 ) -> None:
     """Construye tiempo, ERA5, EGIF, NetCDF y Parquet bajo un único contrato.
 
@@ -78,7 +82,21 @@ def ejecutar_workflow_historico(
             cell_size=GRID_CELL_SIZE_M,
         )
 
-    required_static = [grid_path, spatial_cube_path, TOPOGRAPHY_CUBE_PATH, LANDCOVER_CUBE_PATH]
+    if rebuild_static or rebuild_human_activity or not HUMAN_ACTIVITY_CUBE_PATH.exists():
+        construir_capa_actividad_humana(
+            grid_path=grid_path,
+            spatial_cube_path=spatial_cube_path,
+            output_path=HUMAN_ACTIVITY_CUBE_PATH,
+            raw_dir=HUMAN_ACTIVITY_RAW_DIR,
+        )
+
+    required_static = [
+        grid_path,
+        spatial_cube_path,
+        TOPOGRAPHY_CUBE_PATH,
+        LANDCOVER_CUBE_PATH,
+        HUMAN_ACTIVITY_CUBE_PATH,
+    ]
     missing_static = [str(path) for path in required_static if not Path(path).exists()]
     if missing_static:
         raise FileNotFoundError(
@@ -111,6 +129,7 @@ def ejecutar_workflow_historico(
         spatial_cube_path=spatial_cube_path,
         topography_cube_path=TOPOGRAPHY_CUBE_PATH,
         landcover_cube_path=LANDCOVER_CUBE_PATH,
+        human_activity_cube_path=HUMAN_ACTIVITY_CUBE_PATH,
         time_cube_path=time_cube_path,
         meteorology_cube_path=meteorology_cube_path,
         egif_target_path=target_path,
@@ -128,6 +147,11 @@ def main() -> None:
     parser.add_argument("--grid", default=str(GRID_PATH))
     parser.add_argument("--spatial-cube", default=str(SPATIAL_CUBE_PATH))
     parser.add_argument("--rebuild-static", action="store_true")
+    parser.add_argument(
+        "--rebuild-human-activity",
+        action="store_true",
+        help="Recalcula las variables OSM de carreteras y zonas residenciales.",
+    )
     parser.add_argument("--skip-daily-meteorology", action="store_true")
     args = parser.parse_args()
     ejecutar_workflow_historico(
@@ -136,6 +160,7 @@ def main() -> None:
         spatial_cube_path=args.spatial_cube,
         skip_daily_meteorology=args.skip_daily_meteorology,
         rebuild_static=args.rebuild_static,
+        rebuild_human_activity=args.rebuild_human_activity,
     )
 
 

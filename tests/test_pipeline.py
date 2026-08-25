@@ -47,6 +47,14 @@ def test_construir_datacubo_asigna_ceros_fuera_de_las_igniciones(tmp_path) -> No
         {"scrub": (("y", "x"), np.array([[0.5]], dtype=np.float32))},
         coords={"y": [0.0], "x": [0.0]},
     )
+    human_activity = xr.Dataset(
+        {
+            "distance_to_road_m": (("y", "x"), np.array([[0.0]], dtype=np.float32)),
+            "road_length_km": (("y", "x"), np.array([[1.0]], dtype=np.float32)),
+            "distance_to_residential_area_m": (("y", "x"), np.array([[20.0]], dtype=np.float32)),
+        },
+        coords={"y": [0.0], "x": [0.0]},
+    )
     time = pd.date_range("2020-01-01", periods=2, freq="D")
     temporal = xr.Dataset({"month": ("time", [1, 1])}, coords={"time": time})
     meteorology = xr.Dataset(
@@ -54,13 +62,14 @@ def test_construir_datacubo_asigna_ceros_fuera_de_las_igniciones(tmp_path) -> No
             "temperature_max": (("time", "y", "x"), np.array([[[10.0]], [[11.0]]])),
             "precipitation_sum_1d": (("time", "y", "x"), np.array([[[1.0]], [[2.0]]])),
         },
-        coords={"time": time, "y": [0.0], "x": [0.0]},
+        coords={"time": time, "y": [0.0], "x": [0.0], "number": 0},
     )
 
     paths = {
         "spatial": tmp_path / "spatial.nc",
         "topography": tmp_path / "topography.nc",
         "landcover": tmp_path / "landcover.nc",
+        "human_activity": tmp_path / "human_activity.nc",
         "temporal": tmp_path / "time.nc",
         "meteorology": tmp_path / "meteorology.nc",
         "target": tmp_path / "target.parquet",
@@ -69,6 +78,7 @@ def test_construir_datacubo_asigna_ceros_fuera_de_las_igniciones(tmp_path) -> No
     spatial.to_netcdf(paths["spatial"])
     topography.to_netcdf(paths["topography"])
     landcover.to_netcdf(paths["landcover"])
+    human_activity.to_netcdf(paths["human_activity"])
     temporal.to_netcdf(paths["temporal"])
     meteorology.to_netcdf(paths["meteorology"])
     pd.DataFrame(
@@ -79,6 +89,7 @@ def test_construir_datacubo_asigna_ceros_fuera_de_las_igniciones(tmp_path) -> No
         paths["spatial"],
         paths["topography"],
         paths["landcover"],
+        paths["human_activity"],
         paths["temporal"],
         paths["meteorology"],
         paths["target"],
@@ -92,3 +103,5 @@ def test_construir_datacubo_asigna_ceros_fuera_de_las_igniciones(tmp_path) -> No
         assert "egif_observed" not in result
         assert "aspect_no_data_fraction" not in result
         assert "precipitation_sum_1d" not in result
+        assert "number" not in result.coords
+        assert result["road_length_km"].item() == 1.0

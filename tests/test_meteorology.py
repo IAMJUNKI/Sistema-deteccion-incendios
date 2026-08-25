@@ -27,6 +27,9 @@ def test_crear_meteorologia_diaria_convierte_unidades_y_acumulado() -> None:
     assert np.isclose(daily["precipitation_sum"].item(), 23.0)
     assert "precipitation_sum_1d" not in daily
     assert 0 <= daily["relative_humidity_min"].item() <= 100
+    assert daily["temperature_mean"].attrs["units"] == "degC"
+    assert daily["temperature_mean"].attrs["long_name"] == "Daily mean 2 m air temperature"
+    assert daily["consecutive_dry_days"].attrs["units"] == "days"
 
 
 def test_acumulados_incluyen_el_dia_observado_sin_shift() -> None:
