@@ -36,7 +36,11 @@ DAILY_VARIABLES = (
     "consecutive_dry_days",
     "temperature_mean_7d",
     "relative_humidity_mean_7d",
+    "vpd_mean",
+    "vpd_max_12_18h",
 )
+DATACUBE_VARIABLE_FLAGS = {name: True for name in DAILY_VARIABLES}
+TEST_DATACUBE_VARIABLE_FLAGS = {**DATACUBE_VARIABLE_FLAGS, "consecutive_dry_days": False}
 PRECIPITATION_WINDOWS = (3, 7, 14, 30)
 DRY_DAY_THRESHOLD_MM = 1.0
 
@@ -68,6 +72,10 @@ METEOROLOGY_METADATA = {
     "temperature_mean_7d": ("Seven-day mean 2 m air temperature", "degC"),
     "relative_humidity_mean_7d": ("Seven-day mean relative humidity at 2 m", "%"),
     "consecutive_dry_days": ("Consecutive days with precipitation below 1 mm", "days"),
+    "vpd_mean": ("Daily mean vapour pressure deficit at 2 m", "kPa"),
+    "vpd_max_12_18h": (
+        "Maximum vapour pressure deficit from 12:00 to 18:00 Europe/Madrid", "kPa"
+    ),
 }
 
 
@@ -164,7 +172,9 @@ def add_meteorology_accumulations(daily: xr.Dataset) -> xr.Dataset:
     return output
 
 
-def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
+def crear_meteorologia_diaria(
+    hourly: xr.Dataset, inclusion_flags: dict[str, bool] | None = None
+) -> xr.Dataset:
     """Create daily observations. No temporal shift is applied."""
     temperature = hourly["t2m"] - 273.15
     dewpoint = hourly["d2m"] - 273.15
@@ -175,6 +185,8 @@ def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
     )
     humidity = humidity.clip(min=0, max=100)
     wind = np.hypot(hourly["u10"], hourly["v10"]) * 3.6
+    saturation_vapour_pressure = 0.6108 * np.exp(17.27 * temperature / (temperature + 237.3))
+    vpd = (saturation_vapour_pressure * (1 - humidity / 100)).clip(min=0)
     local_time = (
         pd.DatetimeIndex(hourly.time.values).tz_localize("UTC").tz_convert("Europe/Madrid")
     )
@@ -193,6 +205,8 @@ def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
             "wind_speed_mean": _daily(wind, "mean"),
             "wind_speed_max": _daily(wind, "max"),
             "wind_speed_max_12_18h": _daily(wind.where(critical), "max"),
+            "vpd_mean": _daily(vpd, "mean"),
+            "vpd_max_12_18h": _daily(vpd.where(critical), "max"),
             "precipitation_sum": _daily(hourly["tp"] * 1000, "max"),
         }
     ).astype(np.float32)
@@ -206,7 +220,8 @@ def crear_meteorologia_diaria(hourly: xr.Dataset) -> xr.Dataset:
     }
     for name, (long_name, units) in METEOROLOGY_METADATA.items():
         output[name].attrs.update({"long_name": long_name, "units": units})
-    return output
+    flags = DATACUBE_VARIABLE_FLAGS if inclusion_flags is None else inclusion_flags
+    return output[[name for name in output.data_vars if flags.get(name, False)]]
 
 
 def procesar_era5(

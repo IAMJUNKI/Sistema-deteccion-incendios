@@ -28,6 +28,10 @@ TIME_VARIABLES = [
     "month_sin",
     "month_cos",
 ]
+# El calendario se deriva de la coordenada ``time`` cuando haga falta (por
+# ejemplo, para particionar Parquet); no se almacena por defecto como señal.
+DATACUBE_VARIABLE_FLAGS = {name: True for name in TIME_VARIABLES}
+TEST_DATACUBE_VARIABLE_FLAGS = {name: False for name in TIME_VARIABLES}
 
 VARIABLE_METADATA = {
     "year": "Calendar year. Keep for audit and temporal splits; do not use as a model predictor.",
@@ -46,6 +50,7 @@ VARIABLE_METADATA = {
 def crear_datacubo_temporal(
     start_date: str | pd.Timestamp = DEFAULT_START_DATE,
     end_date: str | pd.Timestamp = DEFAULT_END_DATE,
+    inclusion_flags: dict[str, bool] | None = None,
 ) -> xr.Dataset:
     """Crea las variables temporales diarias entre dos fechas inclusivas.
 
@@ -63,6 +68,7 @@ def crear_datacubo_temporal(
     day_of_year = time.dayofyear.to_numpy(dtype=np.int16)
     month = time.month.to_numpy(dtype=np.int8)
     dataset = xr.Dataset(coords={"time": time})
+    flags = DATACUBE_VARIABLE_FLAGS if inclusion_flags is None else inclusion_flags
     dataset["year"] = ("time", time.year.to_numpy(dtype=np.int16))
     dataset["month"] = ("time", month)
     dataset["iso_week"] = ("time", time.isocalendar().week.to_numpy(dtype=np.int8))
@@ -90,6 +96,9 @@ def crear_datacubo_temporal(
     dataset.time.attrs = {"long_name": "Date"}
     for variable in TIME_VARIABLES:
         dataset[variable].attrs = {"long_name": VARIABLE_METADATA[variable], "units": "-"}
+    excluded = [name for name in TIME_VARIABLES if not flags.get(name, False)]
+    if excluded:
+        dataset = dataset.drop_vars(excluded)
     return dataset
 
 

@@ -43,6 +43,14 @@ TOPOGRAPHY_VARIABLES = [
     *ASPECT_VARIABLES,
     ASPECT_NODATA_VARIABLE,
 ]
+# Contrato de almacenamiento, no selección de modelo.  Cambiar un valor permite
+# regenerar una capa/cubo de prueba sin tocar el resto de la ingeniería.
+DATACUBE_VARIABLE_FLAGS = {name: True for name in TOPOGRAPHY_VARIABLES}
+TEST_DATACUBE_VARIABLE_FLAGS = {
+    "elevation_mean": True, "elevation_std": True, "slope_mean": True, "slope_std": True,
+    "roughness_mean": False, "roughness_std": False,
+    **{name: True for name in ASPECT_VARIABLES}, ASPECT_NODATA_VARIABLE: False,
+}
 TOPOGRAPHY_METADATA = {
     "elevation_mean": ("Mean terrain elevation", "m"),
     "elevation_std": ("Terrain elevation standard deviation", "m"),
@@ -259,11 +267,15 @@ def extraer_estadisticas_topograficas_rapidas(
     return result
 
 
-def crear_datacubo_topografia(cube: xr.Dataset, topografia: pd.DataFrame) -> xr.Dataset:
+def crear_datacubo_topografia(
+    cube: xr.Dataset, topografia: pd.DataFrame, inclusion_flags: dict[str, bool] | None = None
+) -> xr.Dataset:
     """Inserta las variables topográficas por ``cell_id`` en el cubo espacial."""
     if "is_galicia" not in cube:
         raise ValueError("El cubo debe incluir la máscara is_galicia.")
-    missing = set(TOPOGRAPHY_VARIABLES) - set(topografia.columns)
+    flags = DATACUBE_VARIABLE_FLAGS if inclusion_flags is None else inclusion_flags
+    selected = [name for name in TOPOGRAPHY_VARIABLES if flags.get(name, False)]
+    missing = set(selected) - set(topografia.columns)
     if missing:
         raise ValueError(f"Faltan variables topográficas: {sorted(missing)}")
 
@@ -273,7 +285,7 @@ def crear_datacubo_topografia(cube: xr.Dataset, topografia: pd.DataFrame) -> xr.
     if (cell_ids < 0).any() or (cell_ids >= ny * nx).any():
         raise ValueError("Los cell_id no pertenecen a la malla del cubo.")
     rows, columns = np.divmod(cell_ids, nx)
-    for variable in TOPOGRAPHY_VARIABLES:
+    for variable in selected:
         values = np.full((ny, nx), np.nan, dtype=np.float32)
         values[rows, columns] = topografia[variable].to_numpy(dtype=np.float32)
         topography[variable] = (("y", "x"), values)
@@ -287,7 +299,8 @@ def crear_datacubo_topografia(cube: xr.Dataset, topografia: pd.DataFrame) -> xr.
         "spatial_resolution": cube.attrs["spatial_resolution"],
         "roughness_method": "3x3 local elevation standard deviation",
     }
-    for variable, (long_name, units) in TOPOGRAPHY_METADATA.items():
+    for variable in selected:
+        long_name, units = TOPOGRAPHY_METADATA[variable]
         topography[variable].attrs = {"long_name": long_name, "units": units}
     return topography
 

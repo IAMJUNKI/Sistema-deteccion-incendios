@@ -40,3 +40,8 @@ EGIF_TARGET_PATH = TARGET_DIR / "egif_target.parquet"
 EGIF_METADATA_PATH = TARGET_DIR / "egif_metadata.json"
 DATACUBE_PATH = DATACUBE_DIR / "galicia_1km.nc"
 TABULAR_DATASET_DIR = PROCESSED_DIR / "tabular" / "egif"
+
+# Productos aislados para validar cambios de contrato sin sustituir las salidas
+# históricas canónicas.
+FEATURE_FLAGS_TEST_DIR = PROCESSED_DIR / "feature_flags_test"
+FEATURE_FLAGS_TEST_CUBE_PATH = FEATURE_FLAGS_TEST_DIR / "galicia_1km_2019-01-01_2019-01-07.nc"

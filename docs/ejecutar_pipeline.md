@@ -130,6 +130,19 @@ descarga/procesa la capa estática de actividad humana, procesa ERA5, asigna las
 igniciones EGIF, crea el NetCDF y exporta los Parquet.
 No cierres PowerShell mientras se ejecuta.
 
+### Reconstruir solo el NetCDF final, sin Parquet
+
+Si los datos originales y las capas intermedias ya existen y solo se ha
+actualizado el contrato de variables, ejecuta:
+
+```powershell
+python -m src.build_final_datacube
+```
+
+Este proceso incorpora las variables VPD y las nuevas variables OSM, aplica las
+exclusiones documentadas en `docs/variables.md` y reemplaza únicamente los
+NetCDF al terminar correctamente. **No exporta ni elimina los Parquet**.
+
 ## Paso 7. Ejecutarlo otra vez cuando ya existen los datos
 
 Si cambias EGIF o quieres regenerar el resultado, no hace falta descargar de

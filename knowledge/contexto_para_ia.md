@@ -16,12 +16,10 @@ No sustituir EGIF por FIRMS sin una decisión explícita del usuario.
 
 ## 2. Estado actual verificable
 
-- Rama remota publicada: `main` en `origin`, commit `d43d92d`.
-- La rama remota `origin/dev` fue eliminada a petición del usuario. Existe una
-  rama local `dev` en el mismo commit como referencia, pero el trabajo debe
-  continuar desde `main` salvo que el usuario diga otra cosa.
-- Tests de código: `27 passed` con `pytest tests -q`.
-- El cubo y los Parquet se reconstruyeron y validaron localmente el 2026-08-23.
+- Rama remota publicada: `main` en `origin`; `origin/dev` fue eliminada a
+  petición del usuario. La rama local `dev` se utiliza para el trabajo en curso.
+- Tests de código: `28 passed` con `pytest tests -q`.
+- El cubo y los Parquet se reconstruyeron y validaron localmente el 2026-08-24.
 - Los datos pesados están ignorados por Git: **no asumir que estén presentes en
   otro ordenador ni intentar subirlos al repositorio**.
 
@@ -35,8 +33,10 @@ data/processed/tabular/egif/year=2019/dataset_2019.parquet
 data/processed/tabular/egif/year=2023/dataset_2023.parquet
 ```
 
-La última validación obtuvo 53.015.391 filas, cinco particiones anuales,
-51 predictores publicados y 0 filas descartadas por predictores incompletos.
+La última validación obtuvo **53.015.391** filas, cinco particiones anuales,
+**54 predictores** publicados y 0 filas descartadas por predictores incompletos.
+El NetCDF tiene 1.791 fechas (2019-01-01 a 2023-11-26), 29.601 celdas activas
+de Galicia, 60 variables y 6.189 celdas-día EGIF positivas.
 
 ## 3. Contrato espacial y temporal
 
@@ -73,6 +73,7 @@ un contrato equivalente y revalidar el modelo; no basta con reutilizar ERA5.
 | Límite | CNIG/IGN | Máscara `is_galicia` sobre la rejilla |
 | Topografía | Copernicus DEM GLO-30 | Estadísticos por celda: elevación, pendiente, rugosidad y orientación en ocho franjas |
 | Cobertura | CORINE Land Cover 2018 | Fracciones agregadas de combustibles/usos de suelo por celda |
+| Actividad humana | OpenStreetMap / Geofabrik, instantánea Galicia 2022-01-01 | Distancia a carreteras y zonas residenciales; longitud de carreteras |
 | Meteorología histórica | ERA5-Land horario | Estadísticos diarios, ventana 12–18 h Europe/Madrid, acumulados y días secos |
 | Incendios | XML EGIF-MITECO | Asignación de igniciones a celda/día; superficie y fuego grande como resultados auxiliares |
 
@@ -82,21 +83,49 @@ completan con el vector de la celda válida más próxima. En meteorología, las
 celdas de borde sin interpolación lineal válida se completan con el píxel
 terrestre ERA5-Land más cercano.
 
+El extracto OSM se descarga automáticamente solo si falta y se conserva en
+`data/raw/human_activity/`. Es una capa estática; no se redescarga ni se
+recalcula salvo petición expresa con `--rebuild-human-activity`.
+
+### Perfil configurable de variables (trabajo en `dev`)
+
+Cada módulo de categoría expone `DATACUBE_VARIABLE_FLAGS` para decidir qué
+variables se almacenan: topografía, CORINE, calendario, meteorología y actividad
+humana. Los valores por defecto mantienen el producto canónico actual; el perfil
+`TEST_PROFILE` de `src.feature_flags` materializa la propuesta de revisión sin
+alterar las salidas oficiales. No confundir estos flags con la selección de
+predictores del modelo.
+
+El perfil de prueba incorpora VPD (`vpd_mean`, `vpd_max_12_18h`) y actividad
+humana desagregada: longitudes viarias principal/local/pistas/otras y fracciones
+residencial/de edificios. La longitud total es la suma de las categorías.
+
 ## 5. Variables disponibles
 
 La lista explicada y actualizada está en [`docs/variables.md`](../docs/variables.md).
 Resumen:
 
-- Identificación y calendario: `cell_id`, `x`, `y`, `fecha`, `year`, mes,
-  semana, día del año, fin de semana y codificaciones cíclicas.
-- Topografía: `elevation_mean/std`, `slope_mean/std`, `roughness_mean/std` y
-  ocho fracciones de orientación.
+- Identificación: `cell_id`, `x`, `y`, `fecha` se derivan para exportación y
+  trazabilidad. El calendario se deriva de la coordenada `time`; no se almacena
+  como señal del cubo final.
+- Topografía: `elevation_mean/std`, `slope_mean/std` y ocho fracciones de
+  orientación. Se retiró la rugosidad por redundancia.
 - Cobertura/combustible: `artificial`, `agriculture`, bosques de frondosas,
   coníferas y mixto, `scrub`, `open_spaces`, `wetlands`, `water` y
-  `forest_cover_fraction`.
+  sin `forest_cover_fraction`, que era una suma exacta de las tres fracciones
+  forestales.
 - Meteorología: temperatura, humedad relativa, viento y precipitación diaria;
   extremos 12–18 h; acumulados de precipitación de 3, 7, 14 y 30 días; medias
-  de temperatura y humedad de 7 días; días secos consecutivos.
+  de temperatura y humedad de 7 días; VPD diario y máximo de 12–18 h. Se retiró
+  el contador de días secos consecutivos.
+- Actividad humana estática: `road_length_km`, sus categorías principal/local/
+  pistas/otras, `residential_area_fraction` y `building_area_fraction`. Se
+  retiraron las distancias por su saturación a cero a escala de 1 km.
+
+Cada variable del NetCDF incluye `long_name`, `units` y, cuando aplique,
+`description` o contrato temporal. La coordenada técnica `number` de ERA5
+(identificador de miembro de ensemble) se elimina del cubo y del Parquet: no
+tiene significado espacial, temporal ni predictivo.
 
 No usar como predictores: `fecha`, `cell_id`, `x`, `y`, `year`, `is_galicia`,
 `target_ignicion`, `burned_area_ha`, `large_fire_500ha` ni las columnas
@@ -130,6 +159,10 @@ con incendios observados, incluso futuros respecto al día que se está marcando
 El código la excluye de `predictor_columns` y la registra como auxiliar en los
 metadatos del Parquet.
 
+La construcción marca directamente las ventanas de las igniciones observadas,
+en lugar de filtrar toda la matriz temporal; es equivalente al contrato anterior
+pero evita que la regeneración completa del cubo sea innecesariamente lenta.
+
 ## 7. Pipeline y puntos de entrada
 
 Arquitectura:
@@ -144,7 +177,8 @@ datos raw
 ```
 
 `src/workflow.py` orquesta el proceso histórico completo. Las rutas y el
-periodo se centralizan en `src/config.py`.
+periodo se centralizan en `src/config.py`. Crea o reutiliza también la capa OSM
+de actividad humana antes del ensamblado.
 
 Para instalar y ejecutar desde cero, la referencia es
 [`docs/ejecutar_pipeline.md`](../docs/ejecutar_pipeline.md). Puntos esenciales:
@@ -246,8 +280,10 @@ recuperables; no se incluyen en Git.
 3. Mantener 2023 como test ciego hasta fijar variables, muestreo y parámetros.
 4. Añadir un baseline Fire Weather Index (FWI) para cuantificar el valor real
    del ML.
-5. Solo después, estudiar variables humanas estáticas (distancia a carreteras y
-   núcleos) y fuentes operativas de MeteoGalicia.
+5. Evaluar con validación temporal si merece la pena añadir VPD de la ventana
+   12–18 h; debe calcularse hora a hora, no a partir de extremos diarios.
+6. Estudiar fuentes operativas de MeteoGalicia y mantener un contrato temporal
+   compatible antes de desplegar inferencia diaria.
 
 ## 12. Instrucciones para la IA que reciba este archivo
 

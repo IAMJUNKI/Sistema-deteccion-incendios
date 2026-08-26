@@ -39,15 +39,20 @@ CORINE válidos, se copia el vector completo de la celda válida más próxima.
 seleccionada más cercana y vale 0 si esta la intersecta. `road_length_km` suma
 los kilómetros de vías seleccionadas dentro de la celda.
 `distance_to_residential_area_m` mide la distancia al área residencial o núcleo
-poblado OSM más cercano. Son variables estáticas calculadas una sola vez y
-estarán disponibles igualmente en producción.
+poblado OSM más cercano. La revisión de contrato añade longitudes por categoría
+(`road_length_main_km`, `road_length_local_km`, `road_length_track_km` y
+`road_length_other_km`), cuya suma es `road_length_km`, y las fracciones
+`residential_area_fraction` y `building_area_fraction`. Son variables estáticas
+calculadas una sola vez. Las dos distancias pueden desactivarse porque se
+saturan frecuentemente en cero a resolución de 1 km.
 
 ## Meteorología (ERA5-Land)
 
 | Grupo | Variables |
 |---|---|
 | Día completo | `temperature_mean/min/max`, `relative_humidity_mean/min`, `wind_speed_mean/max`, `precipitation_sum` |
-| Tarde crítica (12–18 h, Europe/Madrid) | `temperature_max_12_18h`, `relative_humidity_min_12_18h`, `wind_speed_max_12_18h` |
+| Tarde crítica (12–18 h, Europe/Madrid) | `temperature_max_12_18h`, `relative_humidity_min_12_18h`, `wind_speed_max_12_18h`, `vpd_max_12_18h` |
+| Déficit de presión de vapor | `vpd_mean` (día completo, kPa) |
 | Memoria meteorológica | `temperature_mean_7d`, `relative_humidity_mean_7d`, `precipitation_sum_3d/7d/14d/30d`, `consecutive_dry_days` |
 
 Los acumulados y las medias móviles incluyen la fecha T y los días anteriores.
@@ -73,3 +78,31 @@ miembro de ensemble y no tenía significado espacial, temporal ni predictivo.
 
 `burned_area_ha`, `large_fire_500ha`, `target_ignicion` y
 `is_near_ignition_25x25_10d` se excluyen de la matriz de predictores.
+
+## Flags de inclusión
+
+Cada módulo conserva `DATACUBE_VARIABLE_FLAGS`: topografía, cobertura,
+actividad humana, calendario y meteorología. Por defecto preservan el producto
+canónico actual; `TEST_DATACUBE_VARIABLE_FLAGS` define el perfil propuesto para
+la revisión. No son una lista de predictores del modelo: esa selección se valida
+en la fase de ML. El comando `python -m src.build_feature_flags_test` genera un
+cubo real de siete días en `data/processed/feature_flags_test/` sin sobrescribir
+el NetCDF ni los Parquet canónicos.
+
+## Revisión de variables aplicada al cubo final
+
+La siguiente tabla separa la disponibilidad en el cubo de la posterior
+selección de predictores del modelo. Los resultados EGIF y la máscara auxiliar
+continúan almacenándose, pero nunca se usan como predictores.
+
+| Decisión | Variables | Motivo breve |
+|---|---|---|
+| Añadidas | `vpd_mean`, `vpd_max_12_18h` | El déficit de presión de vapor (kPa) resume conjuntamente temperatura y sequedad del aire; la ventana de tarde representa la condición más desfavorable. |
+| Añadidas | `road_length_main_km`, `road_length_local_km`, `road_length_track_km`, `road_length_other_km` | Desagregan la intensidad y el tipo de acceso humano; su suma es `road_length_km`. |
+| Añadidas | `residential_area_fraction`, `building_area_fraction` | Miden intensidad de ocupación humana dentro de la celda, evitando la saturación de una simple distancia. |
+| Excluidas | `roughness_mean`, `roughness_std` | Redundantes con la pendiente y elevación; se conservan solo en las fuentes intermedias si hicieran falta auditorías. |
+| Excluida | `forest_cover_fraction` | Es suma exacta de las tres fracciones de bosque ya disponibles. |
+| Excluido | `consecutive_dry_days` | Resume de forma muy rígida la lluvia y se solapa con los acumulados 3/7/14/30 días. |
+| Excluidas | `distance_to_road_m`, `distance_to_residential_area_m` | A 1 km se saturan frecuentemente en cero y pierden intensidad de red o edificación. |
+| Excluidos | Calendario (`year`, `month`, semana, seno/coseno) | Se deriva de `time` cuando se necesita para particionar o analizar; no se almacena como señal del cubo. |
+| Excluidas | `number`, `precipitation_sum_1d`, `aspect_no_data_fraction` | No representan una señal útil: miembro ERA5 residual, duplicado exacto y control de calidad constante, respectivamente. |

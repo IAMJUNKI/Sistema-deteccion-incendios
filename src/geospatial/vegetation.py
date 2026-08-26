@@ -31,6 +31,8 @@ LANDCOVER_VARIABLES = [
     "water",
 ]
 FOREST_COVER_VARIABLE = "forest_cover_fraction"
+DATACUBE_VARIABLE_FLAGS = {**{name: True for name in LANDCOVER_VARIABLES}, FOREST_COVER_VARIABLE: True}
+TEST_DATACUBE_VARIABLE_FLAGS = {**{name: True for name in LANDCOVER_VARIABLES}, FOREST_COVER_VARIABLE: False}
 LANDCOVER_METADATA = {
     "artificial": "Artificial surfaces",
     "agriculture": "Agricultural areas",
@@ -243,11 +245,15 @@ def _rellenar_celdas_sin_corine_por_vecino(
         landcover.loc[index, LANDCOVER_VARIABLES] = neighbor.to_numpy()
 
 
-def crear_datacubo_cobertura_suelo(cube: xr.Dataset, landcover: pd.DataFrame) -> xr.Dataset:
+def crear_datacubo_cobertura_suelo(
+    cube: xr.Dataset, landcover: pd.DataFrame, inclusion_flags: dict[str, bool] | None = None
+) -> xr.Dataset:
     """Inserta las proporciones CORINE en un cubo con la malla base."""
     if "is_galicia" not in cube:
         raise ValueError("El cubo debe incluir la máscara is_galicia.")
-    missing = set(LANDCOVER_VARIABLES) - set(landcover.columns)
+    flags = DATACUBE_VARIABLE_FLAGS if inclusion_flags is None else inclusion_flags
+    selected = [name for name in [*LANDCOVER_VARIABLES, FOREST_COVER_VARIABLE] if flags.get(name, False)]
+    missing = set(selected) - set(landcover.columns)
     if missing:
         raise ValueError(f"Faltan variables de cobertura del suelo: {sorted(missing)}")
     output = cube.copy()
@@ -256,7 +262,7 @@ def crear_datacubo_cobertura_suelo(cube: xr.Dataset, landcover: pd.DataFrame) ->
     if (cell_ids < 0).any() or (cell_ids >= ny * nx).any():
         raise ValueError("Los cell_id no pertenecen a la malla del cubo.")
     rows, columns = np.divmod(cell_ids, nx)
-    for variable in [*LANDCOVER_VARIABLES, FOREST_COVER_VARIABLE]:
+    for variable in selected:
         values = np.full((ny, nx), np.nan, dtype=np.float32)
         values[rows, columns] = landcover[variable].to_numpy(dtype=np.float32)
         output[variable] = (("y", "x"), values)
