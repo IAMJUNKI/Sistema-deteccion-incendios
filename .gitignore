@@ -153,3 +153,11 @@ Thumbs.db
 
 misc/
 tmp/
+
+# Modelos serializados: un Random Forest son ~80 MB
+*.joblib
+models/
+
+# Detalle por corrida: reproducible relanzando el experimento.
+# Lo que se versiona es docs/technical/resultados.csv, la bitacora acumulativa.
+docs/technical/corridas/
