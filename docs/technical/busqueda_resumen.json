@@ -1,0 +1,31 @@
+{
+  "xgboost": {
+    "n_configuraciones": 40,
+    "minutos": 49.4,
+    "recall_cv_mejor": 0.3988966078345892,
+    "recall_cv_peor": 0.32597818262739425,
+    "parametros": {
+      "n_estimators": 670,
+      "learning_rate": 0.026804126881195513,
+      "max_depth": 8,
+      "min_child_weight": 111.66806426365197,
+      "subsample": 0.8688104541180797,
+      "colsample_bytree": 0.5354704584999639,
+      "reg_lambda": 14.379036661621068,
+      "reg_alpha": 0.0121018095945955,
+      "scale_pos_weight": 12.194207189711609
+    },
+    "confirmacion": {
+      "n_incendios": 1659,
+      "recall_baseline": 0.38698010849909587,
+      "recall_nuevo": 0.3996383363471971,
+      "incendios_baseline": 642,
+      "incendios_nuevo": 663,
+      "diferencia": 0.012658227848101222,
+      "ic_bajo": 0.0,
+      "ic_alto": 0.024713682941531034,
+      "mcnemar_p": 0.11695440246353753,
+      "veredicto": "no concluyente: se mantiene el baseline"
+    }
+  }
+}

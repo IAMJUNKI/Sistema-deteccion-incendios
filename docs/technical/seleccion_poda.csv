@@ -1,0 +1,4 @@
+variable,motivo,evidencia,valor
+road_length_other_km,constante,1 valor(es) distinto(s),1.0
+temperature_max,duplicada,|Spearman| = 0.9989 con temperature_max_12_18h,0.9989332124448922
+relative_humidity_min_12_18h,duplicada,|Spearman| = 0.9947 con relative_humidity_min,0.9946576827664448
