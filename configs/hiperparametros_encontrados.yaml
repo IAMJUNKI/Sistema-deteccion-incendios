@@ -1,0 +1,26 @@
+generado: '20260827_1934'
+fpr: 0.05
+n_configuraciones: 40
+modelos_de_esta_ejecucion:
+- xgboost
+hiperparametros:
+  lightgbm:
+    n_estimators: 1276
+    learning_rate: 0.0262695868041945
+    num_leaves: 38
+    max_depth: 5
+    min_child_samples: 928
+    subsample: 0.8170784332632994
+    colsample_bytree: 0.6626651653816322
+    reg_lambda: 5.170191786366991
+    scale_pos_weight: 4.964881017106655
+  xgboost:
+    n_estimators: 670
+    learning_rate: 0.026804126881195513
+    max_depth: 8
+    min_child_weight: 111.66806426365197
+    subsample: 0.8688104541180797
+    colsample_bytree: 0.5354704584999639
+    reg_lambda: 14.379036661621068
+    reg_alpha: 0.0121018095945955
+    scale_pos_weight: 12.194207189711609

@@ -1,0 +1,116 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Experimento base sobre el datacubo EGIF.
+#
+# Es deliberadamente un BASELINE, no un modelo afinado: los hiperparámetros son
+# conservadores y no se han buscado. El objetivo de esta primera ejecución es
+# tener una cifra honesta sobre la población completa contra la que comparar
+# todo lo que venga después. Afinar antes de tener esa referencia impide saber
+# si una mejora viene del modelo o del protocolo de medida.
+#
+# Los pendientes conocidos están anotados como TODO en cada sección.
+# ─────────────────────────────────────────────────────────────────────────────
+
+etiqueta: egif_v1
+
+# ── Protocolo temporal ───────────────────────────────────────────────────────
+# Coincide con configs/modeling.toml del pipeline común, a propósito: si los dos
+# usamos el mismo corte, las cifras son comparables entre sí.
+# 2023 está incompleto en el dataset (termina el 26-nov-2023, 330 días).
+anios_train: [2019, 2020, 2021]
+anios_validacion: [2022]
+anios_test: [2023]
+evaluar_test: false          # Requiere --evaluar-test explícito. Quemarlo es irreversible.
+
+# ── Muestreo de negativos ────────────────────────────────────────────────────
+# Se conserva 1 negativo de cada 25 y TODOS los positivos. El hash es el mismo
+# que usa src/modeling/data.py, así que las filas seleccionadas coinciden con
+# las del resto del equipo.
+#
+# Cambiar `resto_negativos` (0..24) da una muestra independiente: es la forma de
+# comprobar si un resultado se sostiene o depende de qué negativos tocaron.
+modulo_negativos: 25
+resto_negativos: 0
+
+# ── Variables ────────────────────────────────────────────────────────────────
+# `variables: null` usa todas las que declare metadata.json. No hay lista fija a
+# propósito: cuando Alfonso publique el Parquet con vpd_mean, vpd_max_12_18h y
+# las variables OSM desagregadas, entrarán solas.
+variables: null
+usar_derivadas: true
+
+# ── Métricas ─────────────────────────────────────────────────────────────────
+fpr_objetivo: 0.05           # Recall vigilando el 5 % del territorio.
+top_k_diario: 0.01           # Recall alertando el 1 % de celdas CADA DÍA.
+n_bootstrap: 1000            # Intervalos de confianza al 90 % sobre los positivos.
+semilla: 42
+
+modelos:
+  - lightgbm
+  - xgboost
+  - logistic_regression
+  - random_forest
+
+rondas_parada: 100           # Parada temprana contra la muestra de validación.
+
+# ── Hiperparámetros ──────────────────────────────────────────────────────────
+hiperparametros:
+
+  lightgbm:
+    n_estimators: 3000       # Alto a propósito: manda la parada temprana.
+    learning_rate: 0.03
+    num_leaves: 31
+    max_depth: 7
+    min_child_samples: 200
+    subsample: 0.8
+    subsample_freq: 1
+    colsample_bytree: 0.8
+    reg_lambda: 10.0
+    n_jobs: -1
+    verbosity: -1
+    # Por defecto LightGBM mide la importancia como NÚMERO DE CORTES, lo que premia a las
+    # variables con muchos valores distintos aunque cada corte aporte poco: en la primera
+    # ejecución colocó las ocho fracciones de orientación por delante de la humedad. Con
+    # `gain` mide la reducción de pérdida, que es lo que se quiere leer.
+    importance_type: gain
+    # TODO(determinismo): con n_jobs=-1 dos ejecuciones idénticas no coinciden.
+    #   Añadir deterministic: true y force_row_wise: true y verificar con dos
+    #   ejecuciones seguidas antes de publicar cifras definitivas.
+    # TODO(hiperparámetros): scale_pos_weight se deja sin fijar en el baseline.
+    #   Con módulo 25 la muestra queda en ~324 negativos por positivo; conviene
+    #   barrerlo junto a num_leaves y min_child_samples con Optuna.
+
+  xgboost:
+    n_estimators: 3000
+    learning_rate: 0.03
+    max_depth: 5
+    min_child_weight: 50
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 10.0
+    reg_alpha: 1.0
+    tree_method: hist
+    n_jobs: -1
+
+  logistic_regression:
+    max_iter: 2000
+    C: 1.0
+    class_weight: balanced
+    solver: lbfgs
+    # Va dentro de un Pipeline con imputación por mediana y escalado: sin
+    # escalar, la elevación en metros aplasta a una fracción entre 0 y 1.
+
+  random_forest:
+    n_estimators: 300
+    max_depth: 16
+    min_samples_leaf: 20
+    max_features: sqrt
+    class_weight: balanced_subsample
+    n_jobs: -1
+    # No admite parada temprana. Está para documentar la diferencia entre
+    # bagging y boosting, no para ganar.
+
+# ── Selección de variables ───────────────────────────────────────────────────
+seleccion:
+  umbral_redundancia: 0.95   # |Spearman| por encima del cual dos variables sobran.
+  permutacion_repeticiones: 3
+  permutacion_filas: 1000000 # Submuestra estratificada; conserva todos los positivos.
