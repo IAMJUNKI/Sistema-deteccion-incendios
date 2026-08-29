@@ -20,7 +20,7 @@ resultados es atribuible al modelo o al protocolo, nunca a que cada uno mire fil
 from __future__ import annotations
 
 import logging
-from typing import Iterator, Optional, Sequence
+from collections.abc import Iterator, Sequence
 
 import numpy as np
 import pandas as pd
@@ -39,10 +39,13 @@ FILAS_POR_LOTE = 500_000
 
 def _numero_de_dia(fechas: pd.Series) -> np.ndarray:
     """Convierte fechas a días enteros desde época, que es el índice que usan hash y métricas."""
-    return pd.to_datetime(fechas).astype("int64").to_numpy() // 86_400_000_000_000
+    # No dividir los enteros de pandas por nanosegundos: pandas 3 puede
+    # representarlos internamente en microsegundos. La conversión explícita a
+    # ``datetime64[D]`` mantiene el hash celda-día estable entre versiones.
+    return pd.to_datetime(fechas).to_numpy(dtype="datetime64[D]").astype(np.int64)
 
 
-def _columnas(contrato: Contrato, predictores: Optional[Sequence[str]]) -> list[str]:
+def _columnas(contrato: Contrato, predictores: Sequence[str] | None) -> list[str]:
     """Resuelve qué columnas hay que leer, validando que existan en el contrato."""
     if predictores is None:
         return list(contrato.predictores)
@@ -56,7 +59,7 @@ def _columnas(contrato: Contrato, predictores: Optional[Sequence[str]]) -> list[
 def muestrear_entrenamiento(
     contrato: Contrato,
     anios: Sequence[int],
-    predictores: Optional[Sequence[str]] = None,
+    predictores: Sequence[str] | None = None,
     modulo: int = 25,
     resto: int = 0,
     columnas_extra: Sequence[str] = (),
@@ -98,7 +101,8 @@ def muestrear_entrenamiento(
         positivos += int(objetivo.sum())
 
         hash_fila = (
-            marco[COL_CELDA].to_numpy(dtype=np.int64) * PRIMO_HASH + _numero_de_dia(marco[COL_FECHA])
+            marco[COL_CELDA].to_numpy(dtype=np.int64) * PRIMO_HASH
+            + _numero_de_dia(marco[COL_FECHA])
         ) % modulo
         conservar = (objetivo == 1) | (hash_fila == resto)
         if conservar.any():
@@ -130,8 +134,13 @@ def muestrear_entrenamiento(
     logger.info(
         "Entrenamiento %s: %s filas (%s positivos, %s negativos de %s) — "
         "prevalencia real %.6f%%, en la muestra %.4f%%",
-        list(anios), f"{len(muestra):,}", f"{positivos:,}", f"{negativos_muestra:,}",
-        f"{negativos_totales:,}", meta["prevalencia_real"] * 100, meta["prevalencia_muestra"] * 100,
+        list(anios),
+        f"{len(muestra):,}",
+        f"{positivos:,}",
+        f"{negativos_muestra:,}",
+        f"{negativos_totales:,}",
+        meta["prevalencia_real"] * 100,
+        meta["prevalencia_muestra"] * 100,
     )
     return muestra, meta
 
@@ -139,7 +148,7 @@ def muestrear_entrenamiento(
 def iter_evaluacion(
     contrato: Contrato,
     anios: Sequence[int],
-    predictores: Optional[Sequence[str]] = None,
+    predictores: Sequence[str] | None = None,
     filas_por_lote: int = FILAS_POR_LOTE,
 ) -> Iterator[pd.DataFrame]:
     """Recorre la población completa de los años pedidos, en lotes acotados en memoria.
@@ -173,5 +182,6 @@ def verificar_cobertura(contrato: Contrato, anios: Sequence[int], filas_vistas: 
             f"{filas_vistas:,} filas y el contrato declara {esperadas:,} "
             f"(faltan {esperadas - filas_vistas:,}). No se publican métricas parciales."
         )
-    logger.info("Cobertura verificada: %s filas, las %s declaradas.",
-                f"{filas_vistas:,}", f"{esperadas:,}")
+    logger.info(
+        "Cobertura verificada: %s filas, las %s declaradas.", f"{filas_vistas:,}", f"{esperadas:,}"
+    )

@@ -53,14 +53,15 @@ def test_acumulados_incluyen_el_dia_observado_sin_shift() -> None:
     assert result["consecutive_dry_days"].sel(time="2020-01-31").item() == 0.0
 
 
-def test_medias_movil_de_temperatura_y_humedad_a_siete_dias() -> None:
-    time = pd.date_range("2020-01-01", periods=7, freq="D")
-    values = np.arange(7, dtype=np.float32).reshape(7, 1, 1)
+def test_medias_moviles_meteorologicas_incluyen_el_dia_observado() -> None:
+    time = pd.date_range("2020-01-01", periods=14, freq="D")
+    values = np.arange(14, dtype=np.float32).reshape(14, 1, 1)
     daily = xr.Dataset(
         {
             "precipitation_sum": (("time", "latitude", "longitude"), values),
             "temperature_mean": (("time", "latitude", "longitude"), values),
             "relative_humidity_mean": (("time", "latitude", "longitude"), values + 50),
+            "wind_speed_mean": (("time", "latitude", "longitude"), values + 10),
         },
         coords={"time": time, "latitude": [42.0], "longitude": [-8.0]},
     )
@@ -69,3 +70,7 @@ def test_medias_movil_de_temperatura_y_humedad_a_siete_dias() -> None:
 
     assert result["temperature_mean_7d"].sel(time="2020-01-07").item() == 3.0
     assert result["relative_humidity_mean_7d"].sel(time="2020-01-07").item() == 53.0
+    assert result["wind_speed_mean_7d"].sel(time="2020-01-07").item() == 13.0
+    assert result["relative_humidity_mean_14d"].sel(time="2020-01-14").item() == 56.5
+    assert result["wind_speed_mean_7d"].attrs["units"] == "km h-1"
+    assert result["relative_humidity_mean_14d"].attrs["units"] == "%"

@@ -14,7 +14,13 @@
 
 ### 1.1 Coherencia entre documentación y datos
 
-Los 47 predictores declarados en `metadata.json` están todos presentes en los Parquet, y las cuatro columnas de resultado —`target_ignicion`, `burned_area_ha`, `large_fire_500ha` y `is_near_ignition_25x25_10d`— quedan correctamente excluidas de la matriz de predictores.
+La comprobación original se realizó sobre el esquema de 47 predictores. El
+producto canónico publica 50 predictores en `metadata.json`; los cinco Parquet
+anuales contienen esas columnas, no presentan nulos en las nuevas variables
+meteorológicas y no descartan filas por predictores incompletos. Las tres
+columnas de resultado —`target_ignicion`, `burned_area_ha` y
+`large_fire_500ha`— y la auxiliar `is_near_ignition_25x25_10d` quedan fuera de
+la matriz de predictores.
 
 ### 1.2 Coherencia interna
 

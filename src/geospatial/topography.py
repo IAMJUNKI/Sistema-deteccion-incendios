@@ -43,14 +43,18 @@ TOPOGRAPHY_VARIABLES = [
     *ASPECT_VARIABLES,
     ASPECT_NODATA_VARIABLE,
 ]
-# Contrato de almacenamiento, no selección de modelo.  Cambiar un valor permite
-# regenerar una capa/cubo de prueba sin tocar el resto de la ingeniería.
-DATACUBE_VARIABLE_FLAGS = {name: True for name in TOPOGRAPHY_VARIABLES}
-TEST_DATACUBE_VARIABLE_FLAGS = {
-    "elevation_mean": True, "elevation_std": True, "slope_mean": True, "slope_std": True,
-    "roughness_mean": False, "roughness_std": False,
-    **{name: True for name in ASPECT_VARIABLES}, ASPECT_NODATA_VARIABLE: False,
+# Contrato de almacenamiento canónico, independiente de la selección del modelo.
+CANONICAL_DATACUBE_VARIABLE_FLAGS = {
+    "elevation_mean": True,
+    "elevation_std": True,
+    "slope_mean": True,
+    "slope_std": True,
+    "roughness_mean": False,
+    "roughness_std": False,
+    **{name: True for name in ASPECT_VARIABLES},
+    ASPECT_NODATA_VARIABLE: False,
 }
+DATACUBE_VARIABLE_FLAGS = CANONICAL_DATACUBE_VARIABLE_FLAGS
 TOPOGRAPHY_METADATA = {
     "elevation_mean": ("Mean terrain elevation", "m"),
     "elevation_std": ("Terrain elevation standard deviation", "m"),

@@ -32,11 +32,21 @@ def ejecutar_pipeline_meteorologia(
     start_date: str = DEFAULT_START_DATE,
     end_date: str = DEFAULT_END_DATE,
     skip_daily: bool = False,
+    inclusion_flags: dict[str, bool] | None = None,
 ) -> None:
     """Procesa ERA5-Land y lo incorpora al cubo espacial de 1 km."""
     daily_output_path = Path(daily_output_path)
     if not skip_daily:
-        procesar_era5(raw_dir, daily_output_path, start_date, end_date)
+        if inclusion_flags is None:
+            procesar_era5(raw_dir, daily_output_path, start_date, end_date)
+        else:
+            procesar_era5(
+                raw_dir,
+                daily_output_path,
+                start_date,
+                end_date,
+                inclusion_flags=inclusion_flags,
+            )
     elif not daily_output_path.exists():
         raise FileNotFoundError(
             f"No se puede omitir el procesado diario: no existe {daily_output_path}."

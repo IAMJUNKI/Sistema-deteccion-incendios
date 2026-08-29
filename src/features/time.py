@@ -29,9 +29,9 @@ TIME_VARIABLES = [
     "month_cos",
 ]
 # El calendario se deriva de la coordenada ``time`` cuando haga falta (por
-# ejemplo, para particionar Parquet); no se almacena por defecto como señal.
-DATACUBE_VARIABLE_FLAGS = {name: True for name in TIME_VARIABLES}
-TEST_DATACUBE_VARIABLE_FLAGS = {name: False for name in TIME_VARIABLES}
+# ejemplo, para particionar Parquet); no se almacena como señal del cubo.
+CANONICAL_DATACUBE_VARIABLE_FLAGS = {name: False for name in TIME_VARIABLES}
+DATACUBE_VARIABLE_FLAGS = CANONICAL_DATACUBE_VARIABLE_FLAGS
 
 VARIABLE_METADATA = {
     "year": "Calendar year. Keep for audit and temporal splits; do not use as a model predictor.",

@@ -1,6 +1,6 @@
 # Contexto para una IA colaboradora
 
-> Estado del proyecto: 2026-08-24. Este archivo resume las decisiones vigentes
+> Estado del proyecto: 2026-08-29. Este archivo resume las decisiones vigentes
 > del TFM. Debe leerse antes de proponer cambios de datos, modelado o pipeline.
 
 ## 1. Objetivo y alcance
@@ -18,8 +18,9 @@ No sustituir EGIF por FIRMS sin una decisión explícita del usuario.
 
 - Rama remota publicada: `main` en `origin`; `origin/dev` fue eliminada a
   petición del usuario. La rama local `dev` se utiliza para el trabajo en curso.
-- Tests de código: `28 passed` con `pytest tests -q`.
-- El cubo y los Parquet se reconstruyeron y validaron localmente el 2026-08-24.
+- Pruebas de contrato de datos y meteorología: `36 passed`.
+- El contrato canónico actual produce 50 predictores y 55 variables de datos;
+  los productos pesados se regeneran localmente cuando se necesitan.
 - Los datos pesados están ignorados por Git: **no asumir que estén presentes en
   otro ordenador ni intentar subirlos al repositorio**.
 
@@ -33,10 +34,10 @@ data/processed/tabular/egif/year=2019/dataset_2019.parquet
 data/processed/tabular/egif/year=2023/dataset_2023.parquet
 ```
 
-La última validación obtuvo **53.015.391** filas, cinco particiones anuales,
-**54 predictores** publicados y 0 filas descartadas por predictores incompletos.
-El NetCDF tiene 1.791 fechas (2019-01-01 a 2023-11-26), 29.601 celdas activas
-de Galicia, 60 variables y 6.189 celdas-día EGIF positivas.
+Al ejecutar el workflow con el XML EGIF vigente se generan cinco particiones
+anuales. El NetCDF cubre 1.791 fechas (2019-01-01 a 2023-11-26), 29.601 celdas
+activas de Galicia y contiene 55 variables: 50 candidatas a predictor y cinco
+resultados o auxiliares excluidos.
 
 ## 3. Contrato espacial y temporal
 
@@ -89,15 +90,13 @@ recalcula salvo petición expresa con `--rebuild-human-activity`.
 
 ### Perfil configurable de variables (trabajo en `dev`)
 
-Cada módulo de categoría expone `DATACUBE_VARIABLE_FLAGS` para decidir qué
-variables se almacenan: topografía, CORINE, calendario, meteorología y actividad
-humana. Los valores por defecto mantienen el producto canónico actual; el perfil
-`TEST_PROFILE` de `src.feature_flags` materializa la propuesta de revisión sin
-alterar las salidas oficiales. No confundir estos flags con la selección de
-predictores del modelo.
+`src/datacube_profile.py` contiene el único perfil de variables que usa
+`src.workflow`: topografía, CORINE, calendario, meteorología y actividad humana.
+No existe una ruta alternativa de prueba o final. No confundir este contrato de
+almacenamiento con la selección posterior de predictores del modelo.
 
-El perfil de prueba incorpora VPD (`vpd_mean`, `vpd_max_12_18h`) y actividad
-humana desagregada: longitudes viarias principal/local/pistas/otras y fracciones
+El perfil incluye VPD (`vpd_mean`, `vpd_max_12_18h`) y actividad humana
+desagregada: longitudes viarias principal/local/pistas/otras y fracciones
 residencial/de edificios. La longitud total es la suma de las categorías.
 
 ## 5. Variables disponibles
@@ -116,8 +115,8 @@ Resumen:
   forestales.
 - Meteorología: temperatura, humedad relativa, viento y precipitación diaria;
   extremos 12–18 h; acumulados de precipitación de 3, 7, 14 y 30 días; medias
-  de temperatura y humedad de 7 días; VPD diario y máximo de 12–18 h. Se retiró
-  el contador de días secos consecutivos.
+  de temperatura, viento y humedad a 7 días, humedad a 14 días; días secos
+  consecutivos; VPD diario y máximo de 12–18 h.
 - Actividad humana estática: `road_length_km`, sus categorías principal/local/
   pistas/otras, `residential_area_fraction` y `building_area_fraction`. Se
   retiraron las distancias por su saturación a cero a escala de 1 km.
@@ -212,7 +211,7 @@ accuracy como métrica principal por el fuerte desbalanceo.
 
 Conjuntos de variables en `src/modeling/features.py`:
 
-- `completo`: los 51 predictores publicados.
+- `completo`: parte de los 50 predictores publicados en `metadata.json`.
 - `temporal_compacto`: elimina `roughness_mean`, `roughness_std` y variables
   de calendario redundantes (`day_of_year`, `month`, `iso_week`, `month_sin`,
   `month_cos`). Es el candidato provisional de 44 variables.
@@ -231,10 +230,9 @@ negativos y el test ciego de 2023. El filtro `is_near_ignition_25x25_10d` debe
 evaluarse como protocolo alternativo, no como sustituto de la evaluación
 operacional con negativos representativos.
 
-Hay una discrepancia histórica que una IA debe tratar con cuidado:
-`docs/modeling.md` menciona el antiguo residuo `cell_id % 25`, pero el código
-actual en `src/modeling/data.py` es la fuente de verdad y usa hash por
-celda-día. Corregir la documentación si se vuelve a trabajar en esta fase.
+El muestreo reutilizable de los experimentos usa un hash determinista de
+`(cell_id, fecha)`; no usar el antiguo residuo fijo de `cell_id % 25`, porque
+introducía una fuga espacial.
 
 ## 9. Notebooks útiles
 

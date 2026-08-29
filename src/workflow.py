@@ -1,8 +1,12 @@
 """Orquestación reproducible de las fases dinámicas del datacubo histórico."""
 
 import argparse
+import logging
 import shutil
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import xarray as xr
 
 from src.config import (
     BOUNDARY_PATH,
@@ -27,6 +31,7 @@ from src.config import (
     TIME_CUBE_PATH,
     TOPOGRAPHY_CUBE_PATH,
 )
+from src.datacube_profile import CANONICAL_PROFILE
 from src.features.tabular import exportar_datacubo_tabular
 from src.features.time import crear_datacubo_temporal, guardar_datacubo_temporal
 from src.geospatial.human_activity import construir_capa_actividad_humana
@@ -34,6 +39,8 @@ from src.geospatial.pipeline import run_pipeline as construir_capas_estaticas
 from src.ingestion.ingest_egif import ultima_fecha_egif
 from src.ingestion.pipeline import ejecutar_pipeline_egif, ejecutar_pipeline_meteorologia
 from src.pipeline import construir_datacubo_completo
+
+logger = logging.getLogger(__name__)
 
 
 def _limpiar_salidas_dinamicas(
@@ -46,6 +53,17 @@ def _limpiar_salidas_dinamicas(
     output_dir = Path(tabular_output_dir)
     if output_dir.exists():
         shutil.rmtree(output_dir)
+
+
+def _filtrar_capa_canonica(
+    source_path: str | Path, flags: dict[str, bool], destination: str | Path
+) -> None:
+    """Copia de una capa estática limitada al contrato canónico de variables."""
+    with xr.open_dataset(source_path) as source:
+        selected = [name for name in source.data_vars if flags.get(name, False)]
+        if not selected:
+            raise ValueError(f"El perfil canónico no selecciona variables de {source_path}.")
+        source[selected].to_netcdf(destination)
 
 
 def ejecutar_workflow_historico(
@@ -70,7 +88,9 @@ def ejecutar_workflow_historico(
     lentas y se generan una vez con ``src.geospatial.pipeline``. Este workflow
     consume esas capas validadas y orquesta todas las fases temporales.
     """
+    logger.info("[1/5] Validando las capas estáticas locales.")
     if rebuild_static:
+        logger.info("      Reconstruyendo rejilla, topografía y CORINE.")
         construir_capas_estaticas(
             ruta_limites=BOUNDARY_PATH,
             ruta_clc=CORINE_PATH,
@@ -83,6 +103,7 @@ def ejecutar_workflow_historico(
         )
 
     if rebuild_static or rebuild_human_activity or not HUMAN_ACTIVITY_CUBE_PATH.exists():
+        logger.info("      Construyendo capa de actividad humana.")
         construir_capa_actividad_humana(
             grid_path=grid_path,
             spatial_cube_path=spatial_cube_path,
@@ -105,8 +126,15 @@ def ejecutar_workflow_historico(
 
     time_cube_path = Path(time_cube_path)
     end_date = ultima_fecha_egif(egif_xml).date().isoformat()
+    logger.info("      Periodo EGIF detectado: %s a %s.", DATACUBE_START, end_date)
     _limpiar_salidas_dinamicas(meteorology_cube_path, datacube_path, tabular_output_dir)
-    guardar_datacubo_temporal(crear_datacubo_temporal(DATACUBE_START, end_date), time_cube_path)
+    logger.info("[2/5] Preparando calendario y meteorología ERA5-Land.")
+    if skip_daily_meteorology:
+        logger.info("      Reutilizando ERA5 diario: %s", daily_meteorology_path)
+    guardar_datacubo_temporal(
+        crear_datacubo_temporal(DATACUBE_START, end_date, CANONICAL_PROFILE["time"]),
+        time_cube_path,
+    )
     ejecutar_pipeline_meteorologia(
         spatial_cube_path=spatial_cube_path,
         grid_path=grid_path,
@@ -116,7 +144,9 @@ def ejecutar_workflow_historico(
         start_date=METEOROLOGY_CONTEXT_START,
         end_date=end_date,
         skip_daily=skip_daily_meteorology,
+        inclusion_flags=CANONICAL_PROFILE["meteorology"],
     )
+    logger.info("[3/5] Procesando igniciones EGIF y el target diario.")
     ejecutar_pipeline_egif(
         xml_path=egif_xml,
         grid_path=grid_path,
@@ -125,23 +155,44 @@ def ejecutar_workflow_historico(
         metadata_output_path=metadata_path,
         end_date=end_date,
     )
-    construir_datacubo_completo(
-        spatial_cube_path=spatial_cube_path,
-        topography_cube_path=TOPOGRAPHY_CUBE_PATH,
-        landcover_cube_path=LANDCOVER_CUBE_PATH,
-        human_activity_cube_path=HUMAN_ACTIVITY_CUBE_PATH,
-        time_cube_path=time_cube_path,
-        meteorology_cube_path=meteorology_cube_path,
-        egif_target_path=target_path,
-        output_path=datacube_path,
-        start_date=DATACUBE_START,
-        end_date=end_date,
-    )
+    logger.info("[4/5] Ensamblando el datacubo NetCDF canónico.")
+    datacube_parent = Path(datacube_path).parent
+    datacube_parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix="canonical_layers_", dir=datacube_parent) as temporary_dir:
+        temporary_dir = Path(temporary_dir)
+        topography_path = temporary_dir / "topography.nc"
+        landcover_path = temporary_dir / "landcover.nc"
+        human_activity_path = temporary_dir / "human_activity.nc"
+        _filtrar_capa_canonica(
+            TOPOGRAPHY_CUBE_PATH, CANONICAL_PROFILE["topography"], topography_path
+        )
+        _filtrar_capa_canonica(LANDCOVER_CUBE_PATH, CANONICAL_PROFILE["landcover"], landcover_path)
+        _filtrar_capa_canonica(
+            HUMAN_ACTIVITY_CUBE_PATH,
+            CANONICAL_PROFILE["human_activity"],
+            human_activity_path,
+        )
+        construir_datacubo_completo(
+            spatial_cube_path=spatial_cube_path,
+            topography_cube_path=topography_path,
+            landcover_cube_path=landcover_path,
+            human_activity_cube_path=human_activity_path,
+            time_cube_path=time_cube_path,
+            meteorology_cube_path=meteorology_cube_path,
+            egif_target_path=target_path,
+            output_path=datacube_path,
+            start_date=DATACUBE_START,
+            end_date=end_date,
+        )
+    logger.info("      NetCDF creado: %s", datacube_path)
+    logger.info("[5/5] Exportando dataset tabular Parquet por años.")
     exportar_datacubo_tabular(datacube_path, tabular_output_dir)
+    logger.info("✓ Pipeline finalizado correctamente.")
 
 
 def main() -> None:
     """Ejecuta la ruta reproducible desde las fuentes locales ya descargadas."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     parser = argparse.ArgumentParser(description="Orquesta el datacubo histórico EGIF + ERA5.")
     parser.add_argument("--egif-xml", required=True)
     parser.add_argument("--grid", default=str(GRID_PATH))

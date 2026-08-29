@@ -1,8 +1,8 @@
 """Selección de variables con cuatro criterios independientes.
 
 En el pipeline sobre FIRMS no había selección: se le tiraban al modelo las 22 variables
-disponibles y se confiaba en que los árboles ignorasen las inútiles. Con 54 predictores —y más
-en cuanto lleguen el VPD y las variables OSM desagregadas— eso deja de ser razonable, por tres
+disponibles y se confiaba en que los árboles ignorasen las inútiles. Con 50 predictores publicados
+en el contrato actual, eso deja de ser razonable, por tres
 motivos concretos: variables redundantes reparten la importancia entre sí y la vuelven
 ilegible; cada variable de más es una oportunidad de sobreajuste con solo 6.189 positivos; y un
 tribunal preguntará por qué está cada una.

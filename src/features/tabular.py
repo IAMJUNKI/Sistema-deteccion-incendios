@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,8 @@ import pyarrow.parquet as pq
 import xarray as xr
 
 from src.config import DATACUBE_PATH, TABULAR_DATASET_DIR
+
+logger = logging.getLogger(__name__)
 
 OUTCOME_COLUMNS = {
     "target_ignicion",
@@ -84,6 +87,8 @@ def exportar_datacubo_tabular(
         predictors = obtener_columnas_predictoras(set(data.data_vars))
         part = 0
         dropped_incomplete = 0
+        total_parts = (len(dates) + chunk_days - 1) // chunk_days
+        announced_years: set[int] = set()
 
         for start in range(0, len(dates), chunk_days):
             end = min(start + chunk_days, len(dates))
@@ -106,6 +111,11 @@ def exportar_datacubo_tabular(
             dropped_incomplete += len(frame) - len(complete_rows)
 
             for year, year_frame in complete_rows.groupby("year", sort=True):
+                if year not in announced_years:
+                    logger.info(
+                        "      Exportando año %s (bloque %d/%d).", year, part + 1, total_parts
+                    )
+                    announced_years.add(year)
                 destination = output_dir / f"year={year}" / f"part-{part:05d}.parquet"
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 year_frame.to_parquet(destination, index=False)
@@ -144,11 +154,13 @@ def _consolidar_partes_anuales(output_dir: Path) -> dict[str, int]:
     """Consolida bloques temporales en un único Parquet anual verificable."""
     annual_rows: dict[str, int] = {}
     for year_dir in sorted(output_dir.glob("year=*")):
+        year = year_dir.name.removeprefix("year=")
+        logger.info("      Consolidando Parquet anual %s.", year)
         parts = sorted(year_dir.glob("part-*.parquet"))
-        destination = year_dir / f"dataset_{year_dir.name.removeprefix('year=')}.parquet"
+        destination = year_dir / f"dataset_{year}.parquet"
         if destination.exists():
             with pq.ParquetFile(destination) as annual:
-                annual_rows[year_dir.name.removeprefix("year=")] = annual.metadata.num_rows
+                annual_rows[year] = annual.metadata.num_rows
             for part in parts:
                 part.unlink()
             continue
@@ -180,7 +192,7 @@ def _consolidar_partes_anuales(output_dir: Path) -> dict[str, int]:
         temporary.replace(destination)
         for part in parts:
             part.unlink()
-        annual_rows[year_dir.name.removeprefix("year=")] = rows
+        annual_rows[year] = rows
     return annual_rows
 
 

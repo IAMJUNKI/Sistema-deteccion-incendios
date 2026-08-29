@@ -31,8 +31,11 @@ LANDCOVER_VARIABLES = [
     "water",
 ]
 FOREST_COVER_VARIABLE = "forest_cover_fraction"
-DATACUBE_VARIABLE_FLAGS = {**{name: True for name in LANDCOVER_VARIABLES}, FOREST_COVER_VARIABLE: True}
-TEST_DATACUBE_VARIABLE_FLAGS = {**{name: True for name in LANDCOVER_VARIABLES}, FOREST_COVER_VARIABLE: False}
+CANONICAL_DATACUBE_VARIABLE_FLAGS = {
+    **{name: True for name in LANDCOVER_VARIABLES},
+    FOREST_COVER_VARIABLE: False,
+}
+DATACUBE_VARIABLE_FLAGS = CANONICAL_DATACUBE_VARIABLE_FLAGS
 LANDCOVER_METADATA = {
     "artificial": "Artificial surfaces",
     "agriculture": "Agricultural areas",
@@ -252,7 +255,9 @@ def crear_datacubo_cobertura_suelo(
     if "is_galicia" not in cube:
         raise ValueError("El cubo debe incluir la máscara is_galicia.")
     flags = DATACUBE_VARIABLE_FLAGS if inclusion_flags is None else inclusion_flags
-    selected = [name for name in [*LANDCOVER_VARIABLES, FOREST_COVER_VARIABLE] if flags.get(name, False)]
+    selected = [
+        name for name in [*LANDCOVER_VARIABLES, FOREST_COVER_VARIABLE] if flags.get(name, False)
+    ]
     missing = set(selected) - set(landcover.columns)
     if missing:
         raise ValueError(f"Faltan variables de cobertura del suelo: {sorted(missing)}")

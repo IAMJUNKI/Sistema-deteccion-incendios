@@ -1,6 +1,7 @@
 """Daily ERA5-Land processing for the Galicia wildfire data cube."""
 
 import argparse
+import logging
 import re
 from pathlib import Path
 
@@ -10,6 +11,8 @@ import pandas as pd
 import xarray as xr
 
 from src.config import DATACUBE_END, ERA5_DAILY_PATH, METEOROLOGY_CONTEXT_START
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_START_DATE = METEOROLOGY_CONTEXT_START
 DEFAULT_END_DATE = DATACUBE_END
@@ -36,11 +39,13 @@ DAILY_VARIABLES = (
     "consecutive_dry_days",
     "temperature_mean_7d",
     "relative_humidity_mean_7d",
+    "wind_speed_mean_7d",
+    "relative_humidity_mean_14d",
     "vpd_mean",
     "vpd_max_12_18h",
 )
-DATACUBE_VARIABLE_FLAGS = {name: True for name in DAILY_VARIABLES}
-TEST_DATACUBE_VARIABLE_FLAGS = {**DATACUBE_VARIABLE_FLAGS, "consecutive_dry_days": False}
+CANONICAL_DATACUBE_VARIABLE_FLAGS = {name: True for name in DAILY_VARIABLES}
+DATACUBE_VARIABLE_FLAGS = CANONICAL_DATACUBE_VARIABLE_FLAGS
 PRECIPITATION_WINDOWS = (3, 7, 14, 30)
 DRY_DAY_THRESHOLD_MM = 1.0
 
@@ -71,11 +76,11 @@ METEOROLOGY_METADATA = {
     "precipitation_sum_30d": ("Precipitation accumulated over 30 days", "mm"),
     "temperature_mean_7d": ("Seven-day mean 2 m air temperature", "degC"),
     "relative_humidity_mean_7d": ("Seven-day mean relative humidity at 2 m", "%"),
+    "wind_speed_mean_7d": ("Seven-day mean 10 m wind speed", "km h-1"),
+    "relative_humidity_mean_14d": ("Fourteen-day mean relative humidity at 2 m", "%"),
     "consecutive_dry_days": ("Consecutive days with precipitation below 1 mm", "days"),
     "vpd_mean": ("Daily mean vapour pressure deficit at 2 m", "kPa"),
-    "vpd_max_12_18h": (
-        "Maximum vapour pressure deficit from 12:00 to 18:00 Europe/Madrid", "kPa"
-    ),
+    "vpd_max_12_18h": ("Maximum vapour pressure deficit from 12:00 to 18:00 Europe/Madrid", "kPa"),
 }
 
 
@@ -145,14 +150,24 @@ def add_meteorology_accumulations(daily: xr.Dataset) -> xr.Dataset:
             "time_contract": f"Includes the observation date and the preceding {window - 1} days.",
         }
 
-    for variable in ("temperature_mean", "relative_humidity_mean"):
+    for variable, window in (
+        ("temperature_mean", 7),
+        ("relative_humidity_mean", 7),
+        ("wind_speed_mean", 7),
+        ("relative_humidity_mean", 14),
+    ):
         if variable not in output:
             continue
-        name = f"{variable}_7d"
-        output[name] = output[variable].rolling(time=7, min_periods=7).mean().astype(np.float32)
+        name = f"{variable}_{window}d"
+        output[name] = (
+            output[variable].rolling(time=window, min_periods=window).mean().astype(np.float32)
+        )
         output[name].attrs = {
-            "long_name": f"Seven-day mean of {variable}",
-            "time_contract": "Includes the observation date and the preceding 6 days.",
+            "long_name": f"{window}-day mean of {variable}",
+            "units": METEOROLOGY_METADATA[name][1],
+            "time_contract": (
+                f"Includes the observation date and the preceding {window - 1} days."
+            ),
         }
 
     values = precipitation.values
@@ -229,11 +244,13 @@ def procesar_era5(
     output_path: str | Path = DEFAULT_OUTPUT,
     start_date: str = DEFAULT_START_DATE,
     end_date: str = DEFAULT_END_DATE,
+    inclusion_flags: dict[str, bool] | None = None,
 ) -> None:
     """Process all raw files into a compact daily NetCDF."""
+    logger.info("      Agregando ERA5 horario a métricas diarias.")
     hourly = cargar_era5_horario(listar_archivos_era5(raw_dir, start_date, end_date))
     try:
-        daily = crear_meteorologia_diaria(hourly)
+        daily = crear_meteorologia_diaria(hourly, inclusion_flags=inclusion_flags)
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         encoding = {
@@ -275,9 +292,13 @@ def interpolar_al_grid(
                 coords={"time": daily.time, "y": cube.y, "x": cube.x},
             ).to_netcdf(destination)
 
-        for name in daily.data_vars:
+        variables = list(daily.data_vars)
+        for position, name in enumerate(variables, start=1):
             if name in completed:
                 continue
+            logger.info(
+                "      Interpolando meteorología (%d/%d): %s", position, len(variables), name
+            )
             source = (
                 daily[name]
                 .dropna(dim="latitude", how="all")
