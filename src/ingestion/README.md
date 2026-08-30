@@ -1,10 +1,8 @@
 # Ingesta histórica
 
-<<<<<<< HEAD
 Este módulo procesa exclusivamente las fuentes activas: ERA5-Land para
 meteorología y EGIF-MITECO para incendios. La entrada pública es
 `src.ingestion.pipeline`; normalmente se invoca mediante `src.workflow`.
-=======
 **Fase 2 del proyecto.** Descarga y procesamiento del histórico de incendios (NASA FIRMS) y meteorología histórica (ERA5-Land). Construcción de la variable objetivo mediante clustering espacio-temporal y generación de negativos difíciles.
 
 ## Responsabilidad
@@ -92,4 +90,3 @@ El colector conserva una ventana horaria local, agrega los días que alcanzan
 la cobertura mínima y los interpola a la misma rejilla. Si AEMET devuelve menos
 fechas u horas de las necesarias, la ingesta no inventa valores ni publica un
 estado incompleto.
->>>>>>> 3aef94b (changes)
