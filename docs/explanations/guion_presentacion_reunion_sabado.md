@@ -30,8 +30,8 @@ Se han integrado los avances dispersos en un pipeline modular en `src/`, probado
 * **Shift T-1:** Todas las variables meteorológicas explicativas se desplazan 24 horas respecto al día $T$ de evaluación.
 * **Rejillas Multi-Temporales:** Se usa el mapa CORINE 2012 para datos de 2013-2018, CORINE 2018 para 2019-2024 y CORINE 2024 para inferencia operativa (2025+).
 
-### 🔹 E. Sesgo Meteorológico (Quantile Mapping ERA5 vs MeteoGalicia)
-* Entrenamiento con reanálisis continuo **ERA5-Land** (2019-2023) e inferencia diaria con la previsión numérico **WRF de MeteoGalicia** ajustada mediante **Quantile Mapping**.
+### 🔹 E. Sesgo Meteorológico (ERA5 vs MeteoGalicia)
+* Entrenamiento con reanálisis continuo **ERA5-Land** e inferencia diaria con el forecast numérico **WRF de MeteoGalicia**. La primera versión archiva los pares forecast-observación necesarios para calibrar el sesgo más adelante; no aplica Quantile Mapping con un único día.
 
 ### 🔹 F. Filtrado Físico por Extinción Hídrica ($P < 5\text{ mm}$): Dataset Oficial de Trabajo
 * **Decisión Metodológica:** Adoptar el **dataset filtrado por precipitación ($P < 5\text{ mm}$)** como el estándar oficial de entrenamiento y evaluación del proyecto.
@@ -118,7 +118,7 @@ Prueba empírica de cómo el modelo predijo con 24 horas de antelación ($T-1$) 
 Habiendo validado que **LightGBM Standard (Tabular 2D)** es el modelo oficial de producción (con un $25.74\%$ de Recall a $FPR \le 5\%$ sobre días secos y un Brier Score de $0.0005$), el reparto de módulos para el equipo se centra en la construcción del sistema operativo:
 
 1. **Pipeline de Inferencia Operativa Diaria (`src/ingestion/ingest_meteogalicia.py` & `scripts/run_daily_inference.py`):**
-   - Automatización de la ingesta matutina de la previsión WRF de MeteoGalicia (07:00 AM) y aplicación de *Quantile Mapping* contra la climatología ERA5.
+   - Automatización de la ingesta matutina de la previsión WRF de MeteoGalicia (05:00 AM), archivado de snapshots y evaluación futura frente a ERA5 y observaciones.
 2. **Desarrollo del Dashboard Interactivo en Streamlit (`app.py`):**
    - Construcción de la interfaz web interactiva con mapas de calor de riesgo en alta definición (PyDeck/Folium), selector de fechas y alertas comarcales.
 3. **Módulo de Explicabilidad Local y Global con valores SHAP (`src/models/explainability.py`):**

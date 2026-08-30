@@ -9,6 +9,10 @@
 - Evaluar con métricas orientadas a clases desbalanceadas: AUC-ROC, PR-AUC, F1.
 - Calibrar umbrales de riesgo con la tasa real de incidencia del conjunto de validación.
 - Serializar el modelo y la tabla de umbrales calibrados.
+- Mantener un artefacto independiente y calibrado para cada horizonte T+1,
+  T+2 y T+3, con versión explícita del esquema de features.
+- Calcular explicaciones TreeSHAP desde el artefacto serializado cuando la
+  dependencia opcional `shap` esté disponible.
 
 ## Partición temporal
 
@@ -23,6 +27,8 @@ Test (ciego):   2023 · 2024
 - Modelo serializado (`.pkl` o `.json` para XGBoost).
 - Tabla de umbrales calibrados: Bajo / Moderado / Alto / Extremo.
 - Reporte de métricas en train, val y test.
+- `data/models/forecast_risk_t1.joblib`, `forecast_risk_t2.joblib` y
+  `forecast_risk_t3.joblib`, más sus JSON de métricas.
 
 ## Regla crítica
 

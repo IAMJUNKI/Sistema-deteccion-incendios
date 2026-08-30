@@ -57,7 +57,7 @@ Con la infraestructura de datos y los baselines finalizados, el proyecto se encu
 ┌────────────────────────────────────────────────────────────────────────┐
 │  FASE 5: Inferencia Operativa Diaria con MeteoGalicia                  │ ⏳ PRÓXIMAS SEMANAS
 │  - Ingesta automática de la predicción WRF de MeteoGalicia.            │
-│  - Aplicación de Quantile Mapping contra la serie de ERA5-Land.        │
+│  - Forecast MeteoGalicia archivado; corrección futura con pares históricos. │
 │  - Generación diaria del mapa de riesgo de ignición sobre Galicia.     │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
