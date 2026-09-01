@@ -36,7 +36,7 @@ from src.ingestion.meteogalicia_forecast import (
     validate_hourly_forecast,
 )
 
-DEFAULT_GRID = Path("data/processed/grid/galicia_grid_1km_2018.parquet")
+DEFAULT_GRID = Path("data/processed/grid/galicia_grid_1km_egif.parquet")
 DEFAULT_FORECAST_DIR = Path("data/raw/meteogalicia")
 
 

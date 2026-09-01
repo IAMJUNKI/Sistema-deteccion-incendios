@@ -6,6 +6,12 @@ Este documento describe, de extremo a extremo, cómo el sistema transforma una
 previsión meteorológica y el estado del territorio en tres mapas diarios de
 riesgo de inicio de incendio forestal para Galicia.
 
+La versión normativa del modelo 2D EGIF, con el contrato versionado de 50
+predictores, está resumida en
+[`modelo_2d_egif_operativo.md`](modelo_2d_egif_operativo.md). Este documento
+conserva el detalle histórico y operativo común; cuando ambos textos difieren,
+prevalece el contrato EGIF y el manifiesto generado por el código.
+
 La salida no pretende responder a “¿dónde habrá humo con certeza?” ni a
 “¿cómo se propagará un incendio que ya ha comenzado?”. La decisión operativa es
 más concreta:
@@ -575,13 +581,14 @@ en prec_dia = 0, porque eso haría parecer que hubo un día seco.
 ## 11. Entrenamiento de modelos
 
 build_historical_horizon_dataset() genera tres DataFrames, uno por horizonte.
-Cada fila contiene:
+En el camino EGIF, cada fila contiene:
 
 ~~~text
-fecha         = día objetivo
-issue_date    = fecha - horizon_days
+fecha         = día de emisión de las features
+issue_date    = fecha
+target_date   = issue_date + horizon_days
 horizon_days  = 1, 2 o 3
-target        = ignición del día objetivo
+target        = ignición de target_date
 source_type   = era5_perfect
 ~~~
 
@@ -615,7 +622,15 @@ describen la muestra conservada y deben etiquetarse como desarrollo. El
 benchmark final debe ejecutarse con evaluación sobre los años completos. Las
 métricas prioritarias son PR-AUC, ROC-AUC y Brier Score.
 
-Cada horizonte se guarda como:
+Los modelos canónicos EGIF se guardan como:
+
+~~~text
+data/models/forecast_risk_egif_t1.joblib
+data/models/forecast_risk_egif_t2.joblib
+data/models/forecast_risk_egif_t3.joblib
+~~~
+
+El modelo antiguo se conserva como rollback:
 
 ~~~text
 data/models/forecast_risk_t1.joblib
@@ -623,7 +638,10 @@ data/models/forecast_risk_t2.joblib
 data/models/forecast_risk_t3.joblib
 ~~~
 
-El artefacto contiene LightGBM, calibrador, features, horizonte y metadatos.
+El artefacto contiene LightGBM, calibrador, features, horizonte, versión del
+contrato, hash del dataset, contexto meteorológico y métricas. La inferencia
+selecciona la familia canónica cuando están disponibles los tres artefactos;
+el camino legacy solo sirve para rollback explícito.
 El calibrador isotónico se ajusta en validación y nunca en inferencia.
 
 | Campo de salida | Interpretación |
@@ -678,10 +696,11 @@ por cada cell_id.
 ### Paso 6: selección de malla y fallback
 
 Se prueba WRF 1 km y se valida descarga, variables, horas y cobertura por
-celda. Si no supera la validación, se intenta WRF 04 km. Solo si las dos
-mallas fallan y `allow_stale=True`, se carga el último Parquet que cubra el
-intervalo. Los estados quedan marcados como `fresh`, `fresh_fallback` o
-`stale`; nunca se sustituyen por una fila histórica.
+celda. Si no supera la validación, se intenta WRF 04 km. En `FORECAST_PROVIDER=auto`,
+si ambas mallas fallan se puede intentar AEMET municipal y se marca
+`fresh_aemet_degraded`. Solo después, si `allow_stale=True`, se carga el último
+Parquet que cubra el intervalo. Los estados quedan marcados explícitamente;
+nunca se sustituyen por una fila histórica.
 
 ### Paso 7: features
 
@@ -691,7 +710,8 @@ previstos. Se generan las filas de los tres horizontes.
 ### Paso 8: modelos
 
 Se carga el joblib de cada horizonte. No se reentrena LightGBM. El loader
-verifica horizonte, esquema operational-risk-v1 y lista de features.
+verifica horizonte, esquema `egif-2d-v1` y la lista exacta de 50 features; si
+se selecciona el rollback, valida el esquema legacy de 23 variables.
 
 ### Paso 9: scoring y prioridad preventiva
 

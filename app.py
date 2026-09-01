@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
 
 from src.webapp.components.concello_lookup import render_concello_lookup_tab
 from src.webapp.components.header_kpis import render_header_and_kpis
@@ -39,9 +40,10 @@ apply_custom_styles()
 
 
 def main() -> None:
+    load_dotenv()
     # 3. Carga preliminar de datos para inicializar el sidebar
     predictions_raw = load_operational_predictions()
-    
+
     # 4. Renderizar panel lateral
     sidebar_params = render_sidebar(predictions_raw)
     selected_file = sidebar_params["selected_dataset_file"]
@@ -61,6 +63,25 @@ def main() -> None:
 
     manifest = load_operational_manifest()
     geometries = load_grid_geometries()
+
+    forecast_quality = manifest.get("forecast_quality", "unknown")
+    if forecast_quality in {"incomplete", "invalid", "unavailable"}:
+        st.error(
+            "No hay un forecast completo y válido para publicar. El resultado mostrado "
+            "no debe utilizarse para movilización preventiva."
+        )
+    elif forecast_quality in {"stale", "fresh_fallback", "fresh_aemet_degraded", "fresh_aemet_proxy", "fresh_aemet"}:
+        st.warning(
+            f"Calidad meteorológica: {forecast_quality}. Consulta la pestaña de auditoría "
+            "antes de interpretar el mapa como escenario WRF 1 km."
+        )
+    state_quality = manifest.get("state", {}).get("feature_quality_counts", {})
+    if isinstance(state_quality, dict) and state_quality.get("legacy_proxy", 0):
+        st.warning(
+            "El estado histórico contiene features meteorológicas proxy derivadas de agregados "
+            "legacy. La memoria de sequedad debe actualizarse con observaciones horarias antes "
+            "de usar el mapa para movilización preventiva."
+        )
 
     # Filtrar por horizonte seleccionado
     if "horizon_days" in predictions.columns:

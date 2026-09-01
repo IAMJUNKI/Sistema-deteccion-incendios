@@ -641,7 +641,7 @@ def test_operational_provider_can_use_aemet_without_meteogalicia_key(tmp_path, m
     )
 
     assert len(forecast) == 144
-    assert quality == "fresh_aemet"
+    assert quality == "fresh_aemet_degraded"
     assert report["provider"] == "aemet"
     assert forecast["forecast_grid"].unique().tolist() == ["municipal"]
 

@@ -26,6 +26,7 @@ dependencies:
   # ─── Procesamiento de datos espaciotemporales ─────────────────────────────
   - xarray>=2023.0
   - netcdf4>=1.6
+  - libjpeg-turbo>=2.1  # Evita incompatibilidades de netcdf4 en macOS/Linux.
   - cftime
   - zarr
 
@@ -74,4 +75,3 @@ dependencies:
     - pyarrow>=13.0          # Soporte Parquet
     - streamlit-folium>=0.16  # Integración Folium en Streamlit
     - dem-stitcher>=2.5.0    # Descarga dinámica de Copernicus DEM GLO-30
-

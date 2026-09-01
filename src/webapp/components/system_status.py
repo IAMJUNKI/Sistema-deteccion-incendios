@@ -33,6 +33,11 @@ def render_system_status_tab(
         issue_time = manifest.get("issue_time", df_data.get("issue_time", pd.Series(["-"])).iloc[0])
         mode = manifest.get("pipeline_run_mode", "live")
         coverage = manifest.get("forecast_coverage", {})
+        quality = manifest.get("forecast_quality", "unknown")
+        age = manifest.get("forecast_age_hours")
+        source_resolution = manifest.get("forecast_source_resolution", "unknown")
+        valid_start = manifest.get("valid_start", "-")
+        valid_end = manifest.get("valid_end", "-")
 
         st.markdown(
             f"""
@@ -43,9 +48,12 @@ def render_system_status_tab(
                 </div>
                 <div style="font-size:0.82rem; color:#cbd5e1; line-height:1.6;">
                     <b>Proveedor Meteorológico:</b> {provider}<br/>
-                    <b>Malla Numérica:</b> WRF {grid_res}<br/>
+                    <b>Malla / resolución:</b> {grid_res or 'no disponible'}<br/>
+                    <b>Resolución de fuente:</b> {source_resolution}<br/>
                     <b>Versión API:</b> {api_ver}<br/>
+                    <b>Calidad:</b> <code>{quality}</code> · <b>Antigüedad:</b> {age if age is not None else '-'} h<br/>
                     <b>Fecha/Hora de Emisión:</b> <code>{issue_time}</code><br/>
+                    <b>Validez UTC:</b> <code>{valid_start}</code> → <code>{valid_end}</code><br/>
                     <b>Modo de Ejecución:</b> <code>{mode}</code><br/>
                     <b>Cobertura de Celdas:</b> {coverage.get('complete_cells', len(df_data)):,} / {coverage.get('cells', len(df_data)):,} celdas completas ({coverage.get('minimum_ratio', 1.0):.1%})
                 </div>
@@ -53,8 +61,28 @@ def render_system_status_tab(
             """,
             unsafe_allow_html=True,
         )
+        if quality in {"fresh_aemet", "fresh_aemet_degraded", "fresh_aemet_proxy", "stale", "incomplete", "invalid", "unavailable"}:
+            st.warning(
+                "Este mapa no usa el escenario WRF 1 km nominal: "
+                f"estado meteorológico = {quality}. Revisa la cobertura antes de movilizar medios."
+            )
+        state_quality = manifest.get("state", {}).get("feature_quality_counts", {})
+        if isinstance(state_quality, dict) and state_quality.get("legacy_proxy", 0):
+            st.warning(
+                "El estado meteorológico reciente contiene filas legacy_proxy: "
+                "las memorias históricas no proceden de una serie horaria completa."
+            )
 
     with col_mod:
+        selected_model = manifest.get("models", {}).get(str(selected_horizon), {})
+        model_metadata = selected_model.get("metadata", {}) if isinstance(selected_model, dict) else {}
+        feature_version = manifest.get("feature_contract_version") or model_metadata.get(
+            "feature_schema_version", "desconocido"
+        )
+        feature_count = len(model_metadata.get("feature_columns", [])) or (
+            50 if feature_version == "egif-2d-v1" else 23
+        )
+        model_family = selected_model.get("model_family", "desconocido") if isinstance(selected_model, dict) else "desconocido"
         st.markdown("#### Arquitectura y Calibración del Modelo")
         st.markdown(
             f"""
@@ -66,7 +94,8 @@ def render_system_status_tab(
                 <div style="font-size:0.82rem; color:#cbd5e1; line-height:1.6;">
                     <b>Algoritmo Base:</b> LightGBM Classifier (Gradient Boosting Decision Trees)<br/>
                     <b>Calibración de Probabilidades:</b> Regresión Isotónica (Isotonic Regression sobre año completo)<br/>
-                    <b>Esquema de Features:</b> <code>operational-risk-v1</code> (23 variables biofísicas)<br/>
+                    <b>Familia:</b> <code>{model_family}</code><br/>
+                    <b>Esquema de Features:</b> <code>{feature_version}</code> ({feature_count} variables)<br/>
                     <b>Estrategia de Validación:</b> Bloques temporales anuales completos (Anti-Data Leakage)<br/>
                     <b>Horizonte Operativo Activo:</b> T+{selected_horizon} ({selected_horizon*24} horas)
                 </div>
@@ -79,7 +108,7 @@ def render_system_status_tab(
 
     # Referencias del Estado del Arte y Memoria TFM
     st.markdown("#### Marco Metodológico y Alineación con el Estado del Arte")
-    
+
     st.markdown(
         """
         - **IberFire (Ercibengoa et al., 2025):** Validación metodológica y benchmark de resolución espacial de 1 km × 1 km. A diferencia de IberFire (que se orienta a la construcción de datasets históricos), este sistema implementa un pipeline operativo *end-to-end* en tiempo real con MeteoGalicia.

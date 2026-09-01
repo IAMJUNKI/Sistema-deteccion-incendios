@@ -18,6 +18,10 @@ DEM GLO-30, CORINE Land Cover 2018 y ERA5-Land.
 Consulta [las variables](docs/variables.md) y la guía para
 [ejecutar el pipeline](docs/ejecutar_pipeline.md).
 
+Para desplegar el código por releases y transferir datasets/modelos pesados sin
+subirlos a GitHub, consulta
+[despliegue de código y datos](docs/deployment/despliegue_codigo_y_datos.md).
+
 ## Estructura
 
 ```text

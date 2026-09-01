@@ -64,6 +64,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+deploy/deploy.env
 *.pem
 *.key
 secrets/
@@ -138,6 +139,9 @@ reports/
 *.html
 *.pdf
 !docs/*.pdf
+!docs/references/*.pdf
+!docs/references/*.html
+!docs/references/*.ipynb
 
 # ─── Streamlit ────────────────────────────────────────────────────────────────
 .streamlit/secrets.toml
@@ -156,7 +160,7 @@ tmp/
 
 # Modelos serializados: un Random Forest son ~80 MB
 *.joblib
-models/
+/models/
 
 # Detalle por corrida: reproducible relanzando el experimento.
 # Lo que se versiona es docs/technical/resultados.csv, la bitacora acumulativa.

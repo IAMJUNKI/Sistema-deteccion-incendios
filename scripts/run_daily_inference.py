@@ -2,9 +2,9 @@
 """Inferencia operativa de riesgo T+1/T+2/T+3.
 
 La inferencia consume un forecast horario real de MeteoGalicia, lo asigna a la
-rejilla y carga modelos serializados. Si la descarga falla, solo usa el último
-forecast archivado que cubra los tres días y marca el resultado como ``stale``.
-No existe fallback silencioso a una fecha histórica.
+rejilla y carga modelos serializados. En modo ``auto`` sigue la cadena WRF 1 km,
+WRF 04 km, AEMET degradado y, si se permite, el último forecast archivado como
+``stale``. No existe fallback silencioso a una fecha histórica.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ try:
 except ImportError:  # pragma: no cover - el entorno de producción incluye GeoPandas
     gpd = None
 
+from src.features.canonical_contract import CANONICAL_FEATURES, CANONICAL_WEATHER_FEATURES
 from src.features.operational_features import build_operational_features
 from src.ingestion.aemet_forecast import (
     AEMET_API_VERSION,
@@ -36,6 +37,7 @@ from src.ingestion.aemet_forecast import (
     AemetClient,
     AemetForecastConfig,
     parse_municipality_env,
+    parse_municipality_file,
 )
 from src.ingestion.meteogalicia_forecast import (
     ForecastConfig,
@@ -62,7 +64,7 @@ from src.operational.artifacts import (
 LOGGER = logging.getLogger(__name__)
 GALICIA_TZ = ZoneInfo("Europe/Madrid")
 HORIZONS = (1, 2, 3)
-DEFAULT_GRID_PATH = Path("data/processed/grid/galicia_grid_1km_2018.parquet")
+DEFAULT_GRID_PATH = Path("data/processed/grid/galicia_grid_1km_egif.parquet")
 DEFAULT_FORECAST_DIR = Path("data/raw/meteogalicia")
 DEFAULT_OUTPUT_PATH = Path("data/processed/predicciones_operativas.parquet")
 DEFAULT_MODEL_DIR = Path("data/models")
@@ -295,12 +297,28 @@ def _forecast_coverage_report(
     times = pd.to_datetime(forecast["valid_time"], utc=True)
     per_cell = forecast.assign(_valid_time=times).groupby("cell_id")["_valid_time"].nunique()
     ratios = per_cell / expected_hours
+    required_variables = (
+        "temperature_c",
+        "relative_humidity_pct",
+        "precipitation_mm",
+        "wind_speed_kmh",
+    )
+    missing_variables = [
+        column
+        for column in required_variables
+        if column not in forecast.columns or forecast[column].isna().any()
+    ]
     return {
         "expected_hours_per_cell": expected_hours,
         "cells": int(per_cell.size),
         "minimum_ratio": float(ratios.min()) if len(ratios) else 0.0,
         "mean_ratio": float(ratios.mean()) if len(ratios) else 0.0,
         "complete_cells": int((ratios >= 1.0).sum()),
+        "coverage_percentage": float(ratios.min() * 100) if len(ratios) else 0.0,
+        "valid_start": times.min().isoformat() if len(times) else None,
+        "valid_end": times.max().isoformat() if len(times) else None,
+        "missing_variables": missing_variables,
+        "missing_hours": int(max(0, expected_hours - int(per_cell.min()))) if len(per_cell) else expected_hours,
     }
 
 
@@ -427,6 +445,7 @@ def _fetch_fresh_meteogalicia_forecast(
             assigned["forecast_selection"] = "primary" if index == 0 else "fallback"
             assigned["forecast_grid"] = grid_name
             assigned["forecast_api_version"] = config.api_version
+            assigned["source_resolution"] = f"wrf_{grid_name}"
             assigned["forecast_query_resolution_km"] = query_resolution
             assigned["forecast_requested_points"] = len(points)
             output_name = (
@@ -438,9 +457,14 @@ def _fetch_fresh_meteogalicia_forecast(
                 "quality": quality,
                 "selection": "primary" if index == 0 else "fallback",
                 "source": "provider",
+                "provider": "meteogalicia",
+                "model": config.model,
+                "model_version": str(assigned.get("model_version", pd.Series([config.model])).iloc[0]),
+                "source_resolution": f"wrf_{grid_name}",
                 "api_version": config.api_version,
                 "query_resolution_km": query_resolution,
                 "requested_points": len(points),
+                "forecast_path": str(Path(forecast_dir) / output_name),
                 "attempts": attempts,
             }
             return assigned, issued, quality, report
@@ -524,7 +548,18 @@ def _fetch_fresh_aemet_forecast(
         in {"1", "true", "yes"},
         missing_precipitation_fallback=_aemet_precipitation_fallback(),
     )
-    points = parse_municipality_env(os.getenv("AEMET_MUNICIPALITIES"))
+    municipality_file = os.getenv("AEMET_MUNICIPALITIES_FILE", "").strip()
+    environment = os.getenv("PIPELINE_ENVIRONMENT", "local").strip().lower()
+    if environment == "production" and not municipality_file:
+        raise ForecastError(
+            "AEMET_MUNICIPALITIES_FILE es obligatorio en producción: "
+            "no se permite usar solo las cuatro capitales de prueba."
+        )
+    points = (
+        parse_municipality_file(municipality_file)
+        if municipality_file
+        else parse_municipality_env(os.getenv("AEMET_MUNICIPALITIES"))
+    )
     client = AemetClient(config)
     downloaded_at = pd.Timestamp.now(tz=GALICIA_TZ)
     raw = client.fetch_points(
@@ -549,15 +584,20 @@ def _fetch_fresh_aemet_forecast(
         expected_cells=len(grid),
     )
     issued = _as_utc_timestamp(raw["forecast_run_at"].min())
+    configured_provider = os.getenv("FORECAST_PROVIDER", DEFAULT_FORECAST_PROVIDER).strip().lower()
+    is_auto_fallback = configured_provider == "auto"
     quality = (
         "fresh_aemet_proxy"
         if config.missing_precipitation_fallback is not None
-        else "fresh_aemet"
+        else ("fresh_aemet_degraded" if is_auto_fallback else "fresh_aemet")
     )
+    selection = "aemet_fallback" if is_auto_fallback else "aemet"
     assigned["forecast_quality"] = quality
-    assigned["forecast_selection"] = "aemet"
+    assigned["forecast_selection"] = selection
     assigned["forecast_grid"] = "municipal"
     assigned["forecast_api_version"] = AEMET_API_VERSION
+    if "source_resolution" not in assigned.columns:
+        assigned["source_resolution"] = "aemet_municipal"
     assigned["forecast_query_resolution_km"] = np.nan
     assigned["forecast_requested_points"] = len(points)
     output_name = f"forecast_{issued.strftime('%Y%m%dT%H%M%SZ')}_aemet.parquet"
@@ -565,11 +605,15 @@ def _fetch_fresh_aemet_forecast(
     return assigned, issued, quality, {
         "selected_grid": "municipal",
         "quality": quality,
-        "selection": "aemet",
+        "selection": selection,
         "source": "provider",
         "provider": "aemet",
+        "model": "AEMET-municipal",
+        "model_version": str(assigned.get("model_version", pd.Series([AEMET_API_VERSION])).iloc[0]),
+        "source_resolution": str(assigned.get("source_resolution", pd.Series(["aemet_municipal"])).iloc[0]),
         "api_version": AEMET_API_VERSION,
         "requested_points": len(points),
+        "forecast_path": str(Path(forecast_dir) / output_name),
         "municipalities": [point.municipality_id for point in points],
         "note": (
             "Predicción municipal AEMET; no equivale a WRF 1 km."
@@ -594,11 +638,23 @@ def fetch_fresh_forecast(
 
     provider = _forecast_provider()
     if provider == "aemet":
-        return _fetch_fresh_aemet_forecast(
+        result = _fetch_fresh_aemet_forecast(
             grid,
             issue_time=issue_time,
             forecast_dir=forecast_dir,
         )
+        configured = os.getenv("FORECAST_PROVIDER", DEFAULT_FORECAST_PROVIDER).strip().lower()
+        if configured == "auto" and result[2] == "fresh_aemet":
+            assigned, issued, _, report = result
+            assigned = assigned.copy()
+            assigned["forecast_quality"] = "fresh_aemet_degraded"
+            report = {
+                **report,
+                "quality": "fresh_aemet_degraded",
+                "selection": "aemet_fallback",
+            }
+            return assigned, issued, "fresh_aemet_degraded", report
+        return result
     return _fetch_fresh_meteogalicia_forecast(
         grid,
         issue_time=issue_time,
@@ -643,7 +699,37 @@ def _load_forecast_with_fallback(
     try:
         return fetch_fresh_forecast(grid, issue_time=issue_time, forecast_dir=forecast_dir)
     except (ForecastError, OSError, requests.RequestException) as exc:
-        LOGGER.exception("No se pudo descargar un forecast fresco: %s", exc)
+        LOGGER.warning("No se pudo descargar el forecast primario: %s", exc)
+        configured_provider = os.getenv("FORECAST_PROVIDER", DEFAULT_FORECAST_PROVIDER).strip().lower()
+        auto_aemet_fallback = os.getenv("FORECAST_AUTO_AEMET_FALLBACK", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        # En modo auto se conserva la cadena de disponibilidad del diseño:
+        # WRF 1 km → WRF 04 km → AEMET municipal → archive stale. Una selección
+        # explícita de MeteoGalicia no se sustituye sin que el operador lo pida.
+        if (
+            configured_provider in {"", "auto"}
+            and auto_aemet_fallback
+            and _has_real_credential(os.getenv("AEMET_API_KEY"))
+            and _has_real_credential(os.getenv("METEOGALICIA_API_KEY"))
+        ):
+            try:
+                assigned, issued, quality, report = _fetch_fresh_aemet_forecast(
+                    grid,
+                    issue_time=issue_time,
+                    forecast_dir=forecast_dir,
+                )
+                # AEMET puede ser completo temporalmente, pero sigue siendo
+                # contingencia espacial municipal; se muestra como degradado.
+                quality = "fresh_aemet_degraded"
+                assigned["forecast_quality"] = quality
+                report = {**report, "quality": quality, "selection": "aemet_fallback"}
+                return assigned, issued, quality, report
+            except (ForecastError, OSError, requests.RequestException) as aemet_exc:
+                LOGGER.warning("También falló AEMET como contingencia: %s", aemet_exc)
         if not allow_stale:
             raise
         stale, issued, _ = load_latest_forecast(
@@ -665,12 +751,21 @@ def _load_forecast_with_fallback(
             expected_end=end_local,
             expected_cells=len(grid),
         )
+        archive_path = stale.attrs.get("archive_path")
+        assigned = assigned.copy()
+        assigned["forecast_quality"] = "stale"
+        assigned["forecast_selection"] = "archive"
         selected_grid = _first_column_value(assigned, ("forecast_grid", "grid"))
         return assigned, issued, "stale", {
             "selected_grid": selected_grid,
             "quality": "stale",
             "selection": "archive",
             "source": "archive",
+            "provider": _first_column_value(assigned, ("provider",), default="unknown"),
+            "source_resolution": _first_column_value(
+                assigned, ("source_resolution",), default="unknown"
+            ),
+            "forecast_path": archive_path,
         }
 
 
@@ -741,6 +836,34 @@ def _run_daily_inference_pipeline(
         else issue
     )
     grid = grid_df if grid_df is not None else load_grid(grid_path)
+    configured_model_family = os.getenv("FORECAST_MODEL_FAMILY", "auto").strip().lower()
+    canonical_model_count = sum(
+        (Path(model_dir) / f"forecast_risk_egif_t{horizon}.joblib").exists()
+        for horizon in HORIZONS
+    )
+    canonical_models_present = (
+        canonical_model_count == len(HORIZONS) and configured_model_family != "legacy"
+    )
+    if canonical_model_count not in {0, len(HORIZONS)} and configured_model_family != "legacy":
+        raise ForecastError(
+            "Hay artefactos EGIF canónicos incompletos: deben existir los tres "
+            "modelos forecast_risk_egif_t1/t2/t3.joblib antes de publicar."
+        )
+    if canonical_models_present:
+        expected_static = set(CANONICAL_FEATURES) - set(CANONICAL_WEATHER_FEATURES)
+        missing_static = sorted(expected_static.difference(grid.columns))
+        if missing_static:
+            raise ForecastError(
+                "La rejilla canónica no contiene todas las variables estáticas del contrato EGIF: "
+                f"{missing_static}. No se permiten columnas estáticas ausentes en inferencia."
+            )
+    if canonical_models_present:
+        expected_cells = int(os.getenv("CANONICAL_GRID_CELLS", "29601"))
+        if len(grid) != expected_cells:
+            raise ForecastError(
+                f"El modelo EGIF canónico requiere la rejilla de {expected_cells:,} celdas; "
+                f"la rejilla cargada contiene {len(grid):,}. Configura GRID_PATH con la rejilla EGIF."
+            )
     if history_df is not None:
         history = history_df
         state_report = {"source": "injected"}
@@ -766,6 +889,11 @@ def _run_daily_inference_pipeline(
             "validation_mode": "simulated_as_of" if simulation["enabled"] else "live",
             "simulation_as_of_date": (
                 str(simulation["as_of_date"].date()) if simulation["enabled"] else None
+            ),
+            "feature_quality_counts": (
+                history["state_feature_quality"].value_counts(dropna=False).to_dict()
+                if "state_feature_quality" in history.columns
+                else {}
             ),
         }
     LOGGER.info(
@@ -793,6 +921,12 @@ def _run_daily_inference_pipeline(
         issue_time=issue,
         horizons=HORIZONS,
     )
+    # El agregador genera también aliases canónicos para facilitar la
+    # transición, pero el manifest debe describir el contrato que realmente
+    # consume la familia activa (EGIF o rollback legacy).
+    features["feature_schema_version"] = (
+        "egif-2d-v1" if canonical_models_present else "operational-risk-v1"
+    )
     LOGGER.info(
         "Features operativas listas: %s filas (%s celdas × %s horizontes)",
         len(features),
@@ -815,6 +949,11 @@ def _run_daily_inference_pipeline(
     )
     features["forecast_grid"] = _first_column_value(
         forecast, ("forecast_grid", "grid")
+    )
+    features["forecast_source_resolution"] = _first_column_value(
+        forecast,
+        ("source_resolution",),
+        default=str(forecast_selection.get("source_resolution", "unknown")),
     )
     features["forecast_api_version"] = _first_column_value(
         forecast, ("forecast_api_version",), default="v5"
@@ -848,6 +987,9 @@ def _run_daily_inference_pipeline(
 
     results = []
     model_report: dict[str, object] = {}
+    use_shadow = os.getenv("SHADOW_LEGACY_MODEL", "false").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
     for horizon in HORIZONS:
         horizon_features = features[features["horizon_days"] == horizon].copy()
         LOGGER.info(
@@ -858,12 +1000,50 @@ def _run_daily_inference_pipeline(
         model = load_horizon_model(horizon, model_dir=model_dir)
         probabilities = model.predict_proba(horizon_features)
         scored = add_risk_outputs(horizon_features, probabilities[:, 1])
+        schema_version = getattr(
+            model,
+            "feature_schema_version",
+            getattr(model, "metadata", {}).get("feature_schema_version", "operational-risk-v1"),
+        )
+        if use_shadow and schema_version == "egif-2d-v1":
+            try:
+                shadow_model = load_horizon_model(
+                    horizon, model_dir=model_dir, model_family="legacy"
+                )
+                shadow_probability = shadow_model.predict_proba(horizon_features)[:, 1]
+                scored["shadow_prob_risk"] = shadow_probability
+                scored["shadow_percentil_riesgo"] = pd.Series(
+                    shadow_probability, index=scored.index
+                ).rank(pct=True)
+                scored["shadow_rank_delta"] = (
+                    scored["percentil_riesgo"] - scored["shadow_percentil_riesgo"]
+                )
+                model_report.setdefault(str(horizon), {})["shadow_legacy"] = {
+                    "path": str(Path(model_dir) / f"forecast_risk_t{horizon}.joblib"),
+                    "sha256": sha256_file(Path(model_dir) / f"forecast_risk_t{horizon}.joblib"),
+                    "feature_schema_version": getattr(
+                        shadow_model, "feature_schema_version", "operational-risk-v1"
+                    ),
+                }
+            except (FileNotFoundError, ValueError, TypeError) as shadow_exc:
+                LOGGER.warning("No se pudo calcular el modelo legacy shadow T+%s: %s", horizon, shadow_exc)
         results.append(scored)
-        model_path = Path(model_dir) / f"forecast_risk_t{horizon}.joblib"
-        model_report[str(horizon)] = {
+        model_filename = (
+            f"forecast_risk_egif_t{horizon}.joblib"
+            if schema_version == "egif-2d-v1"
+            else f"forecast_risk_t{horizon}.joblib"
+        )
+        model_path = Path(model_dir) / model_filename
+        primary_report = {
             "path": str(model_path),
             "sha256": sha256_file(model_path) if model_path.exists() else None,
+            "feature_schema_version": schema_version,
+            "model_family": getattr(model, "model_family", "legacy"),
             "metadata": getattr(model, "metadata", {}),
+        }
+        model_report[str(horizon)] = {
+            **model_report.get(str(horizon), {}),
+            **primary_report,
         }
     output = pd.concat(results, ignore_index=True)
     output["forecast_quality_note"] = {
@@ -875,13 +1055,25 @@ def _run_daily_inference_pipeline(
         "fresh_aemet_proxy": (
             "AEMET municipal con proxy explícito de precipitación; solo para pruebas técnicas."
         ),
+        "fresh_aemet_degraded": (
+            "WRF no disponible; se usó AEMET municipal como contingencia degradada. "
+            "No equivale espacialmente a WRF 1 km."
+        ),
         "stale": "No hubo descarga válida; se reutilizó el último forecast archivado.",
     }.get(quality, "Calidad meteorológica no determinada.")
     generated_at = pd.Timestamp.now(tz="UTC")
     output["generated_at"] = generated_at
 
     destination = Path(output_path)
+    features_destination = destination.with_name(f"{destination.stem}.features.parquet")
+    atomic_write_parquet(features, features_destination)
     atomic_write_parquet(output, destination)
+    forecast_archive_path = forecast_selection.get("forecast_path")
+    forecast_archive_sha256 = (
+        sha256_file(Path(forecast_archive_path))
+        if forecast_archive_path and Path(forecast_archive_path).exists()
+        else None
+    )
     metadata = {
         "run_id": generated_at.strftime("%Y%m%dT%H%M%SZ"),
         "issue_time": issue.isoformat(),
@@ -892,6 +1084,11 @@ def _run_daily_inference_pipeline(
             forecast, ("provider",), default=str(forecast_selection.get("provider", "unknown"))
         ),
         "forecast_grid": _first_column_value(forecast, ("forecast_grid", "grid")),
+        "forecast_source_resolution": _first_column_value(
+            forecast,
+            ("source_resolution",),
+            default=str(forecast_selection.get("source_resolution", "unknown")),
+        ),
         "forecast_api_version": _first_column_value(
             forecast, ("forecast_api_version",), default="v5"
         ),
@@ -917,9 +1114,20 @@ def _run_daily_inference_pipeline(
             forecast.get("downloaded_at", pd.Series([None])).iloc[0]
         ),
         "forecast_age_hours": float(output["forecast_age_hours"].iloc[0]),
+        "feature_contract_version": str(
+            output.get("feature_schema_version", pd.Series(["unknown"])).iloc[0]
+        ),
+        "model_family": {
+            horizon: report.get("model_family", "unknown")
+            for horizon, report in model_report.items()
+        },
         "horizons": list(HORIZONS),
         "n_rows": int(len(output)),
         "n_cells": int(output["cell_id"].nunique()),
+        "features_path": str(features_destination),
+        "features_sha256": sha256_file(features_destination),
+        "forecast_archive_path": forecast_archive_path,
+        "forecast_archive_sha256": forecast_archive_sha256,
         "duration_seconds": round(time.perf_counter() - started_at, 3),
     }
     atomic_write_json(metadata, destination.with_suffix(".json"))
@@ -928,7 +1136,14 @@ def _run_daily_inference_pipeline(
         "generated_at": generated_at.isoformat(),
         "forecast_run_source": metadata["forecast_run_source"],
         "forecast_coverage": coverage_report,
+        "issued_at": issued_at.isoformat(),
+        "valid_start": coverage_report.get("valid_start"),
+        "valid_end": coverage_report.get("valid_end"),
+        "missing_variables": coverage_report.get("missing_variables", []),
+        "missing_hours": coverage_report.get("missing_hours", 0),
         "forecast_rows": int(len(forecast)),
+        "forecast_archive_path": forecast_archive_path,
+        "forecast_archive_sha256": forecast_archive_sha256,
         "state": state_report,
         "models": model_report,
         "output_path": str(destination),
@@ -947,9 +1162,21 @@ def parse_args() -> argparse.Namespace:
     manifest_env = os.getenv("INFERENCE_MANIFEST_PATH")
     parser.add_argument("--issue-time", default=None, help="Instante local/ISO de emisión")
     parser.add_argument("--date", default=None, help="Compatibilidad: fecha local de emisión")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH)
-    parser.add_argument("--grid", type=Path, default=DEFAULT_GRID_PATH)
-    parser.add_argument("--forecast-dir", type=Path, default=DEFAULT_FORECAST_DIR)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path(os.getenv("PREDICTIONS_OUTPUT_PATH", str(DEFAULT_OUTPUT_PATH))),
+    )
+    parser.add_argument(
+        "--grid",
+        type=Path,
+        default=Path(os.getenv("GRID_PATH", str(DEFAULT_GRID_PATH))),
+    )
+    parser.add_argument(
+        "--forecast-dir",
+        type=Path,
+        default=Path(os.getenv("METEOGALICIA_FORECAST_DIR", str(DEFAULT_FORECAST_DIR))),
+    )
     parser.add_argument(
         "--forecast-file",
         type=Path,
@@ -959,7 +1186,11 @@ def parse_args() -> argparse.Namespace:
             "sin volver a consultar MeteoSIX (útil para pruebas locales)."
         ),
     )
-    parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR)
+    parser.add_argument(
+        "--model-dir",
+        type=Path,
+        default=Path(os.getenv("MODEL_DIR", os.getenv("DATA_MODELS_PATH", str(DEFAULT_MODEL_DIR)))),
+    )
     parser.add_argument(
         "--state",
         type=Path,

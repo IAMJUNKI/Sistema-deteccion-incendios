@@ -732,6 +732,10 @@ def load_latest_forecast(
             times = pd.to_datetime(frame["valid_time"], utc=True, errors="coerce")
             if times.min() <= start and times.max() >= end:
                 issued = _as_utc_timestamp(frame["forecast_run_at"].iloc[0])
+                # Mantener la ruta fuera de las columnas evita contaminar el
+                # contrato horario, pero permite que la inferencia enlace el
+                # fallback stale con su archivo original en el manifest.
+                frame.attrs["archive_path"] = str(path)
                 return frame, issued, True
         except (OSError, ValueError, ForecastError) as exc:
             LOGGER.warning("No se pudo leer forecast archivado %s: %s", path, exc)

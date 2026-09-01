@@ -18,6 +18,12 @@ nginx/TLS ──> Streamlit ──> lectura del último artefacto publicado
 El dashboard no debe ejecutar inferencia al abrirse. La inferencia es un proceso
 batch separado y el dashboard solo lee el último resultado válido.
 
+El procedimiento reproducible de actualización de código y transferencia de
+artefactos pesados está en
+docs/deployment/despliegue_codigo_y_datos.md. Esta guía de servidor describe la
+arquitectura y la operación de los servicios; el documento enlazado describe
+Deploy Keys, releases atómicas y rsync.
+
 ## 2. Estado actual y alcance
 
 | Capacidad | Estado |
@@ -42,6 +48,8 @@ batch separado y el dashboard solo lee el último resultado válido.
 | Backtest histórico con vintages de forecast | Pendiente |
 | Corrección forecast-observación | Pendiente |
 | Autenticación de usuarios del dashboard | Responsabilidad del servidor/proxy |
+| Deploy Key GitHub y releases atómicas | Implementado mediante scripts de despliegue |
+| Sincronización de datasets/modelos con rsync | Implementado con dry-run y sin borrado por defecto |
 
 La guía incluye una ingesta AEMET para bootstrap, reconciliación y refresco del
 histórico validado, además de un colector de observaciones actuales. Como la
@@ -152,17 +160,20 @@ Después verificar:
 
 ### 5.1 Obtener el código
 
-El código debe desplegarse desde una rama o tag revisado, no desde cambios
-locales sin registrar.
+El código debe desplegarse desde un tag o commit revisado, no desde cambios
+locales sin registrar. La opción recomendada es utilizar la Deploy Key de sólo
+lectura creada por el bootstrap y el script de releases atómicas. Consultar la
+guía completa en docs/deployment/despliegue_codigo_y_datos.md.
 
 ~~~bash
-sudo -u fire-risk git clone https://REEMPLAZAR/repositorio/Sistema-deteccion-incendios.git /srv/fire-risk/app
-cd /srv/fire-risk/app
-sudo -u fire-risk git fetch --tags
-sudo -u fire-risk git checkout TAG_O_COMMIT_VERIFICADO
+sudo -u fire-risk /srv/fire-risk/bin/deploy_code_server.sh \
+  --ref TAG_O_COMMIT_VERIFICADO --run-tests
 ~~~
 
-No se debe ejecutar git pull automáticamente desde el timer de inferencia.
+El script descarga una release nueva, valida la sintaxis y los tests solicitados,
+enlaza el almacenamiento persistente y sólo después cambia
+/srv/fire-risk/app. No se debe ejecutar git pull automáticamente desde el timer
+de inferencia.
 
 ### 5.2 Crear el entorno Conda
 
@@ -224,6 +235,7 @@ La estructura esperada es:
 ~~~text
 /srv/fire-risk/data/
 ├── raw/meteogalicia/raw/
+├── external/egif/
 ├── processed/
 │   ├── grid/
 │   ├── state/
@@ -231,12 +243,12 @@ La estructura esperada es:
 │   ├── predicciones_operativas.json
 │   └── predicciones_operativas.manifest.json
 └── models/
-    ├── forecast_risk_t1.joblib
-    ├── forecast_risk_t1.json
-    ├── forecast_risk_t2.joblib
-    ├── forecast_risk_t2.json
-    ├── forecast_risk_t3.joblib
-    └── forecast_risk_t3.json
+    ├── forecast_risk_egif_t1.joblib
+    ├── forecast_risk_egif_t1.json
+    ├── forecast_risk_egif_t2.joblib
+    ├── forecast_risk_egif_t2.json
+    ├── forecast_risk_egif_t3.joblib
+    └── forecast_risk_egif_t3.json
 ~~~
 
 Los archivos de datos y modelos no se deben almacenar en Git.
@@ -245,11 +257,12 @@ Los archivos de datos y modelos no se deben almacenar en Git.
 
 ### 7.1 Archivo de entorno
 
-Crear el archivo fuera del control de versiones:
+Crear el archivo fuera del control de versiones. En el layout con releases se
+mantiene en config para que sobreviva a las actualizaciones del código:
 
 ~~~bash
-sudo install -o fire-risk -g fire-risk -m 600 /dev/null /srv/fire-risk/app/.env
-sudo -u fire-risk nano /srv/fire-risk/app/.env
+sudo install -o fire-risk -g fire-risk -m 600 /dev/null /srv/fire-risk/config/.env
+sudo -u fire-risk nano /srv/fire-risk/config/.env
 ~~~
 
 Contenido mínimo:
@@ -257,6 +270,7 @@ Contenido mínimo:
 ~~~text
 # auto selecciona MeteoGalicia si tiene clave; en caso contrario AEMET.
 FORECAST_PROVIDER=auto
+FORECAST_AUTO_AEMET_FALLBACK=true
 METEOGALICIA_API_KEY=clave_real
 METEOGALICIA_BASE_URL=https://servizos.meteogalicia.gal/apiv5
 METEOGALICIA_MODEL=WRF
@@ -269,6 +283,7 @@ METEOGALICIA_MAX_RETRIES=3
 FORECAST_MAX_SOURCE_DISTANCE_KM=10
 AEMET_API_KEY=clave_aemet_si_se_usa_como_alternativa
 AEMET_BASE_URL=https://opendata.aemet.es/opendata/api
+AEMET_MUNICIPALITIES_FILE=/srv/fire-risk/data/config/aemet_galicia_municipalities.txt
 AEMET_MUNICIPALITIES=15030:43.3623:-8.4115,27028:43.0097:-7.5568,32054:42.3367:-7.8639,36038:42.4310:-8.6440
 AEMET_USE_HOURLY_OVERLAY=true
 # Mantener vacío en producción; 0 solo para pruebas técnicas si falta mm de lluvia.
@@ -287,8 +302,12 @@ INFERENCE_LOCK_PATH=/srv/fire-risk/data/processed/.daily_inference.lock
 INFERENCE_MANIFEST_PATH=/srv/fire-risk/data/processed/predicciones_operativas.manifest.json
 PREDICTIONS_OUTPUT_PATH=/srv/fire-risk/data/processed/predicciones_operativas.parquet
 PREDICTIONS_MANIFEST_PATH=/srv/fire-risk/data/processed/predicciones_operativas.manifest.json
-GRID_PATH=/srv/fire-risk/data/processed/grid/galicia_grid_1km_2018.parquet
+GRID_PATH=/srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet
 MODEL_DIR=/srv/fire-risk/data/models
+FORECAST_MODEL_FAMILY=canonical
+EGIF_DATASET_DIR=/srv/fire-risk/data/external/egif
+CANONICAL_GRID_CELLS=29601
+SHADOW_LEGACY_MODEL=true
 ~~~
 
 El archivo real no debe aparecer en logs, backups públicos, tickets ni
@@ -298,14 +317,16 @@ por una credencial inyectada en tiempo de ejecución.
 Para probar actualmente con la clave AEMET, usa `FORECAST_PROVIDER=aemet` y
 deja `METEOGALICIA_API_KEY` vacía. Cuando llegue la clave de MeteoGalicia,
 puedes volver a `FORECAST_PROVIDER=auto` o fijar `FORECAST_PROVIDER=meteogalicia`.
-La modalidad AEMET quedará marcada como `fresh_aemet` y no debe confundirse con
-el producto WRF de resolución 1 km.
+La modalidad AEMET explícita queda marcada como `fresh_aemet`; si entra por la
+cadena automática de contingencia queda marcada como
+`fresh_aemet_degraded`. En ambos casos no debe confundirse con el producto WRF
+de resolución 1 km.
 
 ### 7.2 Permisos
 
 ~~~bash
-sudo chown fire-risk:fire-risk /srv/fire-risk/app/.env
-sudo chmod 600 /srv/fire-risk/app/.env
+sudo chown fire-risk:fire-risk /srv/fire-risk/config/.env
+sudo chmod 600 /srv/fire-risk/config/.env
 sudo chmod -R u+rwX /srv/fire-risk/data
 ~~~
 
@@ -325,7 +346,7 @@ el primer estado sin esperar 30 días:
 cd /srv/fire-risk/app
 sudo -u fire-risk env PYTHONPATH=. /opt/miniconda3/envs/incendios-forestales/bin/python \
   scripts/ingest_aemet_weather_state.py \
-  --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_2018.parquet \
+  --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet \
   --observations /srv/fire-risk/data/processed/observations/weather_daily_latest.parquet \
   --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet \
   --raw-dir /srv/fire-risk/data/raw/aemet/observations
@@ -343,7 +364,21 @@ independiente o usar un análisis histórico explícito.
 
 ### 8.1 Rejilla
 
-Copiar la rejilla en:
+Para el modelo EGIF 2D no se debe reutilizar la rejilla legacy de 30.697
+celdas. A partir del NetCDF canónico se genera la rejilla con geometría y
+variables estáticas:
+
+~~~bash
+sudo -u fire-risk env PYTHONPATH=. /opt/miniconda3/envs/incendios-forestales/bin/python \
+  scripts/prepare_operational_grid.py \
+  --cube /srv/fire-risk/data/processed/datacube/galicia_1km.nc \
+  --output /srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet
+~~~
+
+Después se cambia `GRID_PATH` a ese fichero y se comprueba que contiene 29.601
+filas y todas las columnas estáticas del contrato `egif-2d-v1`.
+
+Como fallback legacy puede conservarse la rejilla antigua en:
 
 ~~~text
 /srv/fire-risk/data/processed/grid/galicia_grid_1km_2018.parquet
@@ -354,7 +389,7 @@ Verificarla:
 ~~~bash
 cd /srv/fire-risk/app
 sudo -u fire-risk env PYTHONPATH=. /opt/miniconda3/envs/incendios-forestales/bin/python \
-  -c "import geopandas as gpd; p=gpd.read_parquet('data/processed/grid/galicia_grid_1km_2018.parquet'); print(p.shape, p.columns.tolist())"
+  -c "import geopandas as gpd; p=gpd.read_parquet('data/processed/grid/galicia_grid_1km_egif.parquet'); print(p.shape, p.columns.tolist())"
 ~~~
 
 Debe contener cell_id, lat_centroid y lon_centroid. La versión geoespacial debe
@@ -362,20 +397,31 @@ registrarse junto al release.
 
 ### 8.2 Modelos
 
-Los modelos deben haberse entrenado offline y pasar validación temporal. Copiar
-los tres joblib y sus JSON de métricas:
+Los modelos EGIF 2D deben haberse entrenado offline y pasar validación temporal.
+El comando recomendado, ejecutado en una máquina con el datacubo, es:
 
 ~~~bash
-sudo -u fire-risk cp forecast_risk_t1.joblib /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_t1.json /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_t2.joblib /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_t2.json /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_t3.joblib /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_t3.json /srv/fire-risk/data/models/
+sudo -u fire-risk env PYTHONPATH=. /opt/miniconda3/envs/incendios-forestales/bin/python \
+  scripts/train_egif_operational.py \
+  --dataset-dir /srv/fire-risk/data/external/egif \
+  --output-dir /srv/fire-risk/data/models
 ~~~
 
-No se debe mezclar T+1, T+2 y T+3 de releases incompatibles. El loader valida
-horizonte y schema de features.
+El entrenamiento recorre por lotes y no debe ejecutarse durante la inferencia.
+Como alternativa se copian los tres artefactos y sus JSON:
+
+~~~bash
+sudo -u fire-risk cp forecast_risk_egif_t1.joblib /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_t1.json /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_t2.joblib /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_t2.json /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_t3.joblib /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_t3.json /srv/fire-risk/data/models/
+~~~
+
+No se debe mezclar T+1, T+2 y T+3 de releases incompatibles. La inferencia y el
+health check validan horizonte, checksums y esquema de features. El antiguo `forecast_risk_t{h}.joblib`
+se conserva únicamente como rollback o shadow.
 
 ### 8.3 Estado meteorológico
 
@@ -387,7 +433,7 @@ actualizar el estado en una sola operación:
 cd /srv/fire-risk/app
 sudo -u fire-risk env PYTHONPATH=. /opt/miniconda3/envs/incendios-forestales/bin/python \
   scripts/ingest_aemet_weather_state.py \
-  --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_2018.parquet \
+  --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet \
   --observations /srv/fire-risk/data/processed/observations/weather_daily_latest.parquet \
   --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet \
   --raw-dir /srv/fire-risk/data/raw/aemet/observations
@@ -468,7 +514,7 @@ User=fire-risk
 Group=fire-risk
 WorkingDirectory=/srv/fire-risk/app
 EnvironmentFile=/srv/fire-risk/app/.env
-ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/ingest_aemet_weather_state.py --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_2018.parquet --observations /srv/fire-risk/data/processed/observations/weather_daily_latest.parquet --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet --raw-dir /srv/fire-risk/data/raw/aemet/observations
+ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/ingest_aemet_weather_state.py --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet --observations /srv/fire-risk/data/processed/observations/weather_daily_latest.parquet --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet --raw-dir /srv/fire-risk/data/raw/aemet/observations
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
@@ -893,7 +939,7 @@ Si no se puede usar systemd, cron es menos observable. Siempre se debe usar
 ruta absoluta, usuario de servicio, logs y lock:
 
 ~~~cron
-20 4 * * * cd /srv/fire-risk/app && /usr/bin/flock -n /srv/fire-risk/data/processed/.external-state.lock /opt/miniconda3/envs/incendios-forestales/bin/python scripts/ingest_aemet_weather_state.py --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_2018.parquet --observations /srv/fire-risk/data/processed/observations/weather_daily_latest.parquet --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet --raw-dir /srv/fire-risk/data/raw/aemet/observations >> /var/log/fire-risk-state.log 2>&1
+20 4 * * * cd /srv/fire-risk/app && /usr/bin/flock -n /srv/fire-risk/data/processed/.external-state.lock /opt/miniconda3/envs/incendios-forestales/bin/python scripts/ingest_aemet_weather_state.py --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet --observations /srv/fire-risk/data/processed/observations/weather_daily_latest.parquet --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet --raw-dir /srv/fire-risk/data/raw/aemet/observations >> /var/log/fire-risk-state.log 2>&1
 0 5 * * * cd /srv/fire-risk/app && /usr/bin/flock -n /srv/fire-risk/data/processed/.external-inference.lock /opt/miniconda3/envs/incendios-forestales/bin/python scripts/run_daily_inference.py >> /var/log/fire-risk-inference.log 2>&1
 15 5 * * * cd /srv/fire-risk/app && /usr/bin/flock -n /srv/fire-risk/data/processed/.external-check.lock /opt/miniconda3/envs/incendios-forestales/bin/python scripts/check_operational_run.py >> /var/log/fire-risk-health.log 2>&1
 ~~~
@@ -917,7 +963,8 @@ preferibles por dependencias, estado y logs.
 
 - [ ] rejilla leíble;
 - [ ] tres modelos presentes;
-- [ ] modelos compatibles con operational-risk-v1;
+- [ ] modelos compatibles con egif-2d-v1 y 50 variables;
+- [ ] rejilla canónica con 29.601 celdas y estáticas completas;
 - [ ] estado con 30 días por celda;
 - [ ] forecasts raw y processed tienen retención;
 - [ ] backups configurados.

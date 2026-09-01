@@ -14,6 +14,12 @@ import streamlit as st
 from src.models.forecast_risk_model import load_horizon_model
 from src.webapp.utils.geo_helpers import assign_approx_province, assign_comarca_or_distrito
 
+DEFAULT_CANONICAL_GRID_PATH = "data/processed/grid/galicia_grid_1km_egif.parquet"
+LEGACY_GRID_PATHS = (
+    "data/processed/grid/galicia_grid_1km_2018.parquet",
+    "data/processed/grid/galicia_grid_1km_2012.parquet",
+)
+
 
 @st.cache_data(ttl=300)
 def list_available_inference_datasets() -> dict[str, str]:
@@ -80,7 +86,7 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
     # Si faltan lat_centroid o lon_centroid, intentar recuperar de los centroides de la rejilla
     if ("lat_centroid" not in df.columns or "lon_centroid" not in df.columns) and "cell_id" in df.columns:
         centroids_path = Path("data/processed/grid_galicia_centroids.parquet")
-        grid_path = Path("data/processed/grid/galicia_grid_1km_2018.parquet")
+        grid_path = Path(os.getenv("GRID_PATH", DEFAULT_CANONICAL_GRID_PATH))
         if centroids_path.exists():
             try:
                 cdf = pd.read_parquet(centroids_path)
@@ -137,10 +143,29 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
     elif "distrito_forestal" not in df.columns:
         df["distrito_forestal"] = "Galicia Sur"
 
-    # Calcular indicador de la Regla Crítica 30-30-30
-    tmax = pd.to_numeric(df.get("tmax_vc", pd.Series([20.0] * len(df))), errors="coerce").fillna(20.0)
-    rhmin = pd.to_numeric(df.get("rhmin_vc", pd.Series([50.0] * len(df))), errors="coerce").fillna(50.0)
-    vmax = pd.to_numeric(df.get("vmax_vc", pd.Series([15.0] * len(df))), errors="coerce").fillna(15.0)
+    # Calcular indicador de la Regla Crítica 30-30-30. El contrato EGIF usa
+    # nombres canónicos; los aliases legacy se conservan para rollback.
+    tmax = pd.to_numeric(
+        df.get(
+            "temperature_max_12_18h",
+            df.get("tmax_vc", pd.Series([20.0] * len(df))),
+        ),
+        errors="coerce",
+    ).fillna(20.0)
+    rhmin = pd.to_numeric(
+        df.get(
+            "relative_humidity_min_12_18h",
+            df.get("rhmin_vc", pd.Series([50.0] * len(df))),
+        ),
+        errors="coerce",
+    ).fillna(50.0)
+    vmax = pd.to_numeric(
+        df.get(
+            "wind_speed_max_12_18h",
+            df.get("vmax_vc", pd.Series([15.0] * len(df))),
+        ),
+        errors="coerce",
+    ).fillna(15.0)
     df["regla_30_30_activa"] = (tmax >= 30.0) & (rhmin <= 30.0) & (vmax >= 30.0)
 
     # Acción recomendada
@@ -187,15 +212,15 @@ def load_dashboard_model(horizon: int):
 @st.cache_data(ttl=3600)
 def load_grid_geometries() -> pd.DataFrame:
     """Carga las geometrías y centroides reales de las celdas de la rejilla de 1 km."""
-    grid_path = Path(
-        os.getenv(
-            "GRID_PATH",
-            "data/processed/grid/galicia_grid_1km_2018.parquet",
-        )
+    configured_grid = Path(os.getenv("GRID_PATH", DEFAULT_CANONICAL_GRID_PATH))
+    candidates = [configured_grid, Path(DEFAULT_CANONICAL_GRID_PATH)] + [
+        Path(path) for path in LEGACY_GRID_PATHS
+    ]
+    grid_path = next(
+        (candidate for candidate in dict.fromkeys(candidates) if candidate.exists()),
+        None,
     )
-    if not grid_path.exists():
-        grid_path = Path("data/processed/grid/galicia_grid_1km_2012.parquet")
-    if not grid_path.exists():
+    if grid_path is None:
         centroids_path = Path("data/processed/grid_galicia_centroids.parquet")
         if centroids_path.exists():
             try:
@@ -208,12 +233,12 @@ def load_grid_geometries() -> pd.DataFrame:
         grid = gpd.read_parquet(grid_path)
         if grid.crs is not None and str(grid.crs) != "EPSG:4326":
             grid = grid.to_crs("EPSG:4326")
-        
+
         # Asegurar lat_centroid y lon_centroid si faltan
         if "lat_centroid" not in grid.columns and "geometry" in grid.columns:
             grid["lat_centroid"] = grid.geometry.centroid.y
             grid["lon_centroid"] = grid.geometry.centroid.x
-            
+
         ret_cols = [c for c in ["cell_id", "geometry", "lat_centroid", "lon_centroid"] if c in grid.columns]
         return pd.DataFrame(grid[ret_cols])
     except Exception:

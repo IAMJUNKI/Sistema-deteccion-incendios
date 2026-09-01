@@ -35,7 +35,7 @@ from src.ingestion.aemet_observations import (
 from src.ingestion.weather_state import merge_weather_state, save_weather_state
 from src.operational.artifacts import RunLockError, atomic_write_parquet, run_lock
 
-DEFAULT_GRID = Path("data/processed/grid/galicia_grid_1km_2018.parquet")
+DEFAULT_GRID = Path("data/processed/grid/galicia_grid_1km_egif.parquet")
 DEFAULT_HOURLY = Path("data/processed/observations/aemet_hourly_observations.parquet")
 DEFAULT_DAILY = Path("data/processed/observations/weather_daily_latest.parquet")
 DEFAULT_STATE = Path("data/processed/state/weather_daily_state.parquet")

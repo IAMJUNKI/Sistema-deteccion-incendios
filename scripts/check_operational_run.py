@@ -10,22 +10,38 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 import pandas as pd
+from dotenv import load_dotenv
 
 from src.operational.artifacts import sha256_file
 
 
 def parse_args() -> argparse.Namespace:
+    load_dotenv()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("data/processed/predicciones_operativas.parquet"),
+        default=Path(
+            os.getenv(
+                "PREDICTIONS_OUTPUT_PATH",
+                "data/processed/predicciones_operativas.parquet",
+            )
+        ),
     )
-    parser.add_argument("--manifest", type=Path, default=None)
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=(
+            Path(os.getenv("PREDICTIONS_MANIFEST_PATH"))
+            if os.getenv("PREDICTIONS_MANIFEST_PATH")
+            else None
+        ),
+    )
     parser.add_argument("--max-age-hours", type=float, default=30.0)
     parser.add_argument("--min-coverage", type=float, default=1.0)
     parser.add_argument("--allow-stale", action="store_true")
@@ -68,6 +84,26 @@ def check_run(
     actual_sha = sha256_file(output_path)
     if expected_sha and expected_sha != actual_sha:
         raise RuntimeError("El checksum del output no coincide con el manifiesto.")
+    forecast_path = payload.get("forecast_archive_path")
+    forecast_sha = payload.get("forecast_archive_sha256")
+    if forecast_path and forecast_sha:
+        forecast_file = Path(forecast_path)
+        if not forecast_file.exists() or sha256_file(forecast_file) != forecast_sha:
+            raise RuntimeError("El checksum del forecast archivado no coincide con el manifiesto.")
+
+    models = payload.get("models", {})
+    if isinstance(models, dict):
+        for horizon, model in models.items():
+            if not isinstance(model, dict):
+                continue
+            model_path = model.get("path")
+            model_sha = model.get("sha256")
+            if model_path and model_sha:
+                model_file = Path(model_path)
+                if not model_file.exists() or sha256_file(model_file) != model_sha:
+                    raise RuntimeError(
+                        f"El checksum del modelo T+{horizon} no coincide con el manifiesto."
+                    )
 
     horizons = set(int(value) for value in payload.get("horizons", []))
     if horizons != {1, 2, 3}:
@@ -82,11 +118,19 @@ def check_run(
         )
     if quality == "stale" and not allow_stale:
         raise RuntimeError("La última inferencia usa un forecast stale.")
-    if quality in {"fresh_fallback", "fresh_aemet", "fresh_aemet_proxy"} and fail_on_degraded:
+    if quality in {
+        "fresh_fallback",
+        "fresh_aemet",
+        "fresh_aemet_proxy",
+        "fresh_aemet_degraded",
+        "incomplete",
+        "invalid",
+        "unavailable",
+    } and fail_on_degraded:
         detail = (
             "WRF 04 km como fallback"
             if quality == "fresh_fallback"
-            else "AEMET municipal como proveedor degradado"
+            else "AEMET o forecast no nominal"
         )
         raise RuntimeError(f"La última inferencia usa {detail}.")
     age = float(payload.get("forecast_age_hours", float("inf")))
@@ -99,6 +143,24 @@ def check_run(
             f"Cobertura horaria insuficiente: {minimum_ratio:.1%}; "
             f"mínimo requerido={min_coverage:.1%}."
         )
+
+    feature_contract = str(payload.get("feature_contract_version", "unknown"))
+    if feature_contract == "egif-2d-v1":
+        if int(payload.get("n_cells", 29601)) != 29601:
+            raise RuntimeError("El manifest canónico no declara las 29.601 celdas EGIF.")
+        models = payload.get("models", {})
+        if set(str(key) for key in models) != {"1", "2", "3"}:
+            raise RuntimeError("El manifest canónico no contiene los tres modelos por horizonte.")
+        for horizon, model in models.items():
+            if model.get("feature_schema_version") != "egif-2d-v1":
+                raise RuntimeError(f"El modelo T+{horizon} no usa egif-2d-v1.")
+
+    features_path = payload.get("features_path")
+    features_sha = payload.get("features_sha256")
+    if features_path and features_sha:
+        feature_file = Path(features_path)
+        if not feature_file.exists() or sha256_file(feature_file) != features_sha:
+            raise RuntimeError("El checksum de las features no coincide con el manifiesto.")
 
     frame = pd.read_parquet(output_path, columns=["horizon_days", "cell_id", "prob_risk"])
     if set(frame["horizon_days"].astype(int).unique()) != {1, 2, 3}:
@@ -117,6 +179,7 @@ def check_run(
             "fresh_fallback",
             "fresh_aemet",
             "fresh_aemet_proxy",
+            "fresh_aemet_degraded",
             "stale",
         },
         "forecast_age_hours": age,

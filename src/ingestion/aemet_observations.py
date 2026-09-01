@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
+from src.features.operational_features import calculate_vpd
 from src.operational.artifacts import atomic_write_json
 
 from .aemet_forecast import AEMET_API_VERSION, AEMET_BASE_URL, AemetClient, AemetForecastConfig
@@ -41,6 +42,21 @@ AEMET_STATIONS_ENDPOINT = "valores/climatologicos/inventarioestaciones/todasesta
 AEMET_CURRENT_OBSERVATIONS_ENDPOINT = "observacion/convencional/todas"
 AEMET_MAX_DAILY_RANGE_DAYS = 15
 DAILY_WEATHER_COLUMNS = ["cell_id", "fecha", "tmax_vc", "rhmin_vc", "vmax_vc", "prec_dia"]
+CANONICAL_DAILY_WEATHER_COLUMNS = [
+    "temperature_mean",
+    "temperature_min",
+    "temperature_max",
+    "temperature_max_12_18h",
+    "relative_humidity_mean",
+    "relative_humidity_min",
+    "relative_humidity_min_12_18h",
+    "wind_speed_mean",
+    "wind_speed_max",
+    "wind_speed_max_12_18h",
+    "vpd_mean",
+    "vpd_max_12_18h",
+    "precipitation_sum",
+]
 
 
 class AemetObservationError(ForecastError):
@@ -379,12 +395,17 @@ def aggregate_aemet_hourly_to_daily(
         "precipitation_mm",
     ]
     frame[numeric] = frame[numeric].apply(pd.to_numeric, errors="coerce")
+    frame["vpd_hourly"] = calculate_vpd(
+        frame["temperature_c"], frame["relative_humidity_pct"]
+    )
+    frame["local_hour"] = frame["valid_time"].dt.tz_convert(GALICIA_TZ).dt.hour
 
     rows: list[dict[str, Any]] = []
     for (station_id, fecha), group in frame.groupby(["station_id", "fecha"], sort=True):
         coverage = int(group["valid_time"].dt.floor("h").nunique())
         if coverage < min_coverage_hours:
             continue
+        critical = group[group["local_hour"].between(12, 18)]
         rows.append(
             {
                 "station_id": station_id,
@@ -398,6 +419,19 @@ def aggregate_aemet_hourly_to_daily(
                 "rhmin_vc": group["relative_humidity_pct"].min(),
                 "vmax_vc": group["wind_speed_kmh"].max(),
                 "prec_dia": group["precipitation_mm"].sum(min_count=1),
+                "temperature_mean": group["temperature_c"].mean(),
+                "temperature_min": group["temperature_c"].min(),
+                "temperature_max": group["temperature_c"].max(),
+                "temperature_max_12_18h": critical["temperature_c"].max(),
+                "relative_humidity_mean": group["relative_humidity_pct"].mean(),
+                "relative_humidity_min": group["relative_humidity_pct"].min(),
+                "relative_humidity_min_12_18h": critical["relative_humidity_pct"].min(),
+                "wind_speed_mean": group["wind_speed_kmh"].mean(),
+                "wind_speed_max": group["wind_speed_kmh"].max(),
+                "wind_speed_max_12_18h": critical["wind_speed_kmh"].max(),
+                "vpd_mean": group["vpd_hourly"].mean(),
+                "vpd_max_12_18h": critical["vpd_hourly"].max(),
+                "precipitation_sum": group["precipitation_mm"].sum(min_count=1),
                 "coverage_hours": float(coverage),
                 "source": "aemet_current_observation_aggregate",
             }
@@ -464,6 +498,36 @@ def interpolate_aemet_daily_to_grid(
 ) -> pd.DataFrame:
     """Interpola observaciones diarias de estaciones a cada celda de la rejilla."""
 
+    station_daily = station_daily.copy()
+    # La climatología diaria de AEMET antigua solo contiene los cuatro
+    # agregados de compatibilidad. Los derivados canónicos se rellenan aquí
+    # como proxy explícito; cuando la fuente procede de observaciones horarias
+    # ya estarán presentes y conservarán su resolución real.
+    aliases = {
+        "temperature_mean": "tmax_vc",
+        "temperature_min": "tmax_vc",
+        "temperature_max": "tmax_vc",
+        "temperature_max_12_18h": "tmax_vc",
+        "relative_humidity_mean": "rhmin_vc",
+        "relative_humidity_min": "rhmin_vc",
+        "relative_humidity_min_12_18h": "rhmin_vc",
+        "wind_speed_mean": "vmax_vc",
+        "wind_speed_max": "vmax_vc",
+        "wind_speed_max_12_18h": "vmax_vc",
+        "precipitation_sum": "prec_dia",
+    }
+    for canonical, legacy in aliases.items():
+        if canonical not in station_daily.columns and legacy in station_daily.columns:
+            station_daily[canonical] = station_daily[legacy]
+    if "vpd_mean" not in station_daily.columns:
+        station_daily["vpd_mean"] = calculate_vpd(
+            station_daily["temperature_mean"], station_daily["relative_humidity_mean"]
+        )
+    if "vpd_max_12_18h" not in station_daily.columns:
+        station_daily["vpd_max_12_18h"] = calculate_vpd(
+            station_daily["temperature_max_12_18h"],
+            station_daily["relative_humidity_min_12_18h"],
+        )
     required_station = {"station_id", "fecha", "lat", "lon", *DAILY_WEATHER_COLUMNS[2:]}
     missing_station = required_station.difference(station_daily.columns)
     if missing_station:
@@ -478,7 +542,11 @@ def interpolate_aemet_daily_to_grid(
         grid["lat_centroid"].to_numpy(float), grid["lon_centroid"].to_numpy(float)
     )
     rows: list[pd.DataFrame] = []
-    variables = ["tmax_vc", "rhmin_vc", "vmax_vc", "prec_dia"]
+    variables = list(
+        dict.fromkeys(
+            ["tmax_vc", "rhmin_vc", "vmax_vc", "prec_dia", *CANONICAL_DAILY_WEATHER_COLUMNS]
+        )
+    )
     for fecha, day in station_daily.groupby("fecha", sort=True):
         station_xy = _project_coordinates(day["lat"].to_numpy(float), day["lon"].to_numpy(float))
         output = pd.DataFrame({"cell_id": grid_ids, "fecha": fecha})
@@ -502,7 +570,8 @@ def interpolate_aemet_daily_to_grid(
     if not rows:
         raise AemetObservationError("No hay días de observación para interpolar.")
     result = pd.concat(rows, ignore_index=True)
-    missing = result[DAILY_WEATHER_COLUMNS].isna().sum()
+    required_output = list(dict.fromkeys([*DAILY_WEATHER_COLUMNS, *CANONICAL_DAILY_WEATHER_COLUMNS]))
+    missing = result[required_output].isna().sum()
     if missing.any():
         raise AemetObservationError(
             "La interpolación dejó valores ausentes: "

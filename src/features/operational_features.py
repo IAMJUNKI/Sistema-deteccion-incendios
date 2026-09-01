@@ -16,6 +16,11 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
+from src.features.canonical_contract import (
+    CANONICAL_FEATURE_SCHEMA_VERSION,
+    CANONICAL_FEATURES,
+)
+
 GALICIA_TZ = ZoneInfo("Europe/Madrid")
 CRITICAL_START_HOUR = 12
 CRITICAL_END_HOUR = 18
@@ -52,6 +57,22 @@ BASE_WEATHER_COLUMNS = [
     "rhmin_vc",
     "vmax_vc",
     "prec_dia",
+]
+
+DAILY_CANONICAL_WEATHER_COLUMNS = [
+    "temperature_mean",
+    "temperature_min",
+    "temperature_max",
+    "temperature_max_12_18h",
+    "relative_humidity_mean",
+    "relative_humidity_min",
+    "relative_humidity_min_12_18h",
+    "wind_speed_mean",
+    "wind_speed_max",
+    "wind_speed_max_12_18h",
+    "vpd_mean",
+    "vpd_max_12_18h",
+    "precipitation_sum",
 ]
 
 
@@ -105,16 +126,38 @@ def aggregate_hourly_forecast(forecast_df: pd.DataFrame) -> pd.DataFrame:
     critical = hourly[hourly["local_hour"].between(CRITICAL_START_HOUR, CRITICAL_END_HOUR)]
     if critical.empty:
         return pd.DataFrame()
-    daily = critical.groupby(keys, as_index=False).agg(
-        tmax_vc=("temperature_c", "max"),
-        rhmin_vc=("relative_humidity_pct", "min"),
-        vmax_vc=("wind_speed_kmh", "max"),
-        vpd_vc=("vpd_hourly", "max"),
+    daily = hourly.groupby(keys, as_index=False).agg(
+        temperature_mean=("temperature_c", "mean"),
+        temperature_min=("temperature_c", "min"),
+        temperature_max=("temperature_c", "max"),
+        relative_humidity_mean=("relative_humidity_pct", "mean"),
+        relative_humidity_min=("relative_humidity_pct", "min"),
+        wind_speed_mean=("wind_speed_kmh", "mean"),
+        wind_speed_max=("wind_speed_kmh", "max"),
+        vpd_mean=("vpd_hourly", "mean"),
     )
+    critical_daily = critical.groupby(keys, as_index=False).agg(
+        temperature_max_12_18h=("temperature_c", "max"),
+        relative_humidity_min_12_18h=("relative_humidity_pct", "min"),
+        wind_speed_max_12_18h=("wind_speed_kmh", "max"),
+        vpd_max_12_18h=("vpd_hourly", "max"),
+    )
+    daily = daily.merge(critical_daily, on=keys, validate="one_to_one")
     precipitation = hourly.groupby(keys, as_index=False)["precipitation_mm"].sum(
         min_count=1
     )
-    daily = daily.merge(precipitation.rename(columns={"precipitation_mm": "prec_dia"}), on=keys)
+    daily = daily.merge(
+        precipitation.rename(columns={"precipitation_mm": "precipitation_sum"}),
+        on=keys,
+        validate="one_to_one",
+    )
+    # Aliases del contrato operativo antiguo. Se conservan para que los
+    # artefactos de rollback puedan convivir durante la migración a EGIF.
+    daily["tmax_vc"] = daily["temperature_max_12_18h"]
+    daily["rhmin_vc"] = daily["relative_humidity_min_12_18h"]
+    daily["vmax_vc"] = daily["wind_speed_max_12_18h"]
+    daily["prec_dia"] = daily["precipitation_sum"]
+    daily["vpd_vc"] = daily["vpd_max_12_18h"]
     for column in (
         "forecast_run_at",
         "downloaded_at",
@@ -154,7 +197,50 @@ def _normalise_history(history_df: pd.DataFrame) -> pd.DataFrame:
     for old, new in aliases.items():
         if old in history.columns and new not in history.columns:
             history = history.rename(columns={old: new})
-    required = {"cell_id", "fecha", *BASE_WEATHER_COLUMNS}
+
+    # La tienda histórica anterior solo conserva agregados de la ventana
+    # crítica. Se proyectan como proxy para mantener el rollback operativo;
+    # las nuevas ingestas conservan las estadísticas horarias reales.
+    canonical_aliases = {
+        "temperature_max": "tmax_vc",
+        "temperature_max_12_18h": "tmax_vc",
+        "temperature_mean": "tmax_vc",
+        "temperature_min": "tmax_vc",
+        "relative_humidity_min": "rhmin_vc",
+        "relative_humidity_min_12_18h": "rhmin_vc",
+        "relative_humidity_mean": "rhmin_vc",
+        "wind_speed_max": "vmax_vc",
+        "wind_speed_max_12_18h": "vmax_vc",
+        "wind_speed_mean": "vmax_vc",
+        "precipitation_sum": "prec_dia",
+    }
+    for canonical, legacy in canonical_aliases.items():
+        if canonical not in history.columns and legacy in history.columns:
+            history[canonical] = history[legacy]
+    legacy_aliases = {
+        "tmax_vc": "temperature_max_12_18h",
+        "rhmin_vc": "relative_humidity_min_12_18h",
+        "vmax_vc": "wind_speed_max_12_18h",
+        "prec_dia": "precipitation_sum",
+    }
+    for legacy, canonical in legacy_aliases.items():
+        if legacy not in history.columns and canonical in history.columns:
+            history[legacy] = history[canonical]
+    if "vpd_mean" not in history.columns:
+        history["vpd_mean"] = calculate_vpd(
+            history["temperature_mean"], history["relative_humidity_mean"]
+        )
+    if "vpd_max_12_18h" not in history.columns:
+        history["vpd_max_12_18h"] = calculate_vpd(
+            history["temperature_max_12_18h"], history["relative_humidity_min_12_18h"]
+        )
+
+    required = {
+        "cell_id",
+        "fecha",
+        *BASE_WEATHER_COLUMNS,
+        *DAILY_CANONICAL_WEATHER_COLUMNS,
+    }
     missing = required.difference(history.columns)
     if missing:
         raise ValueError(f"Faltan columnas históricas: {sorted(missing)}")
@@ -245,7 +331,12 @@ def build_operational_features(
     history = history[history["fecha"] < issue_date].copy()
     # El forecast diario y el histórico tienen un contrato común. Los nombres
     # de origen se conservan en columnas separadas para trazabilidad.
-    weather_columns = ["cell_id", "fecha", *BASE_WEATHER_COLUMNS]
+    weather_columns = [
+        "cell_id",
+        "fecha",
+        *BASE_WEATHER_COLUMNS,
+        *DAILY_CANONICAL_WEATHER_COLUMNS,
+    ]
     history_weather = history[weather_columns].copy()
     forecast_weather = daily_forecast[weather_columns].copy()
     combined = pd.concat([history_weather, forecast_weather], ignore_index=True)
@@ -268,13 +359,21 @@ def build_operational_features(
     rolling_source = combined.set_index("fecha")
     rolling_features: dict[str, pd.Series] = {}
     for name, column, window_days, aggregation in (
-        ("prec_acum_3d", "prec_dia", 3, "sum"),
-        ("prec_acum_7d", "prec_dia", 7, "sum"),
-        ("prec_acum_14d", "prec_dia", 14, "sum"),
-        ("prec_acum_30d", "prec_dia", 30, "sum"),
-        ("tmax_media_7d", "tmax_vc", 7, "mean"),
-        ("rhmin_media_7d", "rhmin_vc", 7, "mean"),
-        ("vmax_media_7d", "vmax_vc", 7, "mean"),
+        ("prec_acum_3d", "precipitation_sum", 3, "sum"),
+        ("prec_acum_7d", "precipitation_sum", 7, "sum"),
+        ("prec_acum_14d", "precipitation_sum", 14, "sum"),
+        ("prec_acum_30d", "precipitation_sum", 30, "sum"),
+        ("tmax_media_7d", "temperature_max", 7, "mean"),
+        ("rhmin_media_7d", "relative_humidity_min", 7, "mean"),
+        ("vmax_media_7d", "wind_speed_max", 7, "mean"),
+        ("precipitation_sum_3d", "precipitation_sum", 3, "sum"),
+        ("precipitation_sum_7d", "precipitation_sum", 7, "sum"),
+        ("precipitation_sum_14d", "precipitation_sum", 14, "sum"),
+        ("precipitation_sum_30d", "precipitation_sum", 30, "sum"),
+        ("temperature_mean_7d", "temperature_mean", 7, "mean"),
+        ("relative_humidity_mean_7d", "relative_humidity_mean", 7, "mean"),
+        ("wind_speed_mean_7d", "wind_speed_mean", 7, "mean"),
+        ("relative_humidity_mean_14d", "relative_humidity_mean", 14, "mean"),
     ):
         rolling_features[name] = (
             rolling_source.groupby("cell_id", sort=False)[column]
@@ -291,7 +390,7 @@ def build_operational_features(
     # La racha seca se expresa como segmentos de filas secas separados por
     # lluvia o por un valor faltante. El desplazamiento final excluye el día
     # objetivo, igual que el bucle histórico original.
-    dry = combined["prec_dia"].notna() & combined["prec_dia"].lt(RAIN_THRESHOLD_MM)
+    dry = combined["precipitation_sum"].notna() & combined["precipitation_sum"].lt(RAIN_THRESHOLD_MM)
     dry_segments = (~dry).groupby(combined["cell_id"], sort=False).cumsum()
     dry_streak = dry.astype("int64").groupby(
         [combined["cell_id"], dry_segments], sort=False
@@ -327,13 +426,16 @@ def build_operational_features(
     features["issue_date_local"] = issue_date
     features["source_type"] = "forecast"
     features["alerta_30_30"] = (
-        (features["tmax_vc"] >= 30) & (features["rhmin_vc"] <= 30)
+        (features["temperature_max_12_18h"] >= 30)
+        & (features["relative_humidity_min_12_18h"] <= 30)
     ).astype("int8")
+    features["consecutive_dry_days"] = features["dias_sin_lluvia"]
     features = features.sort_values(["horizon_days", "cell_id"]).reset_index(drop=True)
     features = _add_static_and_calendar(features, grid_df)
-    for column in OPERATIONAL_FEATURES:
+    for column in OPERATIONAL_FEATURES + list(CANONICAL_FEATURES):
         if column not in features.columns:
             features[column] = np.nan
+    features["feature_schema_version"] = CANONICAL_FEATURE_SCHEMA_VERSION
     return features
 
 
@@ -361,7 +463,39 @@ def build_historical_features(daily_df: pd.DataFrame) -> pd.DataFrame:
     data["vmax_media_7d"] = grouped["vmax_vc"].transform(
         lambda values: values.shift(1).rolling(7, min_periods=1).mean()
     )
+    # Memorias con los nombres del contrato EGIF. Se calculan a partir de la
+    # meteorología previa al día de la fila, incluso si el datacubo ya traía
+    # una columna con el mismo nombre. Así la construcción histórica y la
+    # inferencia operativa tienen exactamente la misma semántica temporal.
+    data["precipitation_sum_3d"] = grouped["precipitation_sum"].transform(
+        lambda values: values.shift(1).rolling(3, min_periods=1).sum()
+    )
+    data["precipitation_sum_7d"] = grouped["precipitation_sum"].transform(
+        lambda values: values.shift(1).rolling(7, min_periods=1).sum()
+    )
+    data["precipitation_sum_14d"] = grouped["precipitation_sum"].transform(
+        lambda values: values.shift(1).rolling(14, min_periods=1).sum()
+    )
+    data["precipitation_sum_30d"] = grouped["precipitation_sum"].transform(
+        lambda values: values.shift(1).rolling(30, min_periods=1).sum()
+    )
+    data["temperature_mean_7d"] = grouped["temperature_mean"].transform(
+        lambda values: values.shift(1).rolling(7, min_periods=1).mean()
+    )
+    data["relative_humidity_mean_7d"] = grouped["relative_humidity_mean"].transform(
+        lambda values: values.shift(1).rolling(7, min_periods=1).mean()
+    )
+    data["relative_humidity_mean_14d"] = grouped["relative_humidity_mean"].transform(
+        lambda values: values.shift(1).rolling(14, min_periods=1).mean()
+    )
+    data["wind_speed_mean_7d"] = grouped["wind_speed_mean"].transform(
+        lambda values: values.shift(1).rolling(7, min_periods=1).mean()
+    )
     data["vpd_vc"] = calculate_vpd(data["tmax_vc"], data["rhmin_vc"])
+    data["vpd_mean"] = calculate_vpd(data["temperature_mean"], data["relative_humidity_mean"])
+    data["vpd_max_12_18h"] = calculate_vpd(
+        data["temperature_max_12_18h"], data["relative_humidity_min_12_18h"]
+    )
     data["alerta_30_30"] = ((data["tmax_vc"] >= 30) & (data["rhmin_vc"] <= 30)).astype("int8")
 
     # El contador se calcula sobre valores previos, nunca sobre el propio día.
@@ -374,6 +508,7 @@ def build_historical_features(daily_df: pd.DataFrame) -> pd.DataFrame:
             counter = counter + 1 if pd.notna(value) and value < RAIN_THRESHOLD_MM else 0
             streak.append(counter)
         data.loc[indices, "dias_sin_lluvia"] = streak
+    data["consecutive_dry_days"] = data["dias_sin_lluvia"]
 
     dates = pd.to_datetime(data["fecha"])
     data["mes"] = dates.dt.month.astype("int8")
@@ -392,30 +527,69 @@ def build_historical_horizon_dataset(
 ) -> dict[int, pd.DataFrame]:
     """Construye el benchmark histórico ERA5 para cada horizonte.
 
-    Este benchmark usa el tiempo observado del propio día objetivo como si
-    fuera un forecast perfecto. Sirve para validar la alineación de targets y
-    el modelo de incendios; no debe presentarse como evaluación del error real
-    de MeteoGalicia.
+    Este benchmark toma las variables observadas en la fecha de emisión y
+    desplaza la etiqueta al día ``issue_date + h``. Sirve para validar la
+    alineación temporal y el modelo de incendios, pero no debe presentarse como
+    evaluación del error real de MeteoGalicia: no contiene vintages históricos
+    de forecasts.
     """
 
+    is_canonical = "target_ignicion" in daily_df.columns
     data = build_historical_features(daily_df)
+    if is_canonical:
+        data["target_ignicion"] = pd.to_numeric(
+            data["target_ignicion"], errors="coerce"
+        ).astype("Int8")
 
     outputs: dict[int, pd.DataFrame] = {}
     for horizon in sorted(set(int(h) for h in horizons)):
-        output = data.copy()
-        output["horizon_days"] = horizon
-        output["issue_date"] = output["fecha"] - pd.Timedelta(days=horizon)
+        if is_canonical:
+            # La fila de features representa la fecha de emisión. La etiqueta
+            # se obtiene de la misma celda en issue_date + h; no se reutiliza
+            # silenciosamente el target del propio día para los tres modelos.
+            output = data.copy()
+            output["issue_date"] = output["fecha"]
+            output["target_date"] = output["issue_date"] + pd.Timedelta(days=horizon)
+            labels = data[["cell_id", "fecha", "target_ignicion"]].rename(
+                columns={"fecha": "target_date", "target_ignicion": "target_horizon"}
+            )
+            output = output.merge(
+                labels,
+                on=["cell_id", "target_date"],
+                how="left",
+                validate="many_to_one",
+            )
+            output = output.dropna(subset=["target_horizon"]).copy()
+            output["target"] = output["target_horizon"].astype("int8")
+            output["target_ignicion"] = output["target"]
+            output[f"target_t{horizon}"] = output["target"]
+            output = output.drop(columns=["target_horizon"])
+            output["target_alignment"] = "issue_date_plus_horizon"
+        else:
+            output = data.copy()
+            output["horizon_days"] = horizon
+            output["issue_date"] = output["fecha"] - pd.Timedelta(days=horizon)
+            output["target_date"] = output["fecha"]
+            output[f"target_t{horizon}"] = output["target"].astype("int8")
         output["source_type"] = "era5_perfect"
+        output["horizon_days"] = horizon
+        output["feature_schema_version"] = (
+            CANONICAL_FEATURE_SCHEMA_VERSION if is_canonical else "operational-risk-v1"
+        )
         outputs[horizon] = output
     return outputs
 
 
-def ensure_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
+def ensure_feature_matrix(
+    df: pd.DataFrame,
+    feature_columns: Iterable[str] | None = None,
+) -> pd.DataFrame:
     """Devuelve una matriz numérica estable para el modelo serializado."""
 
+    columns = list(feature_columns or OPERATIONAL_FEATURES)
     matrix = df.copy()
-    for column in OPERATIONAL_FEATURES:
+    for column in columns:
         if column not in matrix.columns:
             matrix[column] = 0.0
-    matrix = matrix[OPERATIONAL_FEATURES].copy()
+    matrix = matrix[columns].copy()
     return matrix.replace([np.inf, -np.inf], np.nan).fillna(0.0)

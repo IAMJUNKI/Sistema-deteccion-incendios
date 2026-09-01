@@ -26,6 +26,7 @@ from src.features.operational_features import (
     build_historical_features,
     build_historical_horizon_dataset,
 )
+from src.models.canonical_training import train_all_canonical_horizons
 from src.models.forecast_risk_model import train_all_horizon_models, train_horizon_model
 
 DEFAULT_COLUMNS = [
@@ -172,7 +173,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-dir", type=Path, default=Path("misc/Dataset/Mike"))
     parser.add_argument("--output-dir", type=Path, default=Path("data/models"))
     parser.add_argument("--years", nargs="+", type=int, default=[2019, 2020, 2021, 2022, 2023, 2024])
-    parser.add_argument("--negative-ratio", type=int, default=50)
+    parser.add_argument(
+        "--negative-ratio",
+        type=int,
+        default=None,
+        help="Negativos por positivo: 100 en EGIF y 50 en el modelo legacy si no se especifica.",
+    )
+    parser.add_argument(
+        "--include-xgboost-challenger",
+        action="store_true",
+        help="En datasets EGIF, entrena XGBoost fuera del artefacto operativo.",
+    )
     parser.add_argument("--max-rows", type=int, default=None, help="Límite por año para smoke tests")
     parser.add_argument(
         "--rows-per-year",
@@ -185,13 +196,55 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    # El datacubo EGIF se reconoce por su metadata y usa el contrato canónico
+    # de 50 predictores. Se mantiene el camino antiguo para reproducir el
+    # modelo de 23 variables y disponer de rollback.
+    if (args.dataset_dir / "metadata.json").exists():
+        available_years = [
+            year
+            for year in args.years
+            if any(
+                (args.dataset_dir / candidate).exists()
+                for candidate in (
+                    f"year={year}/dataset_{year}.parquet",
+                    f"dataset_{year}.parquet",
+                    f"dataset_maestro_{year}.parquet",
+                )
+            )
+        ]
+        train_years = tuple(year for year in available_years if year <= 2021)
+        validation_year = 2022 if 2022 in available_years else None
+        test_years = tuple(year for year in available_years if year == 2023)
+        if not train_years or validation_year is None or not test_years:
+            raise FileNotFoundError(
+                "El datacubo EGIF necesita particiones 2019-2021 para train, "
+                "2022 para validación y 2023 para test."
+            )
+        reports = train_all_canonical_horizons(
+            args.dataset_dir,
+            output_dir=args.output_dir,
+            train_years=train_years,
+            validation_year=validation_year,
+            test_years=test_years,
+            negative_ratio=args.negative_ratio or 100,
+            include_challenger=args.include_xgboost_challenger,
+        )
+        print("\nModelos EGIF serializados:")
+        for horizon, report in reports.items():
+            validation = report["validation"]
+            test = report["test"]
+            print(
+                f"T+{horizon}: validation PR-AUC={validation['pr_auc']:.6f} | "
+                f"test PR-AUC={test['pr_auc']:.6f}"
+            )
+        return
     if args.max_rows is not None:
         master = load_master_dataset(args.dataset_dir, args.years, args.max_rows)
         horizon_datasets = build_historical_horizon_dataset(master)
         reports = train_all_horizon_models(
             horizon_datasets,
             output_dir=args.output_dir,
-            negative_ratio=args.negative_ratio,
+            negative_ratio=args.negative_ratio or 50,
         )
     else:
         sampled_features = load_sampled_historical_features(
@@ -202,7 +255,7 @@ def main() -> None:
         reports = train_sampled_models(
             sampled_features,
             output_dir=args.output_dir,
-            negative_ratio=args.negative_ratio,
+            negative_ratio=args.negative_ratio or 50,
         )
         del sampled_features
         gc.collect()

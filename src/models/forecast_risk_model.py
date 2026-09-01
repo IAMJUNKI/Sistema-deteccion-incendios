@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,11 @@ import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 
+from src.features.canonical_contract import (
+    CANONICAL_FEATURE_SCHEMA_VERSION,
+    ensure_canonical_matrix,
+    load_feature_columns,
+)
 from src.features.operational_features import OPERATIONAL_FEATURES, ensure_feature_matrix
 
 try:
@@ -47,9 +53,19 @@ class ForecastRiskModel:
     feature_columns: list[str]
     horizon_days: int
     metadata: dict[str, object]
+    feature_schema_version: str = FEATURE_SCHEMA_VERSION
+    model_family: str = "legacy"
 
     def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
-        matrix = ensure_feature_matrix(features)
+        schema_version = getattr(
+            self,
+            "feature_schema_version",
+            self.metadata.get("feature_schema_version", FEATURE_SCHEMA_VERSION),
+        )
+        if schema_version == CANONICAL_FEATURE_SCHEMA_VERSION:
+            matrix = ensure_canonical_matrix(features, self.feature_columns)
+        else:
+            matrix = ensure_feature_matrix(features, self.feature_columns)
         raw = self.base_model.predict_proba(matrix)[:, 1]
         calibrated = np.clip(self.calibrator.transform(raw), 0.0, 1.0)
         return np.column_stack([1.0 - calibrated, calibrated])
@@ -157,6 +173,9 @@ def train_horizon_model(
         "horizon_days": horizon_days,
         "feature_schema_version": FEATURE_SCHEMA_VERSION,
         "weather_source": "era5_perfect_benchmark",
+        "provider_training_context": "era5_perfect_benchmark",
+        "model_version": f"legacy-lightgbm-t{horizon_days}",
+        "trained_at": pd.Timestamp.now(tz="UTC").isoformat(),
         "train": _metrics(train["target"], model.predict_proba(matrix_train)[:, 1]),
         "validation": _metrics(validation["target"], validation_calibrated),
         "test": _metrics(test["target"], test_calibrated),
@@ -172,6 +191,8 @@ def train_horizon_model(
         feature_columns=list(OPERATIONAL_FEATURES),
         horizon_days=horizon_days,
         metadata=metrics,
+        feature_schema_version=FEATURE_SCHEMA_VERSION,
+        model_family="legacy-operational",
     )
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
@@ -206,13 +227,27 @@ def load_horizon_model(
     horizon_days: int,
     *,
     model_dir: str | Path = "data/models",
+    model_family: str | None = None,
 ) -> ForecastRiskModel:
     """Carga un modelo serializado sin volver a entrenarlo."""
 
-    path = Path(model_dir) / f"forecast_risk_t{horizon_days}.joblib"
-    if not path.exists():
+    directory = Path(model_dir)
+    requested_family = (model_family or os.getenv("FORECAST_MODEL_FAMILY", "auto")).strip().lower()
+    canonical_path = directory / f"forecast_risk_egif_t{horizon_days}.joblib"
+    legacy_path = directory / f"forecast_risk_t{horizon_days}.joblib"
+    if requested_family not in {"auto", "canonical", "legacy"}:
+        raise ValueError("FORECAST_MODEL_FAMILY debe ser auto, canonical o legacy.")
+    if requested_family == "canonical":
+        candidates = [canonical_path]
+    elif requested_family == "legacy":
+        candidates = [legacy_path]
+    else:
+        candidates = [canonical_path, legacy_path]
+    path = next((candidate for candidate in candidates if candidate.exists()), None)
+    if path is None:
         raise FileNotFoundError(
-            f"No existe el modelo operativo para T+{horizon_days}: {path}. "
+            f"No existe el modelo operativo para T+{horizon_days}: "
+            f"{', '.join(str(candidate) for candidate in candidates)}. "
             "Ejecuta el entrenamiento offline antes de iniciar la inferencia."
         )
     artifact = joblib.load(path)
@@ -223,16 +258,29 @@ def load_horizon_model(
             f"El artefacto {path} declara T+{artifact.horizon_days}, "
             f"pero se solicitó T+{horizon_days}."
         )
-    if artifact.feature_columns != list(OPERATIONAL_FEATURES):
-        raise ValueError(
-            f"El artefacto {path} no coincide con el contrato de features "
-            f"{FEATURE_SCHEMA_VERSION}."
-        )
-    if artifact.metadata.get("feature_schema_version") != FEATURE_SCHEMA_VERSION:
-        raise ValueError(
-            f"El artefacto {path} no contiene la versión de esquema "
-            f"{FEATURE_SCHEMA_VERSION}. Reentrena los modelos operativos."
-        )
+    schema_version = getattr(
+        artifact,
+        "feature_schema_version",
+        artifact.metadata.get("feature_schema_version", FEATURE_SCHEMA_VERSION),
+    )
+    declared_schema = artifact.metadata.get("feature_schema_version", schema_version)
+    if schema_version != declared_schema:
+        raise ValueError(f"El artefacto {path} declara dos esquemas de features distintos.")
+    if schema_version == CANONICAL_FEATURE_SCHEMA_VERSION:
+        expected = load_feature_columns(os.getenv("EGIF_DATASET_DIR"))
+        if artifact.feature_columns != expected:
+            raise ValueError(
+                f"El artefacto {path} no coincide con el contrato canónico "
+                f"{CANONICAL_FEATURE_SCHEMA_VERSION}."
+            )
+    elif schema_version == FEATURE_SCHEMA_VERSION:
+        if artifact.feature_columns != list(OPERATIONAL_FEATURES):
+            raise ValueError(
+                f"El artefacto {path} no coincide con el contrato de features "
+                f"{FEATURE_SCHEMA_VERSION}."
+            )
+    else:
+        raise ValueError(f"El artefacto {path} usa un esquema no soportado: {schema_version}.")
     return artifact
 
 

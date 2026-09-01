@@ -28,6 +28,20 @@ STATE_COLUMNS = [
     "vmax_vc",
     "prec_dia",
     "vpd_vc",
+    "temperature_mean",
+    "temperature_min",
+    "temperature_max",
+    "temperature_max_12_18h",
+    "relative_humidity_mean",
+    "relative_humidity_min",
+    "relative_humidity_min_12_18h",
+    "wind_speed_mean",
+    "wind_speed_max",
+    "wind_speed_max_12_18h",
+    "vpd_mean",
+    "vpd_max_12_18h",
+    "precipitation_sum",
+    "state_feature_quality",
     "source",
     "coverage_hours",
     "state_as_of",
@@ -63,6 +77,34 @@ def normalise_weather_state(frame: pd.DataFrame, *, source: str = "observation")
         if old in state.columns and new not in state.columns:
             state = state.rename(columns={old: new})
 
+    canonical_from_legacy = {
+        "temperature_mean": "tmax_vc",
+        "temperature_min": "tmax_vc",
+        "temperature_max": "tmax_vc",
+        "temperature_max_12_18h": "tmax_vc",
+        "relative_humidity_mean": "rhmin_vc",
+        "relative_humidity_min": "rhmin_vc",
+        "relative_humidity_min_12_18h": "rhmin_vc",
+        "wind_speed_mean": "vmax_vc",
+        "wind_speed_max": "vmax_vc",
+        "wind_speed_max_12_18h": "vmax_vc",
+        "precipitation_sum": "prec_dia",
+    }
+    source_quality = "observed"
+    for canonical, legacy in canonical_from_legacy.items():
+        if canonical not in state.columns and legacy in state.columns:
+            state[canonical] = state[legacy]
+            source_quality = "legacy_proxy"
+    legacy_from_canonical = {
+        "tmax_vc": "temperature_max_12_18h",
+        "rhmin_vc": "relative_humidity_min_12_18h",
+        "vmax_vc": "wind_speed_max_12_18h",
+        "prec_dia": "precipitation_sum",
+    }
+    for legacy, canonical in legacy_from_canonical.items():
+        if legacy not in state.columns and canonical in state.columns:
+            state[legacy] = state[canonical]
+
     required = {"cell_id", "fecha", "tmax_vc", "rhmin_vc", "vmax_vc", "prec_dia"}
     missing = required.difference(state.columns)
     if missing:
@@ -72,6 +114,18 @@ def normalise_weather_state(frame: pd.DataFrame, *, source: str = "observation")
     state = state.dropna(subset=["cell_id", "fecha"]).copy()
     if "vpd_vc" not in state.columns:
         state["vpd_vc"] = calculate_vpd(state["tmax_vc"], state["rhmin_vc"])
+    if "vpd_mean" not in state.columns:
+        state["vpd_mean"] = calculate_vpd(
+            state["temperature_mean"], state["relative_humidity_mean"]
+        )
+        source_quality = "legacy_proxy"
+    if "vpd_max_12_18h" not in state.columns:
+        state["vpd_max_12_18h"] = calculate_vpd(
+            state["temperature_max_12_18h"], state["relative_humidity_min_12_18h"]
+        )
+        source_quality = "legacy_proxy"
+    if "state_feature_quality" not in state.columns:
+        state["state_feature_quality"] = source_quality
     if "source" not in state.columns:
         state["source"] = source
     if "coverage_hours" not in state.columns:
@@ -79,6 +133,9 @@ def normalise_weather_state(frame: pd.DataFrame, *, source: str = "observation")
     if "state_as_of" not in state.columns:
         state["state_as_of"] = pd.Timestamp.now(tz="UTC")
 
+    for column in STATE_COLUMNS:
+        if column not in state.columns:
+            state[column] = pd.NA
     state = state[STATE_COLUMNS].copy()
     numeric = [
         "tmax_vc",
@@ -86,6 +143,19 @@ def normalise_weather_state(frame: pd.DataFrame, *, source: str = "observation")
         "vmax_vc",
         "prec_dia",
         "vpd_vc",
+        "temperature_mean",
+        "temperature_min",
+        "temperature_max",
+        "temperature_max_12_18h",
+        "relative_humidity_mean",
+        "relative_humidity_min",
+        "relative_humidity_min_12_18h",
+        "wind_speed_mean",
+        "wind_speed_max",
+        "wind_speed_max_12_18h",
+        "vpd_mean",
+        "vpd_max_12_18h",
+        "precipitation_sum",
         "coverage_hours",
     ]
     state[numeric] = state[numeric].apply(pd.to_numeric, errors="coerce")
@@ -177,6 +247,9 @@ def validate_weather_state(
         "latest_date": latest_date,
         "minimum_cell_coverage_ratio": float(ratio.min()) if len(ratio) else 0.0,
         "source_counts": normalised["source"].value_counts(dropna=False).to_dict(),
+        "feature_quality_counts": normalised["state_feature_quality"].value_counts(
+            dropna=False
+        ).to_dict(),
     }
 
 

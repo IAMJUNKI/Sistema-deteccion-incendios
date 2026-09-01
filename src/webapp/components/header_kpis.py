@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+
 import pandas as pd
 import streamlit as st
 
@@ -27,7 +28,6 @@ def render_header_and_kpis(
         return
 
     # Extraer variables clave de calidad y procedencia
-    issue_time = str(df_data.get("issue_time", pd.Series(["-"])).iloc[0])
     forecast_quality = str(df_data.get("forecast_quality", pd.Series(["unknown"])).iloc[0])
     forecast_age = float(df_data.get("forecast_age_hours", pd.Series([float("nan")])).iloc[0])
     forecast_provider = str(
@@ -44,10 +44,14 @@ def render_header_and_kpis(
         badge_class = "badge-fallback"
         badge_icon = "sync_problem"
         badge_text = f"WRF 04km Fallback ({forecast_provider})"
-    elif forecast_quality in {"fresh_aemet", "fresh_aemet_proxy"}:
+    elif forecast_quality in {"fresh_aemet", "fresh_aemet_proxy", "fresh_aemet_degraded"}:
         badge_class = "badge-fallback"
         badge_icon = "location_city"
-        badge_text = "AEMET Municipal (Contingencia)"
+        badge_text = "AEMET Municipal (Contingencia degradada)"
+    elif forecast_quality in {"incomplete", "invalid", "unavailable"}:
+        badge_class = "badge-stale"
+        badge_icon = "cloud_off"
+        badge_text = f"Forecast no publicable ({forecast_quality})"
     else:
         badge_class = "badge-fresh"
         badge_icon = "verified"
@@ -113,8 +117,16 @@ def render_header_and_kpis(
     render_html_safely(header_html)
 
     # Resumen Ejecutivo de Situación (Lectura en 30 segundos)
-    max_t = float(df_data["tmax_vc"].max()) if "tmax_vc" in df_data.columns else 28.0
-    max_v = float(df_data["vmax_vc"].max()) if "vmax_vc" in df_data.columns else 20.0
+    temperature_column = next(
+        (column for column in ("temperature_max_12_18h", "temperature_max", "tmax_vc") if column in df_data),
+        None,
+    )
+    wind_column = next(
+        (column for column in ("wind_speed_max_12_18h", "wind_speed_max", "vmax_vc") if column in df_data),
+        None,
+    )
+    max_t = float(df_data[temperature_column].max()) if temperature_column else 28.0
+    max_v = float(df_data[wind_column].max()) if wind_column else 20.0
 
     briefing_html = f"""
     <div style="background: #111827; border-left: 4px solid {briefing_color}; border-radius: 6px; padding: 0.85rem 1.2rem; margin-bottom: 1rem; border-top: 1px solid #1f2937; border-right: 1px solid #1f2937; border-bottom: 1px solid #1f2937;">
@@ -123,7 +135,7 @@ def render_header_and_kpis(
             Resumen Ejecutivo Matinal para Mandos y Protección Civil
         </div>
         <div style="font-size:0.88rem; color:#f1f5f9; margin-top:0.35rem; line-height:1.5;">
-            Hoy la atención prioritaria debe concentrarse en el <b>{distrito_top}</b> durante la ventana crítica de <b>13:00 a 18:00 h</b>, con máximas previstas de hasta <b>{max_t:.1f} °C</b> y vientos de <b>{max_v:.1f} km/h</b>. 
+            Hoy la atención prioritaria debe concentrarse en el <b>{distrito_top}</b> durante la ventana crítica de <b>13:00 a 18:00 h</b>, con máximas previstas de hasta <b>{max_t:.1f} °C</b> y vientos de <b>{max_v:.1f} km/h</b>.
             Estado de severidad autonómica: <b style="color:{briefing_color};">{alert_label}</b> ({num_top5:,} km² en vigilancia prioritaria).
         </div>
     </div>

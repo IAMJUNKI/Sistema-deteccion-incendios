@@ -33,7 +33,7 @@ from src.ingestion.weather_state import merge_weather_state, save_weather_state
 from src.operational.artifacts import RunLockError, atomic_write_parquet, run_lock
 
 GALICIA_TZ = "Europe/Madrid"
-DEFAULT_GRID = Path("data/processed/grid/galicia_grid_1km_2018.parquet")
+DEFAULT_GRID = Path("data/processed/grid/galicia_grid_1km_egif.parquet")
 DEFAULT_OBSERVATIONS = Path("data/processed/observations/weather_daily_latest.parquet")
 DEFAULT_STATE = Path("data/processed/state/weather_daily_state.parquet")
 DEFAULT_RAW = Path("data/raw/aemet/observations")

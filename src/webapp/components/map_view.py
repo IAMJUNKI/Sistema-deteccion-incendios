@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import textwrap
-import folium
-from folium import plugins
-import geopandas as gpd
+
 import pandas as pd
 import streamlit as st
-from streamlit_folium import st_folium
+
+try:
+    import folium
+    from folium import plugins
+    from streamlit_folium import st_folium
+except ImportError:  # pragma: no cover - se prueba en instalaciones sin extras GIS
+    folium = None
+    plugins = None
+    st_folium = None
 
 from src.webapp.utils.geo_helpers import (
     CONCELLOS_GALICIA,
@@ -80,6 +86,12 @@ def render_map_tab(
 
     if df_data.empty:
         st.warning("No hay datos para renderizar el mapa.")
+        return
+    if folium is None or st_folium is None:
+        st.error(
+            "El mapa requiere folium y streamlit-folium. Activa el entorno del proyecto y "
+            "verifica las dependencias de `environment.yml`."
+        )
         return
 
     # Asegurar coordenadas si no están presentes
@@ -203,6 +215,9 @@ def render_map_tab(
     if "0.3%" in filter_risk or "0.5%" in filter_risk:
         n_cutoff = max(80, int(len(df_map) * 0.005))
         df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+    elif "1.0%" in filter_risk or "1%" in filter_risk:
+        n_cutoff = max(80, int(len(df_map) * 0.01))
+        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
     elif "1.5%" in filter_risk or "2.0%" in filter_risk:
         n_cutoff = max(180, int(len(df_map) * 0.02))
         df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
@@ -244,7 +259,7 @@ def render_map_tab(
         # 2. Capa de Inspección Interactiva (Popups detallados para las celdas más críticas)
         dlat = 0.00449
         dlon = 0.00615
-        
+
         # Limitar celdas interactivas con popup a las más críticas para máxima fluidez
         df_interactive = df_render.head(250)
 
@@ -271,10 +286,10 @@ def render_map_tab(
                 forest_pct = 0.0
 
             r30_flag = "Activa" if row.get("regla_30_30_activa", False) else "Inactiva"
-            tmax_val = row.get("tmax_vc", 25.0)
-            rhmin_val = row.get("rhmin_vc", 35.0)
-            vmax_val = row.get("vmax_vc", 15.0)
-            prec30d = row.get("prec_acum_30d", 5.0)
+            tmax_val = row.get("temperature_max_12_18h", row.get("tmax_vc", 25.0))
+            rhmin_val = row.get("relative_humidity_min_12_18h", row.get("rhmin_vc", 35.0))
+            vmax_val = row.get("wind_speed_max_12_18h", row.get("vmax_vc", 15.0))
+            prec30d = row.get("precipitation_sum_30d", row.get("prec_acum_30d", 5.0))
             distrito = row.get("distrito_forestal", "Galicia")
 
             popup_html = f"""

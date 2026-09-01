@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pipeline de modelado 2D del riesgo de ignicion en Galicia sobre el datacubo EGIF: modulos, protocolo de evaluacion, resultados con intervalos y limites conocidos.">
+<meta name="author" content="Miquel Jimenez">
+<title>Modelado 2D · Riesgo EGIF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --papel:#F7F8F7;
+  --papel-alt:#EFF2F0;
+  --tinta:#161C1A;
+  --tinta-media:#3E4744;
+  --gris:#6B7671;
+  --linea:#DCE1DD;
+  --linea-fuerte:#C2CAC5;
+  --acento:#0F5F5C;
+  --acento-suave:#E2EDEB;
+  --ocre:#8A5A2B;
+  --ocre-suave:#F3EBE1;
+
+  --serif:"Newsreader",Georgia,"Times New Roman",serif;
+  --sans:"Source Sans 3",-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+
+  --medida:68ch;
+  --ancho:1180px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --papel:#111614;
+    --papel-alt:#181F1C;
+    --tinta:#E6EBE8;
+    --tinta-media:#B7C0BB;
+    --gris:#8B9691;
+    --linea:#28312D;
+    --linea-fuerte:#3A443F;
+    --acento:#5FB3AC;
+    --acento-suave:#152B29;
+    --ocre:#C99A63;
+    --ocre-suave:#2A2118;
+  }
+}
+:root[data-theme="dark"]{
+  --papel:#111614;
+  --papel-alt:#181F1C;
+  --tinta:#E6EBE8;
+  --tinta-media:#B7C0BB;
+  --gris:#8B9691;
+  --linea:#28312D;
+  --linea-fuerte:#3A443F;
+  --acento:#5FB3AC;
+  --acento-suave:#152B29;
+  --ocre:#C99A63;
+  --ocre-suave:#2A2118;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--papel);
+  color:var(--tinta);
+  font-family:var(--sans);
+  font-size:17px;
+  line-height:1.62;
+  font-weight:400;
+  -webkit-font-smoothing:antialiased;
+}
+.env{max-width:var(--ancho);margin:0 auto;padding:0 clamp(20px,5vw,64px)}
+.col{max-width:var(--medida)}
+
+/* ── Cabecera ─────────────────────────────────────────── */
+header{border-bottom:1px solid var(--linea-fuerte);padding:clamp(48px,7vw,88px) 0 36px}
+.eyebrow{
+  font-family:var(--mono);font-size:11.5px;font-weight:500;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--acento);
+  margin:0 0 22px;
+}
+h1{
+  font-family:var(--serif);font-weight:500;
+  font-size:clamp(2.3rem,5.4vw,3.5rem);line-height:1.08;
+  letter-spacing:-.018em;margin:0 0 20px;text-wrap:balance;
+}
+.bajada{
+  font-family:var(--serif);font-size:clamp(1.06rem,2.2vw,1.28rem);
+  line-height:1.55;color:var(--tinta-media);max-width:60ch;margin:0 0 34px;
+}
+.meta{
+  display:flex;flex-wrap:wrap;gap:0 34px;
+  font-family:var(--mono);font-size:12px;color:var(--gris);
+}
+.meta b{font-weight:500;color:var(--tinta-media)}
+
+/* ── Secciones ────────────────────────────────────────── */
+section{padding:clamp(44px,6vw,68px) 0;border-bottom:1px solid var(--linea)}
+section:last-of-type{border-bottom:0}
+.sec-cab{display:flex;gap:18px;align-items:baseline;margin:0 0 26px}
+.sec-num{
+  font-family:var(--mono);font-size:12px;font-weight:500;color:var(--acento);
+  letter-spacing:.06em;flex:none;padding-top:.5em;
+}
+h2{
+  font-family:var(--serif);font-weight:500;font-size:clamp(1.5rem,3.2vw,2.05rem);
+  line-height:1.18;letter-spacing:-.012em;margin:0;text-wrap:balance;
+}
+h3{
+  font-family:var(--sans);font-weight:600;font-size:1rem;
+  letter-spacing:.005em;margin:38px 0 12px;color:var(--tinta);
+}
+h3:first-child{margin-top:0}
+p{margin:0 0 17px}
+p:last-child{margin-bottom:0}
+a{color:var(--acento)}
+strong{font-weight:600}
+code{
+  font-family:var(--mono);font-size:.87em;
+  background:var(--papel-alt);padding:.12em .38em;border-radius:3px;
+  border:1px solid var(--linea);
+}
+
+/* ── Cifras destacadas ────────────────────────────────── */
+.cifras{
+  display:grid;gap:1px;background:var(--linea);
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  border:1px solid var(--linea);margin:32px 0;
+}
+.cifra{background:var(--papel);padding:22px 20px}
+.cifra .v{
+  font-family:var(--mono);font-size:1.85rem;font-weight:500;
+  color:var(--acento);line-height:1.05;font-variant-numeric:tabular-nums;
+}
+.cifra .k{
+  font-size:13px;color:var(--gris);margin-top:8px;line-height:1.4;
+}
+
+/* ── Tablas ───────────────────────────────────────────── */
+.tw{overflow-x:auto;margin:26px 0;border:1px solid var(--linea)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:520px}
+caption{
+  caption-side:top;text-align:left;padding:14px 16px 13px;
+  font-size:13px;color:var(--gris);border-bottom:1px solid var(--linea);
+  background:var(--papel-alt);
+}
+th,td{padding:9px 16px;text-align:left;border-bottom:1px solid var(--linea)}
+thead th{
+  font-family:var(--mono);font-size:10.5px;font-weight:500;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--gris);
+  background:var(--papel-alt);white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.destacada td{background:var(--acento-suave)}
+tr.destacada td:first-child{font-weight:600}
+.mono{font-family:var(--mono);font-size:.92em}
+.tenue{color:var(--gris)}
+
+/* ── Barra de intervalo: el recurso central ───────────── */
+.iv{
+  position:relative;height:20px;min-width:150px;width:100%;
+}
+.iv::before{
+  content:"";position:absolute;inset:9px 0 auto;height:1px;
+  background:var(--linea-fuerte);
+}
+.iv i{
+  position:absolute;top:7px;height:5px;border-radius:3px;
+  background:var(--linea-fuerte);
+  left:var(--l);width:var(--w);
+}
+.iv b{
+  position:absolute;top:5px;width:9px;height:9px;border-radius:50%;
+  background:var(--acento);left:var(--p);margin-left:-4.5px;
+}
+.iv.gris b{background:var(--gris)}
+.iv.gris i{background:var(--linea)}
+
+/* ── Módulos ──────────────────────────────────────────── */
+.mods{display:grid;gap:1px;background:var(--linea);border:1px solid var(--linea);margin:26px 0}
+.mod{
+  background:var(--papel);padding:18px 20px;
+  display:grid;grid-template-columns:minmax(140px,190px) 1fr auto;gap:8px 22px;align-items:baseline;
+}
+.mod .nom{font-family:var(--mono);font-size:13.5px;font-weight:500;color:var(--acento)}
+.mod .desc{font-size:14.5px;line-height:1.5;color:var(--tinta-media)}
+.mod .ln{font-family:var(--mono);font-size:11.5px;color:var(--gris);white-space:nowrap}
+@media(max-width:680px){
+  .mod{grid-template-columns:1fr auto}
+  .mod .desc{grid-column:1/-1}
+}
+
+/* ── Avisos ───────────────────────────────────────────── */
+.nota{
+  border-left:2px solid var(--acento);background:var(--acento-suave);
+  padding:16px 20px;margin:26px 0;font-size:15px;line-height:1.55;
+}
+.nota.limite{border-left-color:var(--ocre);background:var(--ocre-suave)}
+.nota p{margin-bottom:10px}
+.nota .rot{
+  font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--acento);display:block;margin-bottom:7px;
+}
+.nota.limite .rot{color:var(--ocre)}
+
+/* ── Escalera ─────────────────────────────────────────── */
+.escalera{margin:26px 0;font-family:var(--mono);font-size:12.5px}
+.esc-fila{display:grid;grid-template-columns:44px 74px 1fr;gap:14px;align-items:center;padding:3px 0}
+.esc-fila .k{text-align:right;color:var(--gris)}
+.esc-fila .v{color:var(--tinta);font-variant-numeric:tabular-nums}
+
+/* ── Listas ───────────────────────────────────────────── */
+ul,ol{margin:0 0 17px;padding-left:1.15em}
+li{margin-bottom:9px;padding-left:.2em}
+li::marker{color:var(--gris)}
+
+/* ── Pie ──────────────────────────────────────────────── */
+footer{
+  padding:38px 0 60px;font-size:13px;color:var(--gris);
+  border-top:1px solid var(--linea-fuerte);
+}
+footer p{margin-bottom:8px;max-width:72ch}
+
+@media print{
+  body{background:#fff;color:#000;font-size:10.5pt}
+  section{break-inside:auto;border-color:#ccc}
+  tr,.mod,.nota,.cifra{break-inside:avoid}
+  .tw{overflow:visible}
+}
+</style>
+
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  img,svg{max-width:100%;height:auto;display:block}
+  table{border-collapse:collapse}
+</style>
+</head>
+<body>
+<div class="env">
+
+<header>
+  <p class="eyebrow">TFM · Sistema de detección de incendios · Galicia</p>
+  <h1>Modelado 2D sobre el datacubo EGIF</h1>
+  <p class="bajada">Un pipeline de predicción de riesgo de ignición diario sobre la rejilla de 1&nbsp;km, con evaluación sobre la población completa y comparación estadística entre modelos.</p>
+  <div class="meta">
+    <span><b>Autor</b> Miquel Jiménez</span>
+    <span><b>Dataset</b> EGIF-MITECO, 47 predictores</span>
+    <span><b>Validación</b> 2022 · 10.804.365 filas</span>
+    <span><b>Test ciego</b> 2023 · sin abrir</span>
+  </div>
+</header>
+
+<!-- ═══ 1 ═══ -->
+<section>
+  <div class="sec-cab"><span class="sec-num">01</span><h2>Qué se entrega</h2></div>
+  <div class="col">
+    <p>Un pipeline completo que va del Parquet aplanado del datacubo a un modelo de riesgo calibrado, con el protocolo de evaluación y las pruebas que lo respaldan. Es la capa de modelado en dos dimensiones: consume una fila por celda y fecha, y no toca la construcción del cubo.</p>
+    <p>La cifra que resume el resultado es operativa, no estadística: <strong>vigilando el 5&nbsp;% del territorio gallego, el modelo detecta 653 de las 1.659 igniciones de 2022</strong>. Con una regresión logística sobre las mismas variables serían 469.</p>
+  </div>
+
+  <div class="cifras">
+    <div class="cifra"><div class="v">39,4 %</div><div class="k">Recall vigilando el 5 % del territorio</div></div>
+    <div class="cifra"><div class="v">7,8 %</div><div class="k">Recall alertando el 1 % de celdas cada día</div></div>
+    <div class="cifra"><div class="v">184</div><div class="k">Igniciones más al año que el baseline lineal</div></div>
+    <div class="cifra"><div class="v">183</div><div class="k">Pruebas automáticas, todas en verde</div></div>
+  </div>
+
+  <div class="col">
+    <p class="tenue" style="font-size:14.5px">Todas las cifras proceden de la validación sobre el año 2022 completo, sin submuestrear. El año 2023 permanece cerrado y no ha intervenido en ninguna decisión.</p>
+  </div>
+</section>
+
+<!-- ═══ 2 ═══ -->
+<section>
+  <div class="sec-cab"><span class="sec-num">02</span><h2>El pipeline</h2></div>
+  <div class="col">
+    <p>Diez módulos en <code>src/entrenamiento/</code>, cada uno con un único motivo para cambiar. La separación no es estética: cuando se modifica el criterio de evaluación se toca un fichero y los resultados anteriores siguen siendo comparables, porque nada más se ha movido.</p>
+  </div>
+
+  <div class="mods">
+    <div class="mod"><span class="nom">contrato.py</span><span class="desc">Lee <code>metadata.json</code> y resuelve el esquema por patrón sobre el nombre de cada variable. Es lo que permitió que el dataset cambiara quince columnas sin editar una línea de código.</span><span class="ln">153 ln</span></div>
+    <div class="mod"><span class="nom">datos.py</span><span class="desc">Submuestrea negativos al entrenar y recorre la población completa al evaluar. Usa el mismo hash celda-día que el pipeline común del equipo, así que las filas coinciden.</span><span class="ln">141 ln</span></div>
+    <div class="mod"><span class="nom">derivadas.py</span><span class="desc">Anomalías respecto de la climatología de cada celda y mes, z-scores espaciales diarios y calendario mínimo. Todas sin estado, para poder evaluar por lotes acotados.</span><span class="ln">324 ln</span></div>
+    <div class="mod"><span class="nom">seleccion.py</span><span class="desc">Poda auditada, familias de correlación, importancia por permutación y curva de compromiso con intervalos.</span><span class="ln">432 ln</span></div>
+    <div class="mod"><span class="nom">modelos.py</span><span class="desc">Los cuatro estimadores tras una interfaz común, con parada temprana contra validación.</span><span class="ln">139 ln</span></div>
+    <div class="mod"><span class="nom">calibracion.py</span><span class="desc">Corrección de prior de King y Zeng más regresión isotónica, para que la probabilidad signifique algo y se puedan fijar umbrales de riesgo.</span><span class="ln">130 ln</span></div>
+    <div class="mod"><span class="nom">metricas.py</span><span class="desc">Recall a coste operativo fijo, recall diario, intervalos por bootstrap y comparación pareada entre modelos.</span><span class="ln">411 ln</span></div>
+    <div class="mod"><span class="nom">experimento.py</span><span class="desc">Orquesta lo anterior y vigila que no se hagan trampas: cobertura completa y test ciego cerrado.</span><span class="ln">257 ln</span></div>
+    <div class="mod"><span class="nom">registro.py</span><span class="desc">Bitácora acumulativa con una fila por experimento y modelo, con el hash del commit que la produjo.</span><span class="ln">96 ln</span></div>
+  </div>
+
+  <div class="col">
+    <p>Y tres ejecutables: <code>entrenar_egif.py</code> entrena y evalúa, <code>seleccionar_variables.py</code> produce el catálogo de conjuntos, y <code>comparar_datasets_firms_egif.py</code> documenta la migración desde la fuente anterior.</p>
+  </div>
+</section>
+
+<!-- ═══ 3 ═══ -->
+<section>
+  <div class="sec-cab"><span class="sec-num">03</span><h2>Datos y protocolo</h2></div>
+
+  <div class="tw">
+    <table>
+      <caption>Reparto temporal. El corte coincide con el del pipeline común del equipo, para que las cifras sean comparables entre nosotros.</caption>
+      <thead><tr><th>Año</th><th>Papel</th><th class="n">Filas</th><th class="n">Igniciones</th><th class="n">Prevalencia</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">2019</td><td>Entrenamiento</td><td class="n">10.804.365</td><td class="n">1.595</td><td class="n">0,0148 %</td></tr>
+        <tr><td class="mono">2020</td><td>Entrenamiento</td><td class="n">10.833.966</td><td class="n">1.479</td><td class="n">0,0137 %</td></tr>
+        <tr><td class="mono">2021</td><td>Entrenamiento</td><td class="n">10.804.365</td><td class="n">926</td><td class="n">0,0086 %</td></tr>
+        <tr class="destacada"><td class="mono">2022</td><td>Validación</td><td class="n">10.804.365</td><td class="n">1.659</td><td class="n">0,0154 %</td></tr>
+        <tr><td class="mono">2023</td><td>Test ciego</td><td class="n">9.768.330</td><td class="n">530</td><td class="n">0,0054 %</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>Se entrena con muestreo y se evalúa sin él</h3>
+    <p>Con una prevalencia de 1,2·10⁻⁴, un modelo que diga siempre «no» acierta el 99,99&nbsp;% de las veces. Para entrenar se conservan todos los positivos y un negativo de cada veinticinco, lo que deja 1.301.556 filas con las que el gradiente aprende algo.</p>
+    <p><strong>Para evaluar, no se submuestrea nada.</strong> Se predice sobre los 10,8 millones de filas del año con su prevalencia real intacta. La diferencia importa: submuestrear la validación multiplica su prevalencia por veinticinco, y PR-AUC depende directamente de ella. Cualquier cifra medida así describe una población que no existe.</p>
+
+    <h3>La probabilidad se recalibra</h3>
+    <p>Entrenar con negativos submuestreados infla las probabilidades. La corrección de prior deshace analíticamente ese sesgo y una regresión isotónica ajustada sobre el año de validación absorbe el resto. Sin este paso hay un ranking, pero no una probabilidad, y no se puede escribir «riesgo alto» en un mapa.</p>
+
+    <h3>Dos métricas, porque no dicen lo mismo</h3>
+    <ul>
+      <li><strong>Recall a FPR fijo</strong> — si se vigila el 5&nbsp;% del territorio, ¿qué fracción de igniciones cae dentro? Es la pregunta de quien tiene un presupuesto.</li>
+      <li><strong>Recall en el 1&nbsp;% diario</strong> — dado que hoy es 12 de agosto, ¿se acierta <em>qué celdas</em>? No vale acertar que agosto es peor que enero; eso lo dice el calendario.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══ 4 ═══ -->
+<section>
+  <div class="sec-cab"><span class="sec-num">04</span><h2>Resultados</h2></div>
+  <div class="col">
+    <p>Los cuatro modelos sobre las 47 variables del cubo, validados en 2022 completo. El punto es la estimación y la barra su intervalo de confianza al 90&nbsp;%.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Recall vigilando el 5 % del territorio. Escala de la barra: 26 % a 42 %.</caption>
+      <thead><tr><th>Modelo</th><th class="n">ROC-AUC</th><th class="n">Recall</th><th style="min-width:180px">Intervalo 90 %</th><th class="n">Top 1 %/día</th><th class="n">Gap</th></tr></thead>
+      <tbody>
+        <tr class="destacada">
+          <td>LightGBM</td><td class="n">0,8702</td><td class="n">39,36 %</td>
+          <td><span class="iv" style="--l:71.1%;--w:24.9%;--p:83.5%"><i></i><b></b></span></td>
+          <td class="n">7,84 %</td><td class="n">0,081</td>
+        </tr>
+        <tr>
+          <td>XGBoost</td><td class="n">0,8686</td><td class="n">38,82 %</td>
+          <td><span class="iv" style="--l:68.1%;--w:24.5%;--p:80.1%"><i></i><b></b></span></td>
+          <td class="n">7,17 %</td><td class="n">0,044</td>
+        </tr>
+        <tr>
+          <td>Random Forest</td><td class="n">0,8494</td><td class="n">31,22 %</td>
+          <td><span class="iv gris" style="--l:21.8%;--w:22.9%;--p:32.6%"><i></i><b></b></span></td>
+          <td class="n">4,52 %</td><td class="n">0,139</td>
+        </tr>
+        <tr>
+          <td>Regresión logística</td><td class="n">0,8365</td><td class="n">28,27 %</td>
+          <td><span class="iv gris" style="--l:2.5%;--w:23.4%;--p:14.2%"><i></i><b></b></span></td>
+          <td class="n">3,80 %</td><td class="n">0,017</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>Comparación pareada</h3>
+    <p>Los cuatro modelos se evalúan sobre las mismas 1.659 igniciones, así que comparar sus intervalos por separado cuenta dos veces la varianza que comparten y declara «no concluyente» diferencias que sí lo son. La comparación correcta remuestrea los incendios una vez por réplica y acumula la <em>diferencia</em>.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Diferencia de recall entre pares. El intervalo es el de la diferencia: si no contiene el cero, la ventaja es real.</caption>
+      <thead><tr><th>Comparación</th><th class="n">Diferencia</th><th class="n">IC 90 % de la diferencia</th><th class="n">McNemar</th><th>Veredicto</th></tr></thead>
+      <tbody>
+        <tr><td>LightGBM · Reg. logística</td><td class="n">+11,09 pp</td><td class="n">+9,10 a +13,02</td><td class="n">4·10⁻²⁰</td><td>LightGBM mejor</td></tr>
+        <tr><td>XGBoost · Reg. logística</td><td class="n">+10,55 pp</td><td class="n">+8,68 a +12,48</td><td class="n">7·10⁻²⁰</td><td>XGBoost mejor</td></tr>
+        <tr><td>LightGBM · Random Forest</td><td class="n">+8,14 pp</td><td class="n">+6,27 a +9,89</td><td class="n">2·10⁻¹³</td><td>LightGBM mejor</td></tr>
+        <tr><td>XGBoost · Random Forest</td><td class="n">+7,59 pp</td><td class="n">+5,79 a +9,34</td><td class="n">2·10⁻¹²</td><td>XGBoost mejor</td></tr>
+        <tr><td>Random Forest · Reg. logística</td><td class="n">+2,95 pp</td><td class="n">+1,15 a +4,82</td><td class="n">0,011</td><td>Random Forest mejor</td></tr>
+        <tr class="destacada"><td>LightGBM · XGBoost</td><td class="n">+0,54 pp</td><td class="n">−0,54 a +1,69</td><td class="n">0,49</td><td>Empate</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="nota">
+    <span class="rot">Lectura</span>
+    <p>El salto a los modelos de <em>boosting</em> está justificado con márgenes que no admiten discusión. Entre LightGBM y XGBoost, en cambio, no hay diferencia: nueve igniciones sobre 1.659. Elegir uno de los dos es una decisión de conveniencia y así debe presentarse, no como una victoria.</p>
+  </div>
+</section>
+
+<!-- ═══ 5 ═══ -->
+<section>
+  <div class="sec-cab"><span class="sec-num">05</span><h2>Lo que está medido</h2></div>
+  <div class="col">
+    <p>Cuatro conclusiones que dejan de ser criterio y pasan a ser dato.</p>
+
+    <h3>La ingeniería de variables no aporta</h3>
+    <p>Añadir catorce variables derivadas —anomalías climatológicas, z-scores espaciales, interacciones— mueve el recall de 39,36&nbsp;% a 39,06&nbsp;% y el recall diario de 7,84&nbsp;% a 7,47&nbsp;%. Ambas bajan, y las dos diferencias caben dentro de los intervalos.</p>
+    <p>Se ha medido dos veces, sobre dos versiones distintas del dataset, con el mismo resultado. La explicación es que el datacubo ya incorpora lo que estas variables aportaban: acumulados de precipitación a cuatro ventanas, medias móviles y déficit de presión de vapor. <strong>La configuración más simple es la mejor.</strong></p>
+
+    <h3>La actividad humana es la tercera variable del modelo</h3>
+    <p>Por importancia de permutación, <code>road_length_local_km</code> queda solo por detrás de la precipitación acumulada a tres días y de la memoria de humedad a siete. Retirar el bloque completo de actividad humana cuesta 3,44 puntos de recall.</p>
+    <p>Y la desagregación por tipo de vía localiza la señal: las carreteras <em>locales</em>, no las principales, que caen al puesto quince. Tiene lectura física directa —las igniciones no arrancan junto a las autovías sino en la red secundaria, donde hay acceso al monte.</p>
+
+    <h3>El número de variables importa menos de lo que parece</h3>
+    <p>Entrenando con las <em>k</em> mejores por permutación, el rendimiento sube hasta unas dieciséis variables y a partir de ahí la curva es plana y no monótona.</p>
+  </div>
+
+  <div class="escalera">
+    <div class="esc-fila"><span class="k">k = 5</span><span class="v">31,77 %</span><span class="iv gris" style="--l:0%;--w:23%;--p:11%"><i></i><b></b></span></div>
+    <div class="esc-fila"><span class="k">8</span><span class="v">34,72 %</span><span class="iv gris" style="--l:26%;--w:22%;--p:37%"><i></i><b></b></span></div>
+    <div class="esc-fila"><span class="k">12</span><span class="v">34,72 %</span><span class="iv gris" style="--l:26%;--w:21%;--p:37%"><i></i><b></b></span></div>
+    <div class="esc-fila"><span class="k">16</span><span class="v">38,10 %</span><span class="iv" style="--l:54%;--w:24%;--p:65%"><i></i><b></b></span></div>
+    <div class="esc-fila"><span class="k">20</span><span class="v">38,76 %</span><span class="iv" style="--l:59%;--w:25%;--p:71%"><i></i><b></b></span></div>
+    <div class="esc-fila"><span class="k">25</span><span class="v">40,33 %</span><span class="iv" style="--l:73%;--w:26%;--p:85%"><i></i><b></b></span></div>
+    <div class="esc-fila"><span class="k">30</span><span class="v">38,58 %</span><span class="iv" style="--l:57%;--w:25%;--p:69%"><i></i><b></b></span></div>
+    <div class="esc-fila"><span class="k">40</span><span class="v">40,02 %</span><span class="iv" style="--l:70%;--w:25%;--p:82%"><i></i><b></b></span></div>
+    <div class="esc-fila"><span class="k">50</span><span class="v">39,60 %</span><span class="iv" style="--l:67%;--w:25%;--p:78%"><i></i><b></b></span></div>
+    <div class="esc-fila"><span class="k">58</span><span class="v">38,40 %</span><span class="iv" style="--l:56%;--w:26%;--p:68%"><i></i><b></b></span></div>
+  </div>
+
+  <div class="col">
+    <p>Que <em>k</em>&nbsp;=&nbsp;40 rinda por debajo de <em>k</em>&nbsp;=&nbsp;25 es la prueba de que lo que se añade a partir de dieciséis es ruido: si aportara algo, la curva subiría aunque fuera poco.</p>
+
+    <h3>El submuestreo de negativos puede ser mucho más agresivo</h3>
+    <p>Entrenar con una prevalencia de 1,5·10⁻⁴ exige descartar negativos, y el proyecto venía conservando uno de cada veinticinco sin que nadie hubiera justificado esa cifra. Medido sobre dieciséis combinaciones de ratio y estrategia:</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Muestreo uniforme a distintos ratios. Todo lo demás igual; validación sobre 2022 completo.</caption>
+      <thead><tr><th>Negativos conservados</th><th class="n">Recall</th><th class="n">Igniciones</th><th class="n">Entrenamiento</th></tr></thead>
+      <tbody>
+        <tr><td>1 de cada 10 · 3.243.858</td><td class="n">38,52 %</td><td class="n">639</td><td class="n">49 s</td></tr>
+        <tr class="destacada"><td>1 de cada 25 · 1.297.543 <span class="tenue">← el heredado</span></td><td class="n">38,40 %</td><td class="n">637</td><td class="n">20 s</td></tr>
+        <tr><td>1 de cada 100 · 324.386</td><td class="n">39,66 %</td><td class="n">658</td><td class="n">5 s</td></tr>
+        <tr><td>1 de cada 200 · 162.193</td><td class="n">38,94 %</td><td class="n">646</td><td class="n">3 s</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p><strong>Veinte veces menos datos y el mismo resultado.</strong> Los cuatro intervalos se solapan por completo y la variación de veintiuna igniciones entre el mejor y el peor cabe holgadamente dentro del ruido. Con uno de cada cien se entrena cuatro veces más rápido sin perder nada.</p>
+    <p>Sobre <em>qué</em> negativos conservar, ninguna estrategia mejora al azar. La estratificación por mes y combustible resultó ser idéntica al muestreo uniforme —repartir con la misma tasa en todos los estratos <em>es</em> muestreo uniforme— y el agrupamiento proporcional empata. La única que se separa lo hace a peor: sobrerrepresentar las regiones raras del espacio de variables pierde unas tres décimas de punto en los cuatro ratios, porque introduce un desplazamiento de covariables. Es el mismo mecanismo que hace fracasar al minado de negativos difíciles.</p>
+
+    <h3>Los hiperparámetros por defecto ya eran competitivos</h3>
+    <p>Cuarenta configuraciones por modelo, exploradas con validación cruzada temporal de ventana expansiva —cada pliegue entrena con los años anteriores y valida con el siguiente, nunca al revés— y puntuadas con la métrica del proyecto.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Mejor configuración encontrada frente a la de partida, sobre la población completa de 2022.</caption>
+      <thead><tr><th>Modelo</th><th class="n">Partida</th><th class="n">Encontrada</th><th class="n">Ganancia</th><th class="n">IC 90 % de la diferencia</th><th class="n">McNemar</th></tr></thead>
+      <tbody>
+        <tr><td>LightGBM</td><td class="n">648</td><td class="n">669</td><td class="n">+1,27 pp</td><td class="n">+0,06 a +2,41</td><td class="n">0,094</td></tr>
+        <tr><td>XGBoost</td><td class="n">642</td><td class="n">663</td><td class="n">+1,27 pp</td><td class="n">+0,00 a +2,47</td><td class="n">0,117</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>Las cifras de ganancia son igniciones detectadas de las 1.659 del año. Los dos modelos ganan <strong>exactamente lo mismo, veintiuna igniciones</strong>, y en ambos casos la mejora queda <strong>en el límite de lo demostrable</strong>: los intervalos tocan el cero por su extremo inferior y ninguno de los dos contrastes de McNemar alcanza el umbral habitual del 0,05.</p>
+    <p>Conviene no leer más de lo que hay. Una regla automática clasificaría el primero como mejora y el segundo como no concluyente, pero esa distinción se apoya en seis centésimas de punto —una ignición— y es un artefacto del umbral, no una diferencia real entre los modelos. La lectura honesta es que <strong>la búsqueda compra alrededor de 1,3 puntos en ambos y en ninguno se distingue con claridad del ruido</strong>.</p>
+    <p>Más informativo que el ganador es qué mueve la aguja, y ahí los dos modelos coinciden:</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Correlación de Spearman de cada hiperparámetro con el resultado, sobre las cuarenta configuraciones.</caption>
+      <thead><tr><th>Hiperparámetro</th><th class="n">LightGBM</th><th class="n">XGBoost</th></tr></thead>
+      <tbody>
+        <tr class="destacada"><td>Tasa de aprendizaje</td><td class="n">−0,63</td><td class="n">−0,60</td></tr>
+        <tr class="destacada"><td>Peso de la clase minoritaria</td><td class="n">−0,46</td><td class="n">−0,38</td></tr>
+        <tr><td>El resto (siete parámetros)</td><td class="n">< |0,28|</td><td class="n">< |0,28|</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>De nueve hiperparámetros, solo dos importan, y dos algoritmos distintos coinciden en cuáles y en qué dirección. La segunda fila tiene contenido metodológico: <strong>después de submuestrear negativos, compensar además el desbalanceo con pesos agresivos empeora el modelo</strong>. Las configuraciones ganadoras llevan pesos de 5 y 12 frente a los 324 que exigiría la compensación completa que recomienda el manual; las que se acercan a esa cifra están sistemáticamente entre las peores.</p>
+    <p>Junto con el resultado del submuestreo, son dos experimentos independientes que apuntan a lo mismo: en este problema el desbalanceo se trata quitando negativos, no reponderándolos.</p>
+
+    <h3>La discriminación dentro del día es la debilidad</h3>
+    <p>Acertar el mes es fácil con meteorología. Acertar qué celda arde hoy es un problema espacial, y la representación aplanada del cubo deja cada fila sin saber que la celda contigua existe. Es la causa de que el recall diario se quede en el 7,8&nbsp;%.</p>
+  </div>
+</section>
+
+<!-- ═══ 6 ═══ -->
+<section>
+  <div class="sec-cab"><span class="sec-num">06</span><h2>Garantías</h2></div>
+  <div class="col">
+    <p>Un resultado que no se puede auditar no sirve para una defensa. El pipeline incorpora tres mecanismos y una suite de pruebas.</p>
+
+    <h3>Guardianes en tiempo de ejecución</h3>
+    <ul>
+      <li><strong>Cobertura</strong> — se comprueba que la predicción cubrió exactamente las filas que el contrato declara. Existe porque una ejecución perdió un bloque entero de celdas sin lanzar ninguna excepción, y las métricas salieron <em>mejores</em> porque faltaba una parte difícil del mapa.</li>
+      <li><strong>Test ciego</strong> — evaluar sobre 2023 exige una opción explícita. Mirarlo «para echar un vistazo» lo quema de forma irreversible.</li>
+      <li><strong>Predictores prohibidos</strong> — el contrato rechaza como variable de entrada cualquier columna que describa el resultado del incendio, con dos barreras independientes.</li>
+    </ul>
+
+    <h3>Pruebas automáticas</h3>
+    <p>183 pruebas, ejecutables en cualquier entorno sin el stack geoespacial. Varias son regresiones de fallos que llegaron a producir resultados incorrectos, con el porqué escrito en el propio test: empates que inflaban el recall, intervalos de confianza tomados de otra métrica, variables duplicadas que repartían la importancia entre sí.</p>
+    <p>El umbral de falsos positivos, en particular, ya no se fija con un cuantil interpolado sino recorriendo los valores distintos hasta encontrar el primero que cabe en el presupuesto. Cumple la restricción por construcción, con empates o sin ellos.</p>
+
+    <h3>Un fallo que solo la bitácora podía detectar</h3>
+    <p>Al preparar el estudio de submuestreo se cargó un embalse de filas por función <em>hash</em> y se repartió dentro de él usando otra vez la misma función. Las dos etapas comparten divisores, de modo que la segunda selección se reducía a «celdas cuyo identificador es múltiplo de cinco»: escogía territorios enteros con todos sus días en lugar de repartir celdas y días.</p>
+    <p>El recuento de filas salía exacto, ninguna comprobación fallaba y el recall caía de 0,39 a 0,24. <strong>Se detectó únicamente porque el número no cuadraba con el que la bitácora ya tenía registrado</strong> para esa misma configuración. Sin esa referencia, la conclusión habría sido que el muestreo aleatorio es malo, y se habría cambiado de estrategia por un motivo falso.</p>
+    <p>Es el argumento de fondo para llevar un registro acumulativo de resultados: no es trámite administrativo, es el mecanismo que detecta los fallos que no se manifiestan como errores.</p>
+
+    <h3>Trazabilidad</h3>
+    <p>Cada experimento deja una fila en <code>docs/technical/resultados.csv</code> con el hash del commit que la produjo. Reejecutar sustituye sus filas en vez de acumular ficheros, así que el historial se lee como un diff.</p>
+  </div>
+</section>
+
+<!-- ═══ 7 ═══ -->
+<section>
+  <div class="sec-cab"><span class="sec-num">07</span><h2>Límites y siguiente paso</h2></div>
+  <div class="col">
+    <p>Lo que este entregable <em>no</em> resuelve, dicho antes de que lo pregunten.</p>
+  </div>
+
+  <div class="nota limite">
+    <span class="rot">Límite</span>
+    <p><strong>Sin contexto espacial.</strong> Al aplanar el cubo, cada fila queda independiente: el modelo no sabe que dos celdas son vecinas. Es la causa directa del 7,8&nbsp;% de recall diario y la línea de trabajo con más recorrido.</p>
+  </div>
+  <div class="nota limite">
+    <span class="rot">Límite</span>
+    <p><strong>El margen por hiperparámetros es estrecho.</strong> Una búsqueda de cuarenta configuraciones sobre nueve parámetros deja 1,27 puntos, y en el límite de lo demostrable. No hay una mejora grande escondida ahí: lo que falta es señal, no ajuste.</p>
+  </div>
+  <div class="nota limite">
+    <span class="rot">Límite</span>
+    <p><strong>Reproducibilidad parcial.</strong> Los modelos de <em>boosting</em> con paralelismo completo no garantizan resultados idénticos entre ejecuciones. La bitácora hace el problema visible, pero aún no está resuelto.</p>
+  </div>
+  <div class="nota limite">
+    <span class="rot">Límite</span>
+    <p><strong>Test ciego con poca potencia.</strong> El año 2023 tiene 530 igniciones y está incompleto —termina el 26 de noviembre—, lo que deja un intervalo de confianza de ±3,3 puntos. Conviene confirmar con quien construye el cubo que el registro oficial de ese periodo está consolidado.</p>
+  </div>
+
+  <div class="col">
+    <h3>La propuesta</h3>
+    <p>Recuperar el contexto espacial sin salir de la representación en dos dimensiones, incorporando la vecindad dentro de la propia fila: media de las variables en las ocho celdas contiguas, densidad de igniciones en el entorno durante los días previos y distancia a la ignición más reciente.</p>
+    <p>La segunda variable exige cuidado. El cubo ya incluye un indicador de proximidad a igniciones, pero abarca también el día del evento, de modo que como predictor sería mirar la respuesta. Una versión desplazada, restringida a los días anteriores, no filtra nada y es exactamente la señal que falta.</p>
+  </div>
+</section>
+
+<footer>
+  <p>Validación sobre el año 2022 completo, 10.804.365 filas y 1.659 igniciones. Intervalos de confianza al 90&nbsp;% por bootstrap sobre los positivos. El año 2023 permanece cerrado.</p>
+  <p>Pipeline en <code>src/entrenamiento/</code> · Resultados en <code>docs/technical/resultados.csv</code> · Pruebas en <code>tests/</code></p>
+</footer>
+
+</div>
+</body>
+</html>

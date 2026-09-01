@@ -147,6 +147,10 @@ def _payload_entry(payload: Any) -> Mapping[str, Any]:
 
 
 def _day_variables(day: Mapping[str, Any]) -> dict[str, list[Mapping[str, Any]]]:
+    # ``probPrecipitacion`` es una probabilidad porcentual, no una cantidad
+    # de agua. Nunca se incorpora como ``precipitation_mm``; si AEMET no
+    # publica ``precipitacion`` cuantitativa, el valor queda ausente y la
+    # política de calidad decide si el horizonte se puede publicar.
     return {
         "temperature": _records(day.get("temperatura")),
         "humidity": _records(day.get("humedadRelativa")),
@@ -463,3 +467,22 @@ def parse_municipality_env(value: str | None) -> tuple[AemetPoint, ...]:
     if not points:
         raise ForecastError("AEMET_MUNICIPALITIES no contiene puntos válidos.")
     return tuple(points)
+
+
+def parse_municipality_file(path: str | Path) -> tuple[AemetPoint, ...]:
+    """Lee un catálogo de municipios ``codigo:lat:lon`` desde un fichero.
+
+    En producción se recomienda generar este fichero con todos los municipios
+    gallegos que se quieran consultar. Las capitales incorporadas por defecto
+    solo mantienen el smoke test del proyecto operativo.
+    """
+
+    file_path = Path(path)
+    if not file_path.exists():
+        raise ForecastError(f"No existe AEMET_MUNICIPALITIES_FILE: {file_path}")
+    lines = [
+        line.strip()
+        for line in file_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    return parse_municipality_env(",".join(lines))

@@ -102,9 +102,11 @@ def render_sidebar(predictions: pd.DataFrame) -> dict:
     filter_risk = st.sidebar.selectbox(
         "Filtro Espacial:",
         [
+            "Top 1.0% Celdas Prioritarias",
             "Top 5.0% Celdas en Riesgo Elevado",
             "Top 2.0% Celdas Críticas",
             "Top 0.5% Riesgo Extremo",
+            "Top 10.0% Celdas de Vigilancia",
             "Mostrar Todas las Celdas con Riesgo > 0.5%",
         ],
         index=0,

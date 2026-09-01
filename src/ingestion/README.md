@@ -57,10 +57,11 @@ hecho de usar los valores por defecto quedan registrados en los metadatos del
 forecast bruto.
 
 El proveedor se selecciona con `FORECAST_PROVIDER=meteogalicia|aemet|auto`.
-`auto` elige MeteoGalicia cuando encuentra una clave real y AEMET en caso
-contrario. AEMET queda marcado como `fresh_aemet`: su predicción es municipal y
-la extensión diaria a 72 horas sirve para validar el pipeline, pero no aporta
-la resolución espacial de WRF 1 km.
+`auto` intenta WRF 1 km, después WRF 04 km, y solo si ambas mallas fallan
+intenta AEMET cuando `FORECAST_AUTO_AEMET_FALLBACK=true`. Esa contingencia se
+marca como `fresh_aemet_degraded`: su predicción es municipal y no equivale a
+una malla WRF de 1 km. Una selección explícita de `meteogalicia` no cambia a
+AEMET silenciosamente.
 
 ## Bootstrap y actualización del estado
 

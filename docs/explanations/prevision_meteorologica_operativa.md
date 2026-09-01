@@ -25,11 +25,13 @@ El proveedor se selecciona mediante `FORECAST_PROVIDER`:
 |---|---|
 | `meteogalicia` | Usa MeteoSIX v5 y exige `METEOGALICIA_API_KEY`. |
 | `aemet` | Usa AEMET OpenData y exige `AEMET_API_KEY`. |
-| `auto` | Elige MeteoGalicia si hay una clave real; si no, AEMET. |
+| `auto` | Intenta MeteoGalicia WRF 1 km, después WRF 04 km y, si ambas mallas fallan, AEMET como contingencia degradada cuando está habilitado. |
 
 La modalidad `auto` permite desarrollar y probar el pipeline antes de recibir
-la clave de MeteoGalicia. No mezcla fuentes dentro de una misma ejecución: el
-manifiesto registra un único proveedor para que el resultado sea reproducible.
+la clave de MeteoGalicia. Dentro de una ejecución se conserva una única fuente
+para los tres horizontes y el manifiesto registra la procedencia. Si WRF falla
+por completo, `auto` puede pasar a AEMET y lo etiqueta como
+`fresh_aemet_degraded`.
 
 ## 2. Selección de la malla y degradación controlada
 
@@ -53,6 +55,7 @@ forecast. Los estados son:
 |---|---|---|
 | `fresh` | WRF 1 km validado | Producto principal |
 | `fresh_fallback` | WRF 1 km no disponible o incompleto; se usa WRF 04 km | Apoyo preventivo con confirmación |
+| `fresh_aemet_degraded` | AEMET municipal tras fallar WRF | Contingencia automática; no equivale a WRF 1 km |
 | `fresh_aemet` | AEMET municipal, con expansión diaria y superposición horaria cuando existe | Pruebas o contingencia; no equivale a WRF |
 | `fresh_aemet_proxy` | AEMET municipal con proxy explícito para precipitación ausente | Solo pruebas técnicas; no usar para evaluar peligro |
 | `stale` | Se reutiliza el último forecast archivado | No publicar como actualización normal |
@@ -86,8 +89,8 @@ para completar T+1/T+2/T+3, y sustituye las horas coincidentes por la
 predicción horaria cuando está disponible.
 
 La salida AEMET se asigna a la rejilla de 1 km desde puntos municipales
-configurados en `AEMET_MUNICIPALITIES`. Por defecto se incluyen las cuatro
-capitales provinciales como configuración de prueba. Esto permite validar el
+configurados en `AEMET_MUNICIPALITIES_FILE` o `AEMET_MUNICIPALITIES`. Las cuatro
+capitales provinciales son solo una configuración de prueba. Esto permite validar el
 circuito técnico completo, pero no representa los contrastes meteorológicos
 locales de una malla WRF. En consecuencia, el dashboard muestra una advertencia
 y el health check puede bloquear la publicación con `--fail-on-degraded`.
