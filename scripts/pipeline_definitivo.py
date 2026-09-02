@@ -84,7 +84,8 @@ Uso
 Cada etapa guarda su tabla en `docs/technical/` y se salta si ya existe, de modo que una
 ejecución interrumpida se retoma donde estaba.
 
-El baseline FWI necesita `fwi.py` en `src/baselines/`. Si no está, la etapa `fwi` detiene la
+El baseline FWI necesita `fwi_van_wagner.py` en `src/baselines/`. Si no está, la etapa `fwi`
+detiene la
 ejecución en lugar de omitirse en silencio: un informe al que le falta el baseline parece
 completo sin serlo.
 """
@@ -121,8 +122,10 @@ from src.entrenamiento import (  # noqa: E402
 DIR_MODELOS = RAIZ / "data" / "models"
 DIR_TECNICA = RAIZ / "docs" / "technical"
 
-#: Carpeta donde se espera `fwi.py`, la implementación de las ecuaciones de Van Wagner que
-#: sostiene el baseline físico. Se puede apuntar a otra ubicación con `--fwi-ruta`.
+#: Carpeta donde se espera `fwi_van_wagner.py`, que calcula el índice a 1 km desde nuestra
+#: propia meteorología. No confundir con `src/ingestion/fwi.py`, que descarga el FWI oficial
+#: de CEMS a 27,5 km: son dos fuentes distintas del mismo índice y ambas sirven de baseline.
+#: Se puede apuntar a otra ubicación con `--fwi-ruta`.
 RUTA_FWI = RAIZ / "src" / "baselines"
 
 ETAPAS = ("contrato", "modelos", "definitivo", "pareado", "circularidad", "importancia",
@@ -786,10 +789,10 @@ def etapa_fwi(ctx: Contexto, ruta_fwi: Path) -> pd.DataFrame:
     """
     sys.path.insert(0, str(ruta_fwi))
     try:
-        from fwi import calcular_fwi
+        from fwi_van_wagner import calcular_fwi
     except ImportError as error:
         raise SystemExit(
-            f"\nNo se encuentra `fwi.py` en {ruta_fwi}.\n"
+            f"\nNo se encuentra `fwi_van_wagner.py` en {ruta_fwi}.\n"
             "Es el módulo con las ecuaciones de Van Wagner que sostiene el baseline físico.\n"
             "Indicar su ubicación con\n"
             f"--fwi-ruta, o excluir la etapa `fwi` de --etapas.\n\nDetalle: {error}"
