@@ -11,6 +11,7 @@ FORBIDDEN_COLUMNS = {
     "burned_area_ha",
     "large_fire_500ha",
     "is_near_ignition_25x25_10d",
+    "fire_weather_index",
 }
 
 # Hipótesis de simplificación a validar en 2022. No alteran el Parquet ni el cubo.

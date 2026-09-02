@@ -22,6 +22,11 @@ OUTCOME_COLUMNS = {
 SAMPLING_AUXILIARY_COLUMNS = {
     "is_near_ignition_25x25_10d",
 }
+BASELINE_COLUMNS = {
+    # Se conserva para comparar el modelo frente al índice físico, pero no se
+    # entrega a los algoritmos de ML como predictor.
+    "fire_weather_index",
+}
 NON_PREDICTOR_COLUMNS = (
     OUTCOME_COLUMNS
     | {
@@ -33,6 +38,7 @@ NON_PREDICTOR_COLUMNS = (
         "precipitation_sum_1d",  # Duplicado exacto de precipitation_sum.
     }
     | SAMPLING_AUXILIARY_COLUMNS
+    | BASELINE_COLUMNS
 )
 
 
@@ -138,6 +144,7 @@ def finalizar_exportacion_tabular(
         "target": "target_ignicion (EGIF-MITECO)",
         "outcome_columns_not_predictors": sorted(OUTCOME_COLUMNS),
         "sampling_auxiliary_columns_not_predictors": sorted(SAMPLING_AUXILIARY_COLUMNS),
+        "baseline_columns_not_predictors": sorted(BASELINE_COLUMNS),
         "predictor_columns": predictors,
         "partitioning": "year=YYYY/dataset_YYYY.parquet",
         "annual_files": annual_files,

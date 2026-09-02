@@ -26,6 +26,7 @@ HUMAN_ACTIVITY_RAW_DIR = RAW_DIR / "human_activity"
 BOUNDARY_PATH = RAW_DIR / "igm" / "galicia_boundary.geojson"
 CORINE_PATH = RAW_DIR / "corine" / "U2018_CLC2018_V2020_20u1.tif"
 ERA5_RAW_DIR = RAW_DIR / "meteorology" / "era5"
+FWI_RAW_DIR = RAW_DIR / "meteorology" / "fwi"
 
 SPATIAL_CUBE_PATH = STATIC_DIR / "spatial_grid_1km.nc"
 TOPOGRAPHY_CUBE_PATH = STATIC_DIR / "topography_1km.nc"

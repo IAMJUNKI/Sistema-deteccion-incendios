@@ -75,6 +75,7 @@ data/raw/
 ├── corine/
 ├── fire_history/
 ├── meteorology/era5/
+├── meteorology/fwi/  # La crea el workflow si necesita descargar FWI
 └── human_activity/  # La crea el pipeline para OpenStreetMap
 ```
 
@@ -126,14 +127,21 @@ python -m src.workflow `
 ```
 
 La primera vez tarda bastante: crea la rejilla, descarga el DEM, procesa CORINE,
-descarga/procesa la capa estática de actividad humana, procesa ERA5, asigna las
-igniciones EGIF, crea el NetCDF y exporta los Parquet.
+descarga/procesa la capa estática de actividad humana, procesa ERA5, descarga
+FWI desde CEMS si no está disponible, asigna las igniciones EGIF, crea el NetCDF
+y exporta los Parquet.
 No cierres PowerShell mientras se ejecuta.
+
+La primera descarga de FWI requiere haber iniciado sesión una vez en el portal
+EWDS de Copernicus y aceptado sus condiciones de CEMS. Usa el mismo
+`COPERNICUS_CDS_API_KEY` definido en `.env`; no requiere otra credencial. Los
+archivos anuales se guardan en `data/raw/meteorology/fwi/` y no se descargan de
+nuevo si ya existen.
 
 ## Paso 7. Ejecutarlo otra vez cuando ya existen los datos
 
 Si cambias EGIF o quieres regenerar el resultado, no hace falta descargar de
-nuevo ERA5 ni recalcular DEM/CORINE. Ejecuta:
+nuevo ERA5, FWI ni recalcular DEM/CORINE. Ejecuta:
 
 ```powershell
 python -m src.workflow `

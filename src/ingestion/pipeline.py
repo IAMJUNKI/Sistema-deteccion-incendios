@@ -4,7 +4,14 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from src.config import EGIF_START, METEOROLOGY_CUBE_PATH
+import pandas as pd
+
+from src.config import DATACUBE_START, EGIF_START, FWI_RAW_DIR, METEOROLOGY_CUBE_PATH
+from src.ingestion.fwi import (
+    CANONICAL_DATACUBE_VARIABLE_FLAGS as FWI_FLAGS,
+    descargar_fwi_historico,
+    interpolar_fwi_al_grid,
+)
 from src.ingestion.ingest_egif import (
     DEFAULT_EVENTS_OUTPUT,
     DEFAULT_METADATA_OUTPUT,
@@ -33,8 +40,12 @@ def ejecutar_pipeline_meteorologia(
     end_date: str = DEFAULT_END_DATE,
     skip_daily: bool = False,
     inclusion_flags: dict[str, bool] | None = None,
+    fwi_raw_dir: str | Path = FWI_RAW_DIR,
+    include_fwi: bool = True,
+    fwi_inclusion_flags: dict[str, bool] | None = None,
+    fwi_start_date: str = DATACUBE_START,
 ) -> None:
-    """Procesa ERA5-Land y lo incorpora al cubo espacial de 1 km."""
+    """Procesa ERA5-Land e incorpora el baseline FWI al cubo de 1 km."""
     daily_output_path = Path(daily_output_path)
     if not skip_daily:
         if inclusion_flags is None:
@@ -60,6 +71,23 @@ def ejecutar_pipeline_meteorologia(
         start_date,
         end_date,
     )
+    if include_fwi:
+        # Igual que ERA5, esta llamada es reanudable: descarga únicamente los
+        # años que no estén disponibles en ``fwi_raw_dir``.
+        descargar_fwi_historico(
+            fwi_raw_dir,
+            start_date=pd.Timestamp(fwi_start_date).date(),
+            end_date=pd.Timestamp(end_date).date(),
+        )
+        interpolar_fwi_al_grid(
+            fwi_raw_dir,
+            spatial_cube_path,
+            grid_path,
+            meteorology_cube_path,
+            fwi_start_date,
+            end_date,
+            fwi_inclusion_flags or FWI_FLAGS,
+        )
 
 
 def ejecutar_pipeline_egif(
@@ -93,6 +121,12 @@ def main() -> None:
     parser.add_argument("--output", default=str(DEFAULT_METEOROLOGY_CUBE))
     parser.add_argument("--start-date", default=DEFAULT_START_DATE)
     parser.add_argument("--end-date", default=DEFAULT_END_DATE)
+    parser.add_argument("--fwi-raw-dir", default=str(FWI_RAW_DIR))
+    parser.add_argument(
+        "--skip-fwi",
+        action="store_true",
+        help="No descarga ni añade el baseline Fire Weather Index (CEMS).",
+    )
     parser.add_argument(
         "--skip-daily",
         action="store_true",
@@ -124,6 +158,8 @@ def main() -> None:
             start_date=args.start_date,
             end_date=args.end_date,
             skip_daily=args.skip_daily,
+            fwi_raw_dir=args.fwi_raw_dir,
+            include_fwi=not args.skip_fwi,
         )
 
     if args.egif_xml:

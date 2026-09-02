@@ -22,16 +22,16 @@ NetCDF conserva además la rejilla rectangular completa y la máscara `is_galici
 
 ## Topografía (Copernicus DEM GLO-30)
 
-`elevation_mean/std`, `slope_mean/std`, `roughness_mean/std` y las fracciones
-de orientación `aspect_000_045_fraction` hasta `aspect_315_360_fraction`.
+`elevation_mean/std`, `slope_mean/std` y las fracciones de orientación
+`aspect_000_045_fraction` hasta `aspect_315_360_fraction`.
 
 ## Cobertura del suelo (CORINE 2018)
 
 Las fracciones `artificial`, `agriculture`, `broadleaf_forest`,
 `coniferous_forest`, `mixed_forest`, `scrub`, `open_spaces`, `wetlands` y
-`water` suman aproximadamente 1 en cada celda. `forest_cover_fraction` es la
-suma de los tres tipos de bosque. Cuando una celda costera no tiene píxeles
-CORINE válidos, se copia el vector completo de la celda válida más próxima.
+`water` suman aproximadamente 1 en cada celda. Cuando una celda costera no
+tiene píxeles CORINE válidos, se copia el vector completo de la celda válida
+más próxima.
 
 ## Actividad humana (OpenStreetMap, instantánea 2022-01-01)
 
@@ -59,6 +59,21 @@ terrestre ERA5-Land más cercano.
 La coordenada escalar `number` de ERA5 no se conserva: identificaba un único
 miembro de ensemble y no tenía significado espacial, temporal ni predictivo.
 
+## Baseline físico de peligro de incendio (CEMS/EFFIS)
+
+`fire_weather_index` (FWI) es el índice físico canadiense de peligro de
+incendio publicado diariamente por CEMS a partir de forzamiento ERA5. Se
+descarga para Galicia desde el producto histórico de CEMS/EWDS, con resolución
+original de 0,25°, y se asigna a cada celda de 1 km mediante vecino más
+cercano, siguiendo el procedimiento de IberFire. Su unidad es `1`: valores
+mayores indican condiciones meteorológicas más favorables al comportamiento
+del fuego, no igniciones observadas.
+
+Se conserva como baseline comparable, pero no se entrega como predictor a los
+modelos de ML ni sustituye a las variables de ERA5-Land. Tampoco debe
+interpretarse como el target EGIF. El workflow descarga el índice solo si falta algún archivo anual;
+el uso de la API requiere haber aceptado previamente las condiciones de CEMS.
+
 ## Resultados EGIF: no usar como predictores
 
 - `target_ignicion`: 1 si hay una o más igniciones EGIF en la celda y fecha; 0
@@ -79,7 +94,7 @@ miembro de ensemble y no tenía significado espacial, temporal ni predictivo.
 ## Flags de inclusión
 
 `src/datacube_profile.py` reúne un único perfil canónico para topografía,
-cobertura, actividad humana, calendario y meteorología. No es una lista de
+cobertura, actividad humana, calendario, meteorología y FWI. No es una lista de
 predictores del modelo: esa selección se valida después en ML.
 
 ## Revisión de variables aplicada al cubo final
@@ -91,6 +106,7 @@ continúan almacenándose, pero nunca se usan como predictores.
 | Decisión | Variables | Motivo breve |
 |---|---|---|
 | Añadidas | `vpd_mean`, `vpd_max_12_18h` | El déficit de presión de vapor (kPa) resume conjuntamente temperatura y sequedad del aire; la ventana de tarde representa la condición más desfavorable. |
+| Añadida | `fire_weather_index` | Baseline físico diario de CEMS/EFFIS, interpolado por vecino más cercano desde 0,25°; se evalúa de forma separada, nunca como predictor de ML. |
 | Añadidas | `wind_speed_mean_7d`, `relative_humidity_mean_14d`, `consecutive_dry_days` | Amplían la memoria meteorológica: viento medio reciente, humedad a dos semanas y duración interpretable de la racha seca (`precipitation_sum < 1 mm`). |
 | Añadidas | `road_length_main_km`, `road_length_local_km`, `road_length_track_km`, `road_length_other_km` | Desagregan la intensidad y el tipo de acceso humano; su suma es `road_length_km`. |
 | Añadidas | `residential_area_fraction`, `building_area_fraction` | Miden intensidad de ocupación humana dentro de la celda, evitando la saturación de una simple distancia. |

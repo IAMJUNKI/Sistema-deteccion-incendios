@@ -42,6 +42,7 @@ PROHIBIDAS = frozenset({
     COL_CELDA, COL_FECHA, COL_TARGET,
     "x", "y", "is_galicia", "year",
     "burned_area_ha", "large_fire_500ha", "is_near_ignition_25x25_10d",
+    "fire_weather_index",
 })
 
 #: Patrones que asignan cada variable a su grupo temático. El orden importa: se aplica el

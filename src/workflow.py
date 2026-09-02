@@ -79,6 +79,7 @@ def ejecutar_workflow_historico(
     raw_meteorology_dir: str | Path = ERA5_RAW_DIR,
     daily_meteorology_path: str | Path = ERA5_DAILY_PATH,
     skip_daily_meteorology: bool = False,
+    skip_fwi: bool = False,
     rebuild_static: bool = False,
     rebuild_human_activity: bool = False,
 ) -> None:
@@ -128,7 +129,7 @@ def ejecutar_workflow_historico(
     end_date = ultima_fecha_egif(egif_xml).date().isoformat()
     logger.info("      Periodo EGIF detectado: %s a %s.", DATACUBE_START, end_date)
     _limpiar_salidas_dinamicas(meteorology_cube_path, datacube_path, tabular_output_dir)
-    logger.info("[2/5] Preparando calendario y meteorología ERA5-Land.")
+    logger.info("[2/5] Preparando calendario, ERA5-Land y el baseline FWI de CEMS.")
     if skip_daily_meteorology:
         logger.info("      Reutilizando ERA5 diario: %s", daily_meteorology_path)
     guardar_datacubo_temporal(
@@ -145,6 +146,8 @@ def ejecutar_workflow_historico(
         end_date=end_date,
         skip_daily=skip_daily_meteorology,
         inclusion_flags=CANONICAL_PROFILE["meteorology"],
+        include_fwi=not skip_fwi,
+        fwi_inclusion_flags=CANONICAL_PROFILE["fwi"],
     )
     logger.info("[3/5] Procesando igniciones EGIF y el target diario.")
     ejecutar_pipeline_egif(
@@ -204,12 +207,18 @@ def main() -> None:
         help="Recalcula las variables OSM de carreteras y zonas residenciales.",
     )
     parser.add_argument("--skip-daily-meteorology", action="store_true")
+    parser.add_argument(
+        "--skip-fwi",
+        action="store_true",
+        help="No descarga ni incorpora Fire Weather Index (solo para diagnósticos).",
+    )
     args = parser.parse_args()
     ejecutar_workflow_historico(
         egif_xml=args.egif_xml,
         grid_path=args.grid,
         spatial_cube_path=args.spatial_cube,
         skip_daily_meteorology=args.skip_daily_meteorology,
+        skip_fwi=args.skip_fwi,
         rebuild_static=args.rebuild_static,
         rebuild_human_activity=args.rebuild_human_activity,
     )

@@ -2,7 +2,8 @@
 
 TFM para construir un datacubo diario de 1 km × 1 km sobre Galicia. El target
 es la ignición oficial de EGIF-MITECO; las fuentes explicativas son Copernicus
-DEM GLO-30, CORINE Land Cover 2018 y ERA5-Land.
+DEM GLO-30, CORINE Land Cover 2018, ERA5-Land y el baseline físico FWI de
+CEMS/EFFIS.
 
 ## Contrato del dataset
 
@@ -22,7 +23,7 @@ Consulta [las variables](docs/variables.md) y la guía para
 
 ```text
 src/geospatial/   rejilla, DEM y CORINE
-src/ingestion/    ERA5-Land y EGIF
+src/ingestion/    ERA5-Land, FWI (CEMS) y EGIF
 src/features/     calendario y exportación tabular
 src/modeling/     carga, selección y evaluación temporal de modelos
 src/workflow.py   orquestación completa
