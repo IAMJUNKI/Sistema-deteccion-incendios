@@ -1,0 +1,67 @@
+{
+  "años_entrenamiento": [
+    2019,
+    2020
+  ],
+  "año_calibracion": 2021,
+  "año_validacion": 2022,
+  "año_reservado": 2023,
+  "modelo": "lightgbm",
+  "hiperparametros": {
+    "n_estimators": 800,
+    "learning_rate": 0.05,
+    "num_leaves": 63,
+    "min_child_samples": 30,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "verbose": -1,
+    "deterministic": true,
+    "force_row_wise": true
+  },
+  "rondas_parada": 50,
+  "candidatos": [
+    "lightgbm",
+    "xgboost",
+    "random_forest",
+    "logistic_regression"
+  ],
+  "modulo_muestreo": 100,
+  "semilla": 42,
+  "semillas_estabilidad": [
+    42,
+    7,
+    123,
+    2024,
+    31
+  ],
+  "fpr_objetivo": 0.05,
+  "top_k_diario": 0.01,
+  "n_bootstrap": 1000,
+  "meses_temporada": [
+    6,
+    7,
+    8,
+    9
+  ],
+  "circulares_estrictas": [
+    "precipitation_sum",
+    "consecutive_dry_days"
+  ],
+  "excluir_del_modelo": [
+    "precipitation_sum",
+    "consecutive_dry_days"
+  ],
+  "circulares_amplias": [
+    "precipitation_sum",
+    "consecutive_dry_days",
+    "precipitation_sum_3d",
+    "precipitation_sum_7d",
+    "precipitation_sum_14d",
+    "precipitation_sum_30d",
+    "temperature_mean_7d",
+    "relative_humidity_mean_7d",
+    "relative_humidity_mean_14d",
+    "wind_speed_mean_7d"
+  ],
+  "bloques_espaciales": 5
+}
