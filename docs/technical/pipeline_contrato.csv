@@ -1,0 +1,12 @@
+clave,valor
+predictores,50
+años,"[2019, 2020, 2021, 2022, 2023]"
+filas_totales,53015391
+contrato_temporal,No temporal shift; meteorological accumulations include date T.
+filas_descartadas,0
+variables_ciclicas,[]
+año_reservado,2023
+grupo_actividad_humana,7
+grupo_cobertura,9
+grupo_meteorologia,22
+grupo_topografia,12
