@@ -55,6 +55,9 @@ ROAD_CLASS_GROUPS = {
 }
 ROAD_CLASSES = set().union(*ROAD_CLASS_GROUPS.values())
 CANONICAL_DATACUBE_VARIABLE_FLAGS = {
+    # Estas dos distancias se conservan en la capa táctica para auditoría,
+    # aunque no entran en el contrato de 50 predictores EGIF
+    # (tabular.py/canonical_contract.py las excluyen explícitamente).
     "distance_to_road_m": False,
     "road_length_km": True,
     "distance_to_residential_area_m": False,
@@ -65,7 +68,11 @@ CANONICAL_DATACUBE_VARIABLE_FLAGS = {
     "residential_area_fraction": True,
     "building_area_fraction": True,
 }
-DATACUBE_VARIABLE_FLAGS = CANONICAL_DATACUBE_VARIABLE_FLAGS
+# La salida del módulo mantiene también las variables tácticas de distancia
+# para no perder información útil para movilización y auditoría. Las flags
+# canónicas siguen describiendo la selección del modelo, no la eliminación
+# física de esas columnas del datacubo.
+DATACUBE_VARIABLE_FLAGS = {name: True for name in HUMAN_ACTIVITY_VARIABLES}
 LEGACY_ROAD_CLASSES = {
     "motorway",
     "motorway_link",

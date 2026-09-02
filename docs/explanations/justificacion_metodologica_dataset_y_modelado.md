@@ -49,10 +49,11 @@ Se adopta la malla regular de celdas de $1000\text{ m} \times 1000\text{ m}$ (co
 
 ---
 
-### 🔹 Decisión D: Abordaje del Sesgo Meteorológico (ERA5 vs MeteoGalicia)
+### 🔹 Decisión D: Separación entre benchmark histórico y forecast operativo
 * **Entrenamiento (2019–2023):** Se usa **ERA5-Land** ($9\text{ km}$ reanálisis downscaled a 1 km con DEM) por ser una serie continua y homogénea sin lagunas.
 * **Producción Operativa (2025+):** Se usa la previsión de **MeteoGalicia (WRF)**.
-* **Mitigación:** Aplicación de **Quantile Mapping** / normalización por celda para eliminar el *Domain Shift*. La cuantificación empírica de esta brecha constituye una contribución central del TFM.
+* **Primera versión:** No se aplica Quantile Mapping. Sin pares históricos de forecast-observación de MeteoGalicia, ordenar los valores de un único día no constituye una corrección meteorológica válida.
+* **Roadmap:** Los forecasts operativos se archivan desde el primer despliegue. Cuando exista suficiente histórico, se evaluará una corrección por variable, estación del año y horizonte, y se cuantificará por separado la degradación frente al benchmark ERA5.
 
 ---
 
@@ -133,7 +134,7 @@ Para garantizar la auditoría técnica del repositorio, a continuación se detal
 | **A. Target EGIF MITECO** | [`src/ingestion/ingest_egif.py`](file:///Users/junki/Desktop/proyectos/Sistema-deteccion-incendios/src/ingestion/ingest_egif.py) | `parse_egif_xml()` y `map_fires_to_grid()` | Extrae 9.549 incendios oficiales verificados por agentes forestales en las provincias 15, 27, 32 y 36 de Galicia ($>0.1\text{ ha}$). |
 | **B. Ignición Día 0** | [`src/ingestion/ingest_egif.py`](file:///Users/junki/Desktop/proyectos/Sistema-deteccion-incendios/src/ingestion/ingest_egif.py) | `map_fires_to_grid()` | Agrupa por `(cell_id, fecha)` tomando la fecha de inicio/detección, descartando la propagación de días 2, 3+ para evitar *temporal leakage*. |
 | **C. Parsimonia 20 Variables** | [`src/features/build_tabular_dataset.py`](file:///Users/junki/Desktop/proyectos/Sistema-deteccion-incendios/src/features/build_tabular_dataset.py) | `assemble_tabular_dataset()` | Ensambla las 20 columnas principales y condensa las 63 clases de CORINE en la variable única `combustible_pct_forestal`. |
-| **D. Quantile Mapping Meteo** | [`src/ingestion/ingest_meteogalicia.py`](file:///Users/junki/Desktop/proyectos/Sistema-deteccion-incendios/src/ingestion/ingest_meteogalicia.py) | `apply_quantile_mapping()` | Ajusta los percentiles de la previsión numérica WRF de MeteoGalicia a la serie de reanálisis ERA5-Land para eliminar el *Domain Shift*. |
+| **D. Forecast operativo** | [`src/ingestion/meteogalicia_forecast.py`](file:///Users/junki/Desktop/proyectos/Sistema-deteccion-incendios/src/ingestion/meteogalicia_forecast.py) | `MeteoGaliciaClient`, `validate_hourly_forecast()` y `assign_forecast_to_grid()` | Descarga, conserva, valida y asigna el forecast WRF. La corrección estadística queda pendiente hasta disponer de pares forecast-observación. |
 | **E. Desfase Temporal $T-1$** | [`src/features/temporal_shift.py`](file:///Users/junki/Desktop/proyectos/Sistema-deteccion-incendios/src/features/temporal_shift.py) | `apply_temporal_shift()` y `compute_climate_memory()` | Aplica `.shift(1)` de 24h a predictores meteorológicos y calcula memorias hídricas a 7d y 30d (`prec_acum_7d`, `prec_acum_30d`). |
 | **F. Hard Negative Mining** | [`src/models/train_baseline.py`](file:///Users/junki/Desktop/proyectos/Sistema-deteccion-incendios/src/models/train_baseline.py) | `hard_negative_sampling()` | Mantiene el 100% de los fuegos reales y realiza un submuestreo controlado 1:50 de ceros representativos. |
 | **G. Métricas y Calibración** | [`src/models/metrics.py`](file:///Users/junki/Desktop/proyectos/Sistema-deteccion-incendios/src/models/metrics.py) | `evaluate_imbalanced_metrics()` e `isotonic_calibration` | Calcula PR-AUC, Recall @ $FPR \le 5\%$ y ajusta probabilidades con *Isotonic Regression*. |
@@ -175,8 +176,8 @@ Sistema-deteccion-incendios/
 
 Habiendo validado empíricamente a **LightGBM Standard** como el modelo ganador definitivo (y desestimado las Redes Neuronales 3D por su menor Recall a FPR $\le 5\%$), las tareas inmediatas para completar el TFM son:
 
-1. **Tarea 1: Inferencia Operativa Diaria en Tiempo Real (`src/ingestion/ingest_meteogalicia.py` & `scripts/run_daily_inference.py`)**
-   - Automatización de la ingesta matutina de MeteoGalicia (07:00 AM), aplicación de *Quantile Mapping* e inferencia rápida con LightGBM para predecir las 30.697 celdas de Galicia para el día de hoy.
+1. **Tarea 1: Inferencia Operativa Diaria en Tiempo Real (`src/ingestion/meteogalicia_forecast.py` & `scripts/run_daily_inference.py`)**
+   - Automatización de la ingesta de MeteoSIX v5, selección WRF 1 km con fallback WRF 04 km, archivado del forecast bruto e inferencia rápida con los modelos LightGBM serializados para los horizontes T+1, T+2 y T+3.
 
 2. **Tarea 2: Dashboard Interactivo en Streamlit (`app.py`)**
    - Desarrollo de la aplicación web interactiva en **Streamlit** con mapas de riesgo en alta definición (PyDeck/Folium), selector de fechas, buscador por municipio/comarca y alertas urgentes.
@@ -208,14 +209,14 @@ Habiendo validado empíricamente a **LightGBM Standard** como el modelo ganador 
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│                   1. INGESTA DIARIA OPERATIVA (07:00 AM)                         │
-│   Descarga automática de la previsión WRF de MeteoGalicia (API JSON / NetCDF)    │
+│                   1. INGESTA DIARIA OPERATIVA (scheduler)                       │
+│   WRF 1 km de MeteoSIX v5 → fallback WRF 04 km → forecast archivado stale       │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │                     2. CORRECCIÓN DE SESGO Y PREPROCESADO                        │
-│   - Quantile Mapping respecto a la serie climática de entrenamiento ERA5-Land.   │
+│   - Validación de cobertura y archivado; corrección estadística solo con pares históricos. │
 │   - Generación de desfases T-1 y memorias climáticas acumuladas (7d y 30d).      │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │
@@ -247,4 +248,3 @@ Habiendo validado empíricamente a **LightGBM Standard** como el modelo ganador 
 │   - Descomposición de factores de riesgo con valores SHAP por celda seleccionada.│
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
-

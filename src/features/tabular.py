@@ -36,6 +36,8 @@ NON_PREDICTOR_COLUMNS = (
         # Se mantienen para trazabilidad, pero no añaden señal al modelo actual.
         "aspect_no_data_fraction",  # Constante a cero en la malla de Galicia.
         "precipitation_sum_1d",  # Duplicado exacto de precipitation_sum.
+        "distance_to_road_m",  # Variable táctica almacenada, no predictor EGIF v1.
+        "distance_to_residential_area_m",  # Variable táctica almacenada, no predictor EGIF v1.
     }
     | SAMPLING_AUXILIARY_COLUMNS
     | BASELINE_COLUMNS

@@ -1,0 +1,13 @@
+[Unit]
+Description=Comprobaciones periódicas del pipeline de riesgo
+
+[Timer]
+OnCalendar=*-*-* *:00:00
+OnCalendar=*-*-* *:30:00
+Persistent=true
+AccuracySec=1min
+Unit=fire-risk-health.service
+
+[Install]
+WantedBy=timers.target
+

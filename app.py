@@ -1,0 +1,168 @@
+"""Dashboard Interactivo de Predicción Diaria de Riesgo de Incendios Forestales en Galicia.
+
+Centro de Mando de Alerta Temprana (Emergency Operations Center - EOC) con resolución a 1 km²,
+perímetros disueltos GIS, consulta municipal por concellos, diagnóstico en lenguaje claro,
+simulador What-If y protocolos operativos de despacho PLADIGA.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+import streamlit as st
+from dotenv import load_dotenv
+
+from src.webapp.components.concello_lookup import render_concello_lookup_tab
+from src.webapp.components.header_kpis import render_header_and_kpis
+from src.webapp.components.map_view import render_map_tab
+from src.webapp.components.operational_protocols import render_operational_protocols_tab
+from src.webapp.components.shap_simulator import render_shap_and_simulator_tab
+from src.webapp.components.sidebar import render_sidebar
+from src.webapp.components.system_status import render_system_status_tab
+from src.webapp.components.territorial_analytics import render_territorial_analytics_tab
+from src.webapp.styles import apply_custom_styles
+from src.webapp.utils.data_loader import (
+    load_dashboard_model,
+    load_grid_geometries,
+    load_operational_manifest,
+    load_operational_predictions,
+)
+
+# 1. Configuración de página Streamlit
+st.set_page_config(
+    page_title="Sistema de Alerta Temprana de Incendios — Galicia",
+    page_icon="🔥",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# 2. Inyección de estilos visuales profesionales con Google Material Symbols
+apply_custom_styles()
+
+
+def main() -> None:
+    load_dotenv()
+    # 3. Carga preliminar de datos para inicializar el sidebar
+    predictions_raw = load_operational_predictions()
+
+    # 4. Renderizar panel lateral
+    sidebar_params = render_sidebar(predictions_raw)
+    selected_file = sidebar_params["selected_dataset_file"]
+    selected_horizon = sidebar_params["selected_horizon"]
+    map_style = sidebar_params["map_style"]
+    color_mode = sidebar_params["color_mode"]
+    filter_risk = sidebar_params["filter_risk"]
+
+    # 5. Cargar dataset efectivo según selección
+    predictions = load_operational_predictions(selected_file)
+    if predictions.empty:
+        st.error(
+            "No se encontraron predicciones disponibles en data/processed/. Ejecuta "
+            "`scripts/run_daily_inference.py` para generar el pronóstico operativo."
+        )
+        st.stop()
+
+    manifest = load_operational_manifest()
+    geometries = load_grid_geometries()
+
+    forecast_quality = manifest.get("forecast_quality", "unknown")
+    if forecast_quality in {"incomplete", "invalid", "unavailable"}:
+        st.error(
+            "No hay un forecast completo y válido para publicar. El resultado mostrado "
+            "no debe utilizarse para movilización preventiva."
+        )
+    elif forecast_quality in {"stale", "fresh_fallback", "fresh_aemet_degraded", "fresh_aemet_proxy", "fresh_aemet"}:
+        st.warning(
+            f"Calidad meteorológica: {forecast_quality}. Consulta la pestaña de auditoría "
+            "antes de interpretar el mapa como escenario WRF 1 km."
+        )
+    state_quality = manifest.get("state", {}).get("feature_quality_counts", {})
+    if isinstance(state_quality, dict) and state_quality.get("legacy_proxy", 0):
+        st.warning(
+            "El estado histórico contiene features meteorológicas proxy derivadas de agregados "
+            "legacy. La memoria de sequedad debe actualizarse con observaciones horarias antes "
+            "de usar el mapa para movilización preventiva."
+        )
+
+    # Filtrar por horizonte seleccionado
+    if "horizon_days" in predictions.columns:
+        df_data = predictions[predictions["horizon_days"] == selected_horizon].copy()
+        if df_data.empty:
+            df_data = predictions.copy()
+    else:
+        df_data = predictions.copy()
+
+    # Fusionar geometrías y centroides reales de celda si están disponibles
+    if not geometries.empty and "cell_id" in df_data.columns:
+        cols_to_merge = [c for c in geometries.columns if c not in df_data.columns or c == "cell_id"]
+        if len(cols_to_merge) > 1:
+            df_data = df_data.merge(geometries[cols_to_merge], on="cell_id", how="left")
+
+    target_date = str(pd.to_datetime(df_data.get("fecha", pd.Series(["hoy"]))).dt.strftime("%Y-%m-%d").iloc[0])
+
+    # Cargar modelo serializado para el horizonte
+    try:
+        dashboard_model = load_dashboard_model(selected_horizon)
+    except Exception:
+        dashboard_model = None
+
+    # 6. Renderizar Cabecera de Mando y Resumen Ejecutivo Matinal
+    render_header_and_kpis(df_data, manifest, selected_horizon, target_date)
+
+    # 7. Renderizar las Pestañas de Navegación Operativa
+    tab_map, tab_concello, tab_analytics, tab_shap, tab_protocols, tab_status = st.tabs(
+        [
+            "Centro de Mando Cartográfico",
+            "Consulta por Concello",
+            "Situación Territorial y Rankings",
+            "Diagnóstico y Simulador",
+            "Medidas y Despacho (PLADIGA)",
+            "Auditoría del Sistema",
+        ]
+    )
+
+    with tab_map:
+        render_map_tab(
+            df_data=df_data,
+            selected_horizon=selected_horizon,
+            map_style=map_style,
+            color_mode=color_mode,
+            filter_risk=filter_risk,
+        )
+
+    with tab_concello:
+        render_concello_lookup_tab(
+            df_data=df_data,
+            target_date=target_date,
+        )
+
+    with tab_analytics:
+        render_territorial_analytics_tab(
+            df_data=df_data,
+            all_predictions=predictions,
+        )
+
+    with tab_shap:
+        render_shap_and_simulator_tab(
+            df_data=df_data,
+            dashboard_model=dashboard_model,
+            selected_horizon=selected_horizon,
+        )
+
+    with tab_protocols:
+        render_operational_protocols_tab(
+            df_data=df_data,
+            manifest=manifest,
+            selected_horizon=selected_horizon,
+            target_date=target_date,
+        )
+
+    with tab_status:
+        render_system_status_tab(
+            df_data=df_data,
+            manifest=manifest,
+            selected_horizon=selected_horizon,
+        )
+
+
+if __name__ == "__main__":
+    main()

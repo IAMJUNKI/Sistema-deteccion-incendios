@@ -1,0 +1,22 @@
+[Unit]
+Description=Inferencia operativa T+1/T+2/T+3
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=fire-risk
+Group=fire-risk
+WorkingDirectory=/srv/fire-risk/app
+EnvironmentFile=/srv/fire-risk/config/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/run_daily_inference.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/srv/fire-risk/app
+ReadWritePaths=/srv/fire-risk/data
+TimeoutStartSec=30min
+UMask=0027
+

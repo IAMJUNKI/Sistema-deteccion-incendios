@@ -6,7 +6,7 @@
 - **Auditoría e Integración de Avances del Equipo:** Evaluación de las aproximaciones de datos en `misc/` (Dataset Tabular 2D de Miquel en `.parquet` y Datacubo 3D de Alfonso en `.nc`).
 - **Definición del Target de Ignición Oficial:** Adopción del **EGIF del MITECO (2019–2023)** como fuente oficial de *Ground Truth* para el inicio de incendios forestales ($>0.1$ ha), relegando **NASA FIRMS** a tareas de validación secundaria en tiempo real.
 - **Estrategia de Mitigación de Fuga de Datos y Desfase Temporal:** Implementación del *Temporal Shift* de las variables meteorológicas ($T-1$) para predecir el inicio del incendio en el día $T$ mediante las condiciones antecedentes.
-- **Tratamiento del Sesgo Meteorológico (ERA5-Land vs MeteoGalicia):** Plan de estandarización por *Quantile Mapping* para asegurar que el modelo entrenado con reanálisis ERA5-Land pueda inferir con datos en tiempo real de MeteoGalicia (WRF) sin sufrir caída de rendimiento por *domain shift*.
+- **Tratamiento del Sesgo Meteorológico (ERA5-Land vs MeteoGalicia):** En la primera versión se archiva el forecast bruto y se mide el *domain shift* sin aplicar una corrección no validada. El *Quantile Mapping* queda para una segunda etapa con pares forecast-observación.
 - **Estrategia para Desbalanceo Severo:** Selección de **PR-AUC** y **Recall a FPR $\le 5\%$** como métricas principales frente al ROC-AUC tradicional, junto con submuestreo de ceros (*Hard Negative Mining*) y calibración isotónica de probabilidades.
 
 ## 2. ¿Por qué se ha hecho?
@@ -28,7 +28,7 @@
 ## 4. ¿Por qué se han elegido estas tecnologías?
 - **Apache Parquet (PyArrow / DuckDB / Pandas):** Formato columnar de alta compresión y velocidad de lectura rápida para algoritmos en árbol (XGBoost / LightGBM / CatBoost).
 - **NetCDF4 / Xarray (`.nc`):** Estándar internacional en ciencias de la Tierra para la manipulación de tensores multidimensionales geoespaciales, compatible con PyTorch y TensorFlow.
-- **Quantile Mapping / Isotonic Regression (Scikit-Learn):** Algoritmos no paramétricos de calibración que ajustan distribuciones entre fuentes distintas (ERA5 vs MeteoGalicia) y corrigen probabilidades sesgadas por submuestreo.
+- **Isotonic Regression (Scikit-Learn):** Calibración de las probabilidades del modelo de incendios por horizonte. La corrección meteorológica entre ERA5 y MeteoGalicia no se activa sin un archivo histórico de pares.
 
 ## 5. ¿Qué conseguimos con ello?
 - **Unificación y Coordinación del Equipo:** Un criterio único y compartido para Miquel, Alfonso, Raúl y Diego que elimina la duplicidad de esfuerzos antes de la reunión del sábado.

@@ -1,4 +1,9 @@
-"""Lectura del contrato del dataset EGIF.
+"""Lectura del contrato analítico EGIF heredado.
+
+La inferencia operativa usa como fuente normativa
+``src.features.canonical_contract`` (``egif-2d-v1`` y 50 predictores). Este
+módulo se mantiene para los experimentos de selección y auditoría del equipo;
+no debe utilizarse para decidir automáticamente el esquema de producción.
 
 Este módulo es la única puerta de entrada al esquema. Todo lo demás pregunta aquí en vez de
 llevar listas de columnas escritas a mano, por una razón operativa: **el dataset todavía no es
@@ -42,7 +47,7 @@ PROHIBIDAS = frozenset({
     COL_CELDA, COL_FECHA, COL_TARGET,
     "x", "y", "is_galicia", "year",
     "burned_area_ha", "large_fire_500ha", "is_near_ignition_25x25_10d",
-    "fire_weather_index",
+    "fire_weather_index", "precipitation_sum_1d",
 })
 
 #: Patrones que asignan cada variable a su grupo temático. El orden importa: se aplica el

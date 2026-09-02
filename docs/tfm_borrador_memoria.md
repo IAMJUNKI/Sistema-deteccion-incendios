@@ -11,6 +11,7 @@
 - [Capítulo 3: Metodología y Prevención de Fugas de Datos](#capítulo-3-metodología-y-prevención-de-fugas-de-datos)
 - [Capítulo 4: Diseño de la Infraestructura Geoespacial (Fase 1)](#capítulo-4-diseño-de-la-infraestructura-geoespacial-fase-1)
 - [Capítulo 5: Resultados y Evaluación Comparativa de Modelos Baseline](#capítulo-5-resultados-y-evaluación-comparativa-de-modelos-baseline)
+- [Capítulo 6: Diseño e Implementación del Centro de Mando Táctico y Dashboard Operativo (Fase 5)](#capítulo-6-diseño-e-implementación-del-centro-de-mando-táctico-y-dashboard-operativo-fase-5)
 
 ---
 
@@ -26,7 +27,7 @@
 
 ### 2.1 Posicionamiento respecto a soluciones y estudios previos
 *(Párrafo de posicionamiento para la sección de antecedentes del TFM)*
-> A diferencia de los trabajos precedentes que o bien construyen datasets de alta resolución (como el dataset IberFire, Ercibengoa et al., 2025) o bien operan sistemas de índices meteorológicos a escala continental (como EFFIS/GEFF de Copernicus), este TFM presenta un pipeline completo de extremo a extremo: desde la ingesta de datos históricos y la construcción de negativos difíciles hasta la inferencia diaria con previsiones meteorológicas regionales de MeteoGalicia, la calibración estadística de niveles de riesgo y el despliegue de un dashboard operativo. La cuantificación de la brecha de rendimiento entre el modo histórico (ERA5) y el modo predictivo operativo (MeteoGalicia) constituye la contribución científica central de este trabajo.
+> A diferencia de los trabajos precedentes que se centran en construir datasets de alta resolución (como IberFire, con una resolución de 1 km × 1 día y 120 variables) o en operar índices meteorológicos a escala continental, este TFM presenta un pipeline completo de extremo a extremo: desde la ingesta histórica y la construcción de negativos difíciles hasta la inferencia diaria con previsiones regionales de MeteoGalicia, la calibración de probabilidades, la priorización preventiva de celdas y el despliegue de un dashboard operativo. IberFire se utiliza como referencia metodológica para la integración de fuentes y la prevención de fugas, pero no como una comparación directa de objetivos: su definición de incendio y su estrategia de evaluación no son idénticas a las de este sistema. La cuantificación de la brecha de rendimiento entre el benchmark histórico ERA5-Land y el modo predictivo operativo MeteoGalicia constituye una contribución científica central de este trabajo.
 
 ---
 
@@ -44,9 +45,9 @@
 *(Justificación de la elección de datos del Ministerio para el entrenamiento supervisado)*
 > Para garantizar la validez metodológica en la evaluación comparativa entre algoritmos tabulares (XGBoost) y de Aprendizaje Profundo 3D (CNNs), se selecciona la Estadística General de Incendios Forestales (EGIF) del MITECO (2019-2023) como la fuente primaria de *Ground Truth*. Frente a las detecciones de anomalías térmicas por satélite (NASA FIRMS), que sufren de ruido térmico antropogénico (quemas agrícolas autorizadas, reflexiones industriales), el EGIF proporciona registros auditados sobre el terreno por agentes forestales para incendios con superficie superior a 0.1 hectáreas. Las detecciones de satélite se preservan como banco de pruebas complementario para evaluar la capacidad del sistema en escenarios de inferencia en tiempo casi-real (Near-Real-Time).
 
-### 3.4 Caracterización del Domain Shift entre Reanálisis (ERA5) y Previsión Operativa (MeteoGalicia)
+### 3.4 Caracterización del Domain Shift entre Reanálisis (ERA5-Land) y Previsión Operativa (MeteoGalicia)
 *(Justificación académica del sesgo meteorológico y su mitigación)*
-> La construcción del sistema impone una asimetría de fuentes meteorológicas: el modelo aprende las relaciones de riesgo a partir del reanálisis histórico ERA5-Land (cobertura homogénea de 9 km downscaled a 1 km con corrección altimétrica), pero en producción infiere a partir de la predicción numérica del modelo WRF de MeteoGalicia. Para evitar la degradación del rendimiento por cambio de distribución (*Domain Shift*), el pipeline aplica un filtrado de *Quantile Mapping* y estandarización climática por celda. La cuantificación empírica de la brecha de precisión resultante de este cambio de fuente representa uno de los núcleos de investigación de este trabajo.
+> La construcción del sistema impone una asimetría de fuentes meteorológicas: el modelo aprende las relaciones de riesgo a partir del reanálisis histórico ERA5-Land, mientras que en producción infiere a partir de la predicción numérica WRF de MeteoGalicia. La API MeteoSIX v5 ofrece una malla WRF de 1 km, que constituye la fuente preferida, y una malla de 4 km como fallback cuando la primera no está disponible o no supera la validación de cobertura. La rejilla de riesgo continúa siendo de 1 km, pero el manifiesto registra la malla meteorológica efectiva y marca `fresh_fallback` cuando se degrada la resolución. La primera versión archiva el forecast bruto y separa el benchmark ERA5 del rendimiento operativo; no aplica Quantile Mapping sin pares históricos forecast-observación. La cuantificación de la brecha de precisión resultante de este cambio de fuente representa uno de los núcleos de investigación de este trabajo.
 
 ### 3.5 Gestión del desbalanceo extremo y calibración no paramétrica de probabilidades
 *(Justificación técnica para el entrenamiento en escenarios de baja prevalencia)*
@@ -58,7 +59,7 @@
 
 ### 3.7 Selección de 20 variables explicativas y principio de parsimonia
 *(Justificación de la reducción de la dimensionalidad frente a datasets como IberFire)*
-> Frente a desarrollos precedentes que incorporan más de 60 clases dispersas de uso de suelo (como IberFire, donde más de 40 clases resultan nulas en la región del noroeste peninsular), este proyecto aplica el principio de parsimonia reduciendo el espacio de entrada a 20 características densas organizadas en 4 bloques físicos: meteorología directa antecedente ($T-1$), memoria climática acumulada a 7 y 30 días, regla fisiológica de estrés (`alerta_30_30`), topografía/combustibles estáticos y proximidad a la infraestructura humana. Esta compactación previene el sobreajuste, elimina la colinealidad y optimiza el rendimiento en la inferencia en tiempo real.
+> Frente a desarrollos como IberFire, que integra 120 variables en ocho categorías, este proyecto aplica inicialmente el principio de parsimonia con un contrato operativo reducido de características densas organizadas en cuatro bloques físicos: meteorología, memoria de sequedad, topografía/combustibles y contexto humano. Esta compactación facilita la trazabilidad y la inferencia en tiempo real. La reducción no se considera definitiva: los índices de vegetación, FWI, población, accesibilidad y humedad del suelo se mantienen como extensiones que deberán justificar su valor mediante ablation tests y validación temporal.
 
 ---
 
@@ -132,5 +133,60 @@
 >
 > Este paradigma híbrido evita la contaminación del dataset con 18.37 millones de ceros invernales triviales (que habrían diluido el gradiente de entrenamiento en ratio 1:15.000) y garantiza la eliminación de artefactos fuera de rango en producción sin degradar la precisión del modelo en época de alto riesgo.
 
+### 5.8 Objetivo preventivo y priorización de recursos públicos
+
+> El producto no se diseña para sustituir el criterio del centro de mando ni para ordenar automáticamente el despliegue de agentes. Su función es reducir el espacio de decisión: para cada horizonte, entrega un ranking de celdas donde la combinación de meteorología, combustible, topografía e historial hace más probable una nueva ignición o un incendio detectable. Este ranking permite concentrar vigilancia, patrullas y medios de primera intervención cuando los recursos son limitados. La variable objetivo científica permanece definida a nivel de celda y día, mientras que la capa operativa transforma la probabilidad calibrada en cuatro acciones orientativas: vigilancia rutinaria, vigilancia reforzada, preposición de medios y preposición prioritaria. La decisión final debe incorporar accesibilidad, exposición, tiempos de respuesta, medios disponibles y confirmación humana.
+
+> Esta formulación es más útil para prevención que intentar predecir directamente la causa humana. El sistema no estima si una persona decidirá provocar un incendio; estima si una ignición producida por cualquier causa encontrará condiciones ambientales favorables para consolidarse. El criterio de éxito operativo será, por tanto, cuántos eventos reales quedan cubiertos por el 1 %, 5 % y 10 % de celdas priorizadas, junto con el recall alcanzado para una tasa de falsas alarmas asumible.
+
+### 5.9 Selección adaptativa de la previsión meteorológica
+
+> La documentación de MeteoSIX v5 establece que la ejecución WRF de 1 km iniciada a las 00:00 UTC termina aproximadamente a las 07:30 UTC, aunque la disponibilidad real puede variar. Por ello, una ejecución fija a las 05:00 hora local no garantiza que la nueva salida de 1 km esté publicada. El pipeline implementado intenta WRF 1 km como fuente preferente y valida la cobertura completa de las horas y variables requeridas. Si esta descarga falla o está incompleta, intenta WRF 04 km. El resultado se etiqueta respectivamente como `fresh` o `fresh_fallback`; únicamente cuando ambas mallas fallan se reutiliza el último forecast archivado y se marca como `stale`. Esta degradación es visible para el usuario y nunca se sustituye silenciosamente por una fecha histórica.
+
+> La decisión entre 1 km y 04 km no se basa solo en la resolución nominal. También se conservan la ejecución `modelRun`, el instante de descarga, la malla efectiva, la versión de la API, la distancia al punto consultado y la cobertura horaria. La consulta se realiza mediante puntos representativos agrupados en lotes de 20, manteniendo la rejilla final de riesgo de 1 km sin lanzar una petición independiente por cada celda.
+
+### 5.10 Aprendizajes metodológicos de IberFire y límites de comparabilidad
+
+> IberFire constituye una referencia valiosa para estructurar un cubo espacio-temporal, separar capas estáticas de capas dinámicas y armonizar fuentes con resoluciones diferentes. También muestra la utilidad de derivar estadísticas meteorológicas a partir de series horarias: humedad relativa calculada a partir de temperatura y punto de rocío, y velocidad del viento calculada desde sus componentes antes de agregarla. Estas decisiones se incorporan como criterios de calidad para el histórico ERA5-Land y para comprobar que las variables de entrenamiento y previsión tienen la misma semántica.
+
+> No obstante, sus resultados no se trasladan directamente a este TFM. IberFire utiliza una definición de incendio basada en áreas quemadas superiores a 5 hectáreas, una muestra balanceada y un objetivo de evaluación diferente. Sus resultados de accuracy y AUROC deben interpretarse como evidencia de utilidad del dataset, no como una cota esperable para nuestro modelo. La comparación del presente trabajo se centrará en PR-AUC, Brier score, calibración, recall a tasa de falsa alarma controlada y cobertura de incendios dentro del presupuesto espacial de movilización.
+
+### 5.11 Mejoras futuras de la capa de riesgo preventivo
+
+> Una evolución posterior podrá combinar el peligro meteorológico con una capa explícita de exposición y capacidad de respuesta. Esta capa podría incluir población, interfaz urbano-forestal, espacios protegidos, distancia a carreteras, tiempo estimado de llegada y disponibilidad de medios. La combinación debe evaluarse como una función de pérdida esperada, no como una multiplicación arbitraria de variables. Mientras no existan datos operativos fiables de recursos y tiempos de respuesta, el sistema publicará el ranking de peligro y la acción orientativa, evitando presentarlo como una probabilidad de daño económico o como una orden de movilización.
+
+### 5.12 Proveedor meteorológico alternativo durante el desarrollo
+
+> La ausencia temporal de la clave de MeteoGalicia no bloquea la validación técnica del pipeline. Se ha implementado una selección por configuración mediante `FORECAST_PROVIDER`: `meteogalicia` utiliza MeteoSIX v5, `aemet` utiliza AEMET OpenData y `auto` ejecuta la cadena WRF 1 km → WRF 04 km → AEMET municipal degradado cuando está habilitado. Esta decisión permite probar la doble descarga de AEMET, la normalización horaria, la agregación de la ventana crítica, el archivado, la generación de los tres mapas y el comportamiento del dashboard sin fingir que ambas fuentes tienen la misma resolución.
+
+> AEMET OpenData ofrece predicción horaria municipal hasta 48 horas y predicción diaria para varios días. Para mantener el contrato T+1/T+2/T+3, el adaptador utiliza la predicción diaria para completar 72 horas y superpone las horas de la predicción horaria cuando están disponibles. La expansión diaria se marca en los metadatos como `source_resolution=daily_expansion`; el resultado se etiqueta `fresh_aemet` si se selecciona explícitamente o `fresh_aemet_degraded` cuando actúa como fallback automático. La consulta se realiza sobre un catálogo configurado de municipios, no sobre cada celda de 1 km; las capitales provinciales son solo una configuración de prueba.
+
+> La precipitación requiere una precaución adicional: si la respuesta diaria solo ofrece probabilidad de precipitación y no cantidad en milímetros, el pipeline no la transforma automáticamente en cero. Solo mediante `AEMET_MISSING_PRECIPITATION_FALLBACK=0` se puede crear un artefacto `fresh_aemet_proxy` para comprobar técnicamente la publicación; dicho artefacto queda excluido de las métricas de peligro.
+
+> Esta salida no se incorpora sin más al benchmark de WRF. El rendimiento se separará por proveedor y se reportará junto con la resolución espacial, la cobertura temporal y el horizonte. AEMET sirve para verificar el circuito operativo y para una contingencia explícita; MeteoGalicia WRF 1 km sigue siendo la fuente objetivo para movilización preventiva en zonas rurales de Galicia. Si la ejecución usa AEMET, el dashboard debe advertirlo y el centro de mando debe confirmar cualquier actuación con información independiente.
+
+### 5.13 Estado meteorológico previo y arranque sin precalentamiento
+
+> La inferencia no depende únicamente del forecast futuro. Las features de memoria —lluvia acumulada, días secos y medias móviles— necesitan un estado diario de los 30 días completos anteriores a la emisión. Para evitar que el primer despliegue tenga que esperar treinta ciclos diarios, se implementa un backfill con la climatología diaria de AEMET. La API permite recuperar un rango de fechas para todas las estaciones; el sistema filtra Galicia, conserva el JSON original e interpola cada estación a la rejilla de 1 km mediante los cuatro vecinos más cercanos.
+
+> El backfill no convierte una estación en una observación de cada celda. Es una reconstrucción espacial con una resolución y una calidad propias, por lo que se registran el proveedor, la distancia a estación, el número de estaciones y la estrategia IDW. Esta información se utilizará para distinguir un arranque `aemet_daily_climatology_idw` de un estado basado en una red observacional más densa.
+
+> La documentación de MeteoSIX v5 establece que su operación numérica está orientada al forecast desde el día actual y limita la consulta a un máximo de siete días. Aunque `precipitation_amount` representa la precipitación prevista durante la hora anterior, no es un archivo de observaciones pasadas. AEMET tampoco resuelve por sí sola el cierre operativo de D-1 mediante su climatología diaria validada, que se publica con un retraso aproximado de cuatro días. Por ello, el diseño separa el backfill AEMET del colector de observaciones actuales implementado en `scripts/ingest_aemet_current_observations.py`: este acumula la ventana móvil de AEMET y cierra solo los días con cobertura suficiente. No se utilizará el forecast como observación retrospectiva.
+
 ---
 
+## Capítulo 6: Diseño e Implementación del Centro de Mando Táctico y Dashboard Operativo (Fase 5)
+
+### 6.1 Arquitectura del Centro de Mando de Alerta Temprana (Emergency Operations Center - EOC)
+*(Justificación del diseño de interfaz para la toma de decisiones en tiempo real)*
+> Para transformar las probabilidades predictivas en una herramienta de soporte a la decisión operativa, el sistema se despliega mediante un **Centro de Mando Táctico** interactivo desarrollado sobre Streamlit y enriquecido con un sistema de diseño visual propio para salas de crisis. La arquitectura desacopla la visualización en cinco áreas funcionales: (1) Centro de Mando Cartográfico GIS con capas térmicas continuas y geometrías disueltas sin fronteras artificiales, (2) Analítica Territorial Comarcal y Provincial con rankings de concellos y evolución multi-horizonte $T+1 \rightarrow T+3$, (3) Diagnóstico Biofísico con explicabilidad local TreeSHAP y un simulador *What-If* reactivo, (4) Matriz de Despacho y Protocolos Preventivos alineados con el PLADIGA, y (5) Panel de Auditoría y Trazabilidad de Manifiestos.
+
+### 6.2 Explicabilidad Causal (TreeSHAP) y Simulación Interactiva de Escenarios (*What-If Simulator*)
+*(Justificación metodológica de la explicabilidad biofísica para mandos de extinción)*
+> En contextos de protección civil y seguridad pública, los modelos de "caja negra" carecen de viabilidad operativa si el analista no puede contrastar los motivos físicos detrás de una alerta. El módulo de diagnóstico implementa **TreeSHAP local aditivo**, descomponiendo la contribución neta de cada variable (en log-odds) entre factores aceleradores (déficit de humedad del combustible, insolación en laderas solanas, velocidad del viento en ventana crítica) y factores atenuantes (precipitación antecedente a 30 días, humedad relativa elevada). Adicionalmente, el **Simulador *What-If*** permite a los directores de extinción evaluar en tiempo real la sensibilidad del territorio ante cambios en la previsión meteorológica (ej. un incremento térmico de $+3^\circ\text{C}$ o rachas de viento de $+20\text{ km/h}$), recalculando instantáneamente la probabilidad calibrada con el artefacto LightGBM serializado.
+
+### 6.3 Alineación con los Protocolos Operativos del PLADIGA y Generación de Briefings de Emergencia
+*(Impacto de negocio y transferencia directa a la gestión forestal pública)*
+> La interfaz traduce automáticamente los percentiles relativos de riesgo en niveles de activación táctica coherentes con el Plan de Prevención y Defensa contra los Incendios Forestales de Galicia (PLADIGA). Las celdas clasificadas en el percentil superior ($\ge 99.5\%$, Nivel Extremo) disparan recomendaciones de preposición de brigadas helitransportadas (ej. BRIF Laza, bases comarcales) y prohibición de quemas agrícolas. Asimismo, el sistema incorpora un generador automático en 1-click de **Informes Ejecutivos de Situación** en Markdown, estructurando los puntos críticos del territorio y los factores dominantes para las reuniones matinales de coordinación de emergencias.
+
+---

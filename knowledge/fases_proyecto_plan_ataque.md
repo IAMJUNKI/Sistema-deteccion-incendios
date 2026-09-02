@@ -98,14 +98,14 @@
 #### Pasos Clave:
 1. **Desarrollo del Pipeline de Inferencia Diaria (Script de Producción):**
    * Programar un script en Python que se ejecute de forma automatizada cada madrugada (ej: a las 05:00 AM mediante un Cron Job).
-   * Este script realiza una llamada a la **API de AEMET OpenData** para descargar el pronóstico meteorológico para las próximas 24, 48 y 72 horas para la Comunidad Autónoma elegida.
-   * Interpolar las previsiones puntuales de las estaciones meteorológicas de la AEMET hacia nuestra rejilla estática de celdas de 1x1 km mediante algoritmos geoespaciales (IDW o Vecino Más Cercano).
-   * Alimentar el modelo XGBoost guardado con estas características predictivas para generar el mapa de probabilidad del día de mañana.
+   * Este script realiza una llamada a **MeteoGalicia MeteoSIX v4** para descargar el forecast horario WRF de los próximos tres días.
+   * Consultar puntos representativos de la malla WRF en lotes de hasta 20 localizaciones y asignarlos a la rejilla estática de celdas de 1x1 km mediante vecino más cercano.
+   * Alimentar los tres modelos de riesgo serializados (T+1, T+2 y T+3) con estas características predictivas.
 2. **Construcción de la Interfaz Gráfica con Streamlit:**
    * Crear un cuadro de mando (*Dashboard*) interactivo utilizando la librería `Streamlit`.
    * Integrar componentes de mapeo avanzados como `Folium` o `PyDeck` para pintar las celdas de la rejilla de colores según su nivel de riesgo calibrado (Verde: Bajo -> Rojo/Púrpura: Extremo).
    * Añadir filtros interactivos por provincia, municipio, fecha de predicción (24h/72h) y un panel lateral que muestre la importancia de las variables (usando valores `SHAP` simplificados o la importancia nativa del modelo) para justificar técnicamente por qué una celda específica se encuentra en riesgo extremo (ej: "Humedad relativa críticamente baja combinada con vientos superiores a 40 km/h").
 3. **Análisis de Degradación del Modelo (Sección Científica del TFM):**
-   * Comparar y documentar en la memoria del TFM la diferencia de rendimiento del modelo cuando se alimenta con datos de reanálisis perfectos (ERA5-Land) frente a cuando se alimenta con las previsiones de la AEMET, cuantificando cómo el error del pronóstico del tiempo afecta a la alerta temprana de incendios.
+   * Comparar y documentar en la memoria del TFM la diferencia de rendimiento del modelo cuando se alimenta con datos de reanálisis perfectos (ERA5-Land) frente a forecasts archivados de MeteoGalicia, cuantificando cómo el error meteorológico afecta a la alerta temprana de incendios.
 
 **Entregable de la Fase:** Repositorio de código final, WebApp funcional desplegada en local o en Streamlit Cloud, y la redacción final de la memoria del TFM.

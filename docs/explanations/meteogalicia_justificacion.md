@@ -103,12 +103,33 @@ Datos históricos completos también disponibles en:
 
 ## Ventaja adicional: modelo de previsión propio
 
-MeteoGalicia opera su propio **modelo de predicción numérica del tiempo** (basado en WRF) calibrado para el terreno gallego, con:
-- Resolución espacial de **4 km × 4 km** (frente a ~10-15 km de los modelos globales de AEMET)
-- Especialmente ajustado para el comportamiento del viento en los valles y las Rías
-- Previsión hasta 72-96 horas con actualización dos veces al día
+MeteoGalicia opera su propio **modelo de predicción numérica del tiempo** (WRF)
+para el territorio gallego. La documentación MeteoSIX v5 expone una malla de
+**1 km × 1 km** como opción preferente, además de mallas de 4, 12 y 36 km. La
+malla de 4 km se mantiene como fallback cuando la ejecución de 1 km aún no
+está disponible o no supera la validación de cobertura.
+
+Las salidas tienen frecuencia horaria y horizonte aproximado de 96 horas para
+WRF 1 km. La hora de disponibilidad de cada ejecución es variable, por lo que
+el pipeline decide mediante `modelRun` y cobertura validada, no solo mediante
+un horario fijo.
 
 Para el pipeline de inferencia diaria, usar la previsión de MeteoGalicia en lugar de AEMET supone partir de datos **más ajustados a la orografía local de Galicia**, que es precisamente donde importa más la precisión (valles entre sierras, zonas de foehn, microclimas costeros).
+
+### AEMET como alternativa de desarrollo
+
+La posesión de una clave AEMET permite probar el circuito antes de recibir la
+credencial de MeteoGalicia. El adaptador utiliza predicciones por municipio y
+asigna cada celda al punto municipal más próximo. La predicción diaria permite
+completar los tres horizontes y la horaria mejora las horas coincidentes, pero
+esta combinación no crea una malla meteorológica de 1 km. Por ello el sistema
+la etiqueta `fresh_aemet`, la muestra en el dashboard y la separa de los
+resultados WRF en la evaluación.
+
+La alternativa es útil para comprobar autenticación, descarga, normalización,
+agregación 12:00–18:00, generación de modelos y publicación del dashboard. No
+debe utilizarse para justificar precisión espacial ni para movilizar medios sin
+confirmación independiente.
 
 ---
 
@@ -119,8 +140,9 @@ ENTRENAMIENTO (histórico 2019-2024):
   Variables meteorológicas base → ERA5-Land (cobertura homogénea, consistente)
   Gap de últimos 5 días ERA5   → MeteoGalicia EMA (observaciones horarias)
 
-PRODUCCIÓN (cron job diario 05:00 AM):
-  Ventana crítica 12-18h T+1/T+2/T+3 → Previsión MeteoGalicia (punto + interpolación)
+PRODUCCIÓN (ejecución provisional y refresco posterior):
+  Ventana crítica 12-18h T+1/T+2/T+3 → WRF 1km; fallback explícito WRF 04km
+  Sin clave MeteoGalicia (pruebas)                  → AEMET municipal `fresh_aemet`
   Acumulados precipitación recientes  → Observaciones MeteoGalicia EMA
   Acumulados largo plazo (>7 días)    → ERA5 histórico + MeteoGalicia reciente
 ```
@@ -132,9 +154,14 @@ PRODUCCIÓN (cron job diario 05:00 AM):
 Añadir al `.env`:
 
 ```bash
-# MeteoGalicia (sin autenticación requerida — API pública)
-METEOGALICIA_BASE_URL=https://servizos.meteogalicia.gal/mf
+FORECAST_PROVIDER=auto  # meteogalicia, aemet o auto
+# MeteoGalicia MeteoSIX v5 (requiere API_KEY privada)
+METEOGALICIA_BASE_URL=https://servizos.meteogalicia.gal/apiv5
+METEOGALICIA_GRIDS=1km,04km
 METEOGALICIA_DATOS_ABIERTOS_URL=https://abertos.xunta.gal
+# Alternativa temporal
+AEMET_API_KEY=clave_aemet
+AEMET_BASE_URL=https://opendata.aemet.es/opendata/api
 ```
 
 Y actualizar el `data-ingestion` skill para incluir MeteoGalicia como **fuente primaria de meteorología en Galicia**, con ERA5 como fuente de calibración y relleno de gaps.
