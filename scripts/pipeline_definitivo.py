@@ -405,6 +405,15 @@ def bandas_diagonales(coordenadas: pd.DataFrame, n_bloques: int) -> pd.Series:
 # ---------------------------------------------------------------------------------------
 # Etapas
 # ---------------------------------------------------------------------------------------
+#: Columnas que jamás pueden ser predictoras porque el modelo se compara **contra** ellas.
+#: El datacubo publica el FWI oficial de CEMS dentro del Parquet para poder usarlo de
+#: referencia, correctamente declarado fuera de los predictores. Si alguna regeneración futura
+#: lo colara entre ellos, el modelo llevaría el índice dentro y la afirmación «superamos al
+#: FWI» pasaría a ser circular: estaríamos comparando el índice contra sí mismo. El contrato no
+#: vigila este caso, así que se vigila aquí.
+COLUMNAS_BASELINE = frozenset({"fire_weather_index", "ffmc", "dmc", "dc", "isi", "bui", "fwi"})
+
+
 def etapa_contrato(ctx: Contexto) -> pd.DataFrame:
     """Deja constancia de sobre qué datos exactos se ejecutó todo lo demás."""
     c = ctx.contrato
@@ -413,6 +422,17 @@ def etapa_contrato(ctx: Contexto) -> pd.DataFrame:
     print(f"\n  codificación cíclica del calendario: {ciclicas or 'ninguna, como se acordó'}")
     print(f"  contrato temporal: {c.contrato_temporal}")
     print(f"  filas descartadas por predictores incompletos: {c.filas_descartadas:,}")
+
+    coladas = sorted(COLUMNAS_BASELINE & set(c.predictores))
+    if coladas:
+        raise SystemExit(
+            f"\nEl metadato declara como predictoras columnas que son el baseline: {coladas}.\n"
+            "El modelo no puede usar de entrada el índice contra el que se compara: la\n"
+            "comparación quedaría vacía de sentido. Deben moverse a\n"
+            "`baseline_columns_not_predictors` en metadata.json antes de continuar."
+        )
+    print(f"  columnas de baseline fuera de los predictores: correcto "
+          f"({len(COLUMNAS_BASELINE)} nombres vigilados)")
 
     filas = [{"clave": "predictores", "valor": len(c.predictores)},
              {"clave": "años", "valor": str(c.anios)},
