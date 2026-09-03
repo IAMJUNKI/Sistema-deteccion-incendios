@@ -9,7 +9,7 @@ GRID_CELL_SIZE_M = 1000
 # para poder calcular las ventanas de precipitación sin valores incompletos.
 METEOROLOGY_CONTEXT_START = "2015-12-01"
 DATACUBE_START = "2016-01-01"
-DATACUBE_END = "2023-11-26"  # Fallback para CLI; workflow lo deriva del XML EGIF.
+DATACUBE_END = "2023-12-31"  # Valor por defecto: último año histórico completo.
 EGIF_START = DATACUBE_START
 
 # Rutas ancladas al repositorio: funcionan igual desde CLI, PyCharm o notebooks.

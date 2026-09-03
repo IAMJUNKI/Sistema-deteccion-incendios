@@ -73,8 +73,11 @@ def construir_datacubo_completo(
 ) -> None:
     """Une capas estáticas, temporales, meteorológicas y el target EGIF.
 
-    El intervalo termina en la última fecha del XML EGIF, por lo que el target
-    vale 0 en toda celda activa sin ignición y no necesita un indicador de cobertura.
+    ``start_date`` y ``end_date`` son un contrato explícito del llamador. En
+    la ruta operativa debe invocarse desde :mod:`src.workflow`, que declara el
+    periodo por años y no lo infiere de la primera o última ignición EGIF.
+    Dentro de ese intervalo, un cero es ausencia de ignición en una celda
+    activa y no requiere un indicador de cobertura adicional.
     """
     target = pd.read_parquet(egif_target_path)
 

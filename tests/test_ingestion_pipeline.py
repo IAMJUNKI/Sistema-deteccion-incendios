@@ -19,10 +19,10 @@ def test_ejecutar_pipeline_procesa_e_interpola(monkeypatch: pytest.MonkeyPatch) 
     )
 
     ejecutar_pipeline_meteorologia(
-        "static.nc", "grid.gpkg", raw_dir="raw", daily_output_path="daily.nc"
+        "static.nc", "grid.gpkg", raw_dir="raw", daily_output_path="daily.nc", include_fwi=False
     )
 
-    assert calls[0] == ("daily", "raw", Path("daily.nc"), "2015-12-01", "2023-11-26")
+    assert calls[0] == ("daily", "raw", Path("daily.nc"), "2015-12-01", "2023-12-31")
     assert calls[1] == (
         "grid",
         Path("daily.nc"),
@@ -30,7 +30,7 @@ def test_ejecutar_pipeline_procesa_e_interpola(monkeypatch: pytest.MonkeyPatch) 
         "grid.gpkg",
         DEFAULT_METEOROLOGY_CUBE,
         "2015-12-01",
-        "2023-11-26",
+        "2023-12-31",
     )
 
 

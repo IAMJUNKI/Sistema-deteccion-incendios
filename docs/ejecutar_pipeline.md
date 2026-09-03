@@ -5,8 +5,10 @@ Los comandos se escriben en **PowerShell**, abierta en la carpeta del repositori
 
 ## Qué construye el proceso
 
-El resultado son un cubo espacial-temporal y Parquet para Machine Learning de
-Galicia, desde el 01-ene-2019 hasta la última fecha que exista en el XML EGIF.
+El resultado son un cubo espacio-temporal y Parquet para Machine Learning de
+Galicia, para los años que elija la persona usuaria. Por defecto, cada año va
+del 1 de enero al 31 de diciembre; las fechas de las igniciones que aparezcan
+en los XML EGIF no modifican ese intervalo.
 
 ```text
 datos originales → capas geográficas → meteorología + incendios → cubo → Parquet
@@ -84,7 +86,7 @@ Coloca los dos ficheros que el proyecto **no descarga automáticamente**:
 | Dato | Qué debe descargar la persona | Dónde guardarlo |
 |---|---|---|
 | CORINE Land Cover 2018 | GeoTIFF `U2018_CLC2018_V2020_20u1.tif` | `data/raw/corine/` |
-| Histórico oficial EGIF | Uno o varios XML de MITECO que cubran 2016–2023 | `data/raw/fire_history/` |
+| Histórico oficial EGIF | Uno o varios XML de MITECO de los años que quieras usar | `data/raw/fire_history/` |
 
 El límite de Galicia se descarga automáticamente si falta cuando se usa
 `--rebuild-static`. El DEM Copernicus GLO-30 también se descarga automáticamente
@@ -93,39 +95,33 @@ carreteras y zonas residenciales se descarga también automáticamente desde un
 extracto Shapefile versionado de OpenStreetMap si falta; se guarda en
 `data/raw/human_activity/` y no se vuelve a descargar.
 
-## Paso 5. Descargar ERA5-Land (solo si aún no está en el equipo)
+## Paso 5. Elegir los años y ejecutar el pipeline completo
 
-ERA5 no se descarga al ejecutar el workflow principal, para evitar descargas
-largas involuntarias. Se descarga una vez con este comando:
+No hay que abrir ningún XML ni indicar fechas de incendios. Elige los **años
+completos** que descargaste de EGIF. El workflow acepta la carpeta, une todos
+los XML y elimina duplicados de intervalos solapados.
 
-```powershell
-python -m src.ingestion.era5 `
-  --output-dir data/raw/meteorology/era5 `
-  --start-date 2015-12-01 `
-  --end-date 2023-11-26
-```
-
-El script guarda un NetCDF por mes y omite los que ya existan, por lo que se
-puede reanudar sin empezar de nuevo. Al terminar, deben verse ficheros como:
-
-`data/raw/meteorology/era5/era5_land_galicia_2019_01.nc`.
-
-## Paso 6. Ejecutar el pipeline completo
-
-Primero mira el nombre exacto del XML que hayas puesto:
-
-```powershell
-Get-ChildItem data/raw/fire_history
-```
-
-El workflow acepta directamente la carpeta y unirá los XML que haya dentro,
-eliminando por `egif_id` los posibles duplicados entre intervalos solapados:
+Por ejemplo, para generar el cubo original 2019–2023:
 
 ```powershell
 python -m src.workflow `
-  --egif-xml data/raw/fire_history `
+  --start-year 2019 `
+  --end-year 2023 `
   --rebuild-static
 ```
+
+Para un cubo ampliado 2016–2023, cambia solamente los años:
+
+```powershell
+python -m src.workflow --start-year 2016 --end-year 2023
+```
+
+El workflow comprueba los meses ERA5 necesarios desde diciembre del año
+anterior y descarga **solo los que falten**. También descarga o reutiliza FWI
+para los mismos años. Los ficheros FWI se verifican por fechas: si uno procede
+de una ejecución parcial y no cubre el intervalo solicitado, se vuelve a
+descargar ese año de forma segura. No se redescargan ficheros crudos que ya
+cubren por completo el periodo pedido.
 
 La primera vez tarda bastante: crea la rejilla, descarga el DEM, procesa CORINE,
 descarga/procesa la capa estática de actividad humana, procesa ERA5, descarga
@@ -136,18 +132,36 @@ No cierres PowerShell mientras se ejecuta.
 La primera descarga de FWI requiere haber iniciado sesión una vez en el portal
 EWDS de Copernicus y aceptado sus condiciones de CEMS. Usa el mismo
 `COPERNICUS_CDS_API_KEY` definido en `.env`; no requiere otra credencial. Los
-archivos anuales se guardan en `data/raw/meteorology/fwi/` y no se descargan de
-nuevo si ya existen.
+archivos anuales se guardan en `data/raw/meteorology/fwi/`. Se reutilizan si
+ya cubren el año solicitado; un fichero parcial se completa automáticamente
+cuando haga falta.
 
-## Paso 7. Ejecutarlo otra vez cuando ya existen los datos
+### Caso excepcional: año final parcial
+
+Para un año actual todavía incompleto, indícalo de forma explícita. Por ejemplo,
+si EGIF se ha descargado hasta el 15 de agosto de 2024:
+
+```powershell
+python -m src.workflow `
+  --start-year 2019 `
+  --end-year 2024 `
+  --partial-final-year `
+  --final-date 2024-08-15
+```
+
+Sin esa opción, `--end-year 2023` siempre significa hasta el 31 de diciembre de
+2023, aunque el último incendio registrado en el XML haya sido anterior. Los
+días sin incendios se conservan correctamente como `target_ignicion = 0`.
+
+## Paso 6. Ejecutarlo otra vez cuando ya existen los datos
 
 Si cambias EGIF o quieres regenerar el resultado, no hace falta descargar de
 nuevo ERA5, FWI ni recalcular DEM/CORINE. Ejecuta:
 
 ```powershell
 python -m src.workflow `
-  --egif-xml data/raw/fire_history `
-  --skip-daily-meteorology
+  --start-year 2019 `
+  --end-year 2023
 ```
 
 El workflow reemplaza sus salidas generadas anteriores, pero nunca borra los
@@ -159,12 +173,13 @@ No existe un segundo script para construir un cubo "final" o "de prueba":
 Para recalcular solo las variables estáticas de carreteras y zonas residenciales
 con el mismo extracto OSM local, añade `--rebuild-human-activity` al comando.
 
-## Paso 8. Comprobar el resultado
+## Paso 7. Comprobar el resultado
 
 Al terminar deben existir:
 
 ```text
 data/processed/datacube/galicia_1km.nc
+data/processed/datacube/run_manifest.json
 data/processed/tabular/egif/metadata.json
 data/processed/tabular/egif/year=2016/dataset_2016.parquet
 …

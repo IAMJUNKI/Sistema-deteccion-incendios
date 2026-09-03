@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import os
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
 import cdsapi
-from dotenv import load_dotenv
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-
+from dotenv import load_dotenv
 
 DATASET = "cems-fire-historical-v1"
 EWDS_API_URL = "https://ewds.climate.copernicus.eu/api"
@@ -55,30 +55,81 @@ def _dates_for_year(year: int, start_date: date, end_date: date) -> list[date]:
     ]
 
 
-def _recortar_a_intervalo(path: Path, first: date, last: date) -> None:
-    """Recorta el archivo recibido al intervalo exacto pedido a EWDS.
+def _cubre_intervalo(path: Path, first: date, last: date) -> bool:
+    """Indica si un fichero FWI contiene todos los días solicitados.
 
-    EWDS puede entregar un mes completo aunque la petición termine a mitad de
-    ese mes. El recorte local evita que el fichero bruto introduzca fechas que
-    no forman parte del contrato temporal del datacubo.
+    Los ficheros crudos se conservan sin recortarlos: una descarga hecha para
+    un intervalo parcial debe poder reutilizarse cuando después se solicite un
+    año completo. La selección exacta se realiza al cargar FWI para el cubo.
     """
-    dataset = xr.open_dataset(path)
     try:
-        clipped = dataset.sel(valid_time=slice(str(first), str(last))).load()
-    finally:
-        dataset.close()
+        with xr.open_dataset(path) as dataset:
+            if "valid_time" not in dataset.coords:
+                return False
+            available = pd.DatetimeIndex(dataset["valid_time"].values).normalize()
+    except (OSError, ValueError):
+        return False
 
-    temporary_path = path.with_suffix(".temporary.nc")
-    clipped.to_netcdf(temporary_path)
-    temporary_path.replace(path)
+    required = pd.date_range(first, last, freq="D")
+    return required.isin(available).all()
+
+
+def _fechas_faltantes(path: Path, requested: list[date]) -> list[date]:
+    """Devuelve solo las fechas que no están en un archivo anual ya existente."""
+    if not path.exists() or path.stat().st_size == 0:
+        return requested
+    try:
+        with xr.open_dataset(path) as dataset:
+            available = pd.DatetimeIndex(dataset["valid_time"].values).normalize()
+    except (KeyError, OSError, ValueError):
+        return requested
+    return [item for item in requested if pd.Timestamp(item) not in available]
+
+
+def _agrupar_fechas_por_mes(dates: list[date]) -> dict[int, list[date]]:
+    """Agrupa fechas por mes para no enviar días inválidos a EWDS.
+
+    La API interpreta ``month`` y ``day`` como un producto cartesiano. Por
+    tanto, una petición anual con el día 31 incluiría por error el 31 de
+    febrero. Se emite una petición por mes con sus días reales.
+    """
+    grouped: dict[int, list[date]] = defaultdict(list)
+    for item in dates:
+        grouped[item.month].append(item)
+    return dict(grouped)
+
+
+def _combinar_fragmentos_fwi(
+    output_path: Path, fragments: list[Path], first: date, last: date
+) -> None:
+    """Une fragmentos mensuales con un archivo parcial y reemplaza al final."""
+    sources = ([output_path] if output_path.exists() and output_path.stat().st_size > 0 else [])
+    sources.extend(fragments)
+    datasets = [xr.open_dataset(path) for path in sources]
+    try:
+        merged = xr.concat(datasets, dim="valid_time", join="exact").sortby("valid_time")
+        _, positions = np.unique(merged["valid_time"].values, return_index=True)
+        merged = merged.isel(valid_time=np.sort(positions)).load()
+    finally:
+        for dataset in datasets:
+            dataset.close()
+
+    temporary_path = output_path.with_suffix(".complete.nc")
+    if temporary_path.exists():
+        temporary_path.unlink()
+    merged.to_netcdf(temporary_path)
+    if not _cubre_intervalo(temporary_path, first, last):
+        temporary_path.unlink()
+        raise ValueError(f"La descarga FWI no cubre todo el intervalo {first} a {last}.")
+    temporary_path.replace(output_path)
 
 
 def descargar_fwi_historico(
     output_dir: str | Path,
     start_date: date = date(2019, 1, 1),
-    end_date: date = date(2023, 11, 26),
+    end_date: date = date(2023, 12, 31),
 ) -> list[Path]:
-    """Descarga FWI diario para Galicia, separado por año y sin sobreescritura.
+    """Descarga FWI diario para Galicia, separado por año y con caché verificable.
 
     Los datos proceden del producto CEMS histórico basado en ERA5. FWI es el
     único índice descargado porque se utiliza como baseline físico, siguiendo
@@ -97,34 +148,48 @@ def descargar_fwi_historico(
         if not dates:
             continue
         output_path = output_dir / f"fwi_galicia_{year}.nc"
-        if output_path.exists() and output_path.stat().st_size > 0:
-            _recortar_a_intervalo(output_path, dates[0], dates[-1])
+        missing_dates = _fechas_faltantes(output_path, dates)
+        if not missing_dates:
             outputs.append(output_path)
             continue
 
-        months = sorted({f"{item.month:02d}" for item in dates})
-        days = sorted({f"{item.day:02d}" for item in dates})
         if client is None:
             if not api_key:
                 raise RuntimeError("Falta COPERNICUS_CDS_API_KEY en el archivo .env.")
             client = cdsapi.Client(url=EWDS_API_URL, key=api_key)
-        client.retrieve(
-            DATASET,
-            {
-                "product_type": "reanalysis",
-                "variable": [FWI_VARIABLE],
-                "dataset_type": "consolidated_dataset",
-                "system_version": ["4_1"],
-                "year": [str(year)],
-                "month": months,
-                "day": days,
-                "area": GALICIA_AREA,
-                "grid": "0.25/0.25",
-                "data_format": "netcdf",
-                "download_format": "unarchived",
-            },
-        ).download(str(output_path))
-        _recortar_a_intervalo(output_path, dates[0], dates[-1])
+        # La API combina ``month`` y ``day`` entre sí; por ello descargamos
+        # fragmentos mensuales con días válidos y solo reemplazamos el anual
+        # una vez que todos han llegado y su cobertura está verificada.
+        fragments: list[Path] = []
+        try:
+            for month, month_dates in _agrupar_fechas_por_mes(missing_dates).items():
+                temporary_path = output_path.with_name(
+                    f"{output_path.stem}_{month:02d}.download.nc"
+                )
+                if temporary_path.exists():
+                    temporary_path.unlink()
+                fragments.append(temporary_path)
+                client.retrieve(
+                    DATASET,
+                    {
+                        "product_type": "reanalysis",
+                        "variable": [FWI_VARIABLE],
+                        "dataset_type": "consolidated_dataset",
+                        "system_version": ["4_1"],
+                        "year": [str(year)],
+                        "month": [f"{month:02d}"],
+                        "day": [f"{item.day:02d}" for item in month_dates],
+                        "area": GALICIA_AREA,
+                        "grid": "0.25/0.25",
+                        "data_format": "netcdf",
+                        "download_format": "unarchived",
+                    },
+                ).download(str(temporary_path))
+            _combinar_fragmentos_fwi(output_path, fragments, dates[0], dates[-1])
+        finally:
+            for fragment in fragments:
+                if fragment.exists():
+                    fragment.unlink()
         outputs.append(output_path)
 
     return outputs

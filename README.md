@@ -8,9 +8,10 @@ CEMS/EFFIS.
 ## Contrato del dataset
 
 - Área: Galicia, rejilla regular de 1 km, `EPSG:3035`.
-- Contexto meteorológico: desde 30 días antes del inicio hasta la última fecha
-  registrada en el XML EGIF.
-- Periodo de modelado: 2016-01-01 hasta la última fecha registrada en EGIF.
+- Periodo: se elige por años completos al ejecutar el workflow. La primera y
+  última ignición del XML no determinan la cobertura temporal.
+- Contexto meteorológico: desde el primer día del mes anterior al año inicial,
+  para poder calcular acumulados de hasta 30 días.
 - Target: `target_ignicion` de EGIF. Un cero significa ausencia de ignición.
 - Temporalidad: las variables meteorológicas y sus acumulados describen el
   mismo día `T`; este producto es un **nowcast/análisis diario**, no una

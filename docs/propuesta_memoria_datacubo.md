@@ -21,10 +21,12 @@ conserva completo en el NetCDF porque permite almacenar capas rasterizadas con
 las mismas coordenadas `x` e `y`; para el modelado tabular solo se exportan las
 29.601 celdas marcadas como Galicia.
 
-El cubo final comprende 1.791 fechas, desde el 1 de enero de 2019 hasta el 26
-de noviembre de 2023, última fecha cubierta por el XML de EGIF empleado. Se
-recupera meteorología desde el 1 de diciembre de 2018 para poder calcular
-ventanas de precipitación de hasta 30 días desde el primer día modelable.
+El periodo del cubo se declara por años completos al ejecutar el workflow, sin
+deducir la cobertura de la primera o la última ignición de EGIF. Por ejemplo,
+un cubo 2019–2023 comprende del 1 de enero de 2019 al 31 de diciembre de 2023,
+incluso si los últimos días no contienen igniciones. Se recupera meteorología
+desde el 1 de diciembre del año anterior para calcular ventanas de precipitación
+de hasta 30 días desde el primer día modelable.
 
 ### Integración de las fuentes
 
@@ -95,8 +97,8 @@ predictoras se distribuyen como sigue:
 `fire_weather_index` se conserva adicionalmente en el Parquet como baseline,
 fuera de la matriz de predictores, para compararlo con los modelos entrenados.
 
-Para los modelos tabulares, el cubo se transforma en cinco ficheros Parquet
-anuales. Cada fila representa una celda activa y una fecha, e incorpora
+Para los modelos tabulares, el cubo se transforma en un fichero Parquet por
+año solicitado. Cada fila representa una celda activa y una fecha, e incorpora
 `fecha`, `x`, `y`, `cell_id` y `year` para trazabilidad y partición temporal.
 Estos identificadores no se incluyen como predictores. La exportación final
 contiene 53.015.391 filas completas y no descarta ninguna por valores faltantes
@@ -105,8 +107,9 @@ en las variables predictoras.
 ### Reproducibilidad y control de calidad
 
 La construcción se centraliza en un único workflow reproducible. Este valida
-las capas estáticas locales, determina la última fecha disponible de EGIF,
-incorpora las capas dinámicas, ensambla el NetCDF y exporta los Parquet. El
+las capas estáticas locales, aplica el periodo anual declarado por la persona
+usuaria, incorpora las capas dinámicas, ensambla el NetCDF y exporta los
+Parquet. El
 perfil canónico de variables evita incluir capas redundantes o poco
 interpretables: se excluyen las coordenadas y el calendario como señal del
 modelo, la rugosidad por su fuerte redundancia con la pendiente, la fracción

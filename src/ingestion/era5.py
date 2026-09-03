@@ -24,6 +24,34 @@ ERA5_VARIABLES = [
 ]
 
 
+def rutas_archivo_mensual(output_dir: str | Path, year: int, month: int) -> tuple[Path, Path]:
+    """Devuelve los nombres canónico e histórico de un mes ERA5-Land.
+
+    El proyecto heredó archivos ``era5land_...`` de la fase previa a EGIF.
+    La descarga reproducible usa ``era5_land_...``; ambos formatos contienen
+    el mismo producto y deben reutilizarse sin pedirlo otra vez a Copernicus.
+    """
+    directory = Path(output_dir)
+    suffix = f"galicia_{year}_{month:02d}.nc"
+    return directory / f"era5_land_{suffix}", directory / f"era5land_{suffix}"
+
+
+def localizar_archivo_mensual(output_dir: str | Path, year: int, month: int) -> Path | None:
+    """Localiza un archivo mensual válido sin ocultar duplicados ambiguos."""
+    existing = [
+        path
+        for path in rutas_archivo_mensual(output_dir, year, month)
+        if path.exists() and path.stat().st_size > 0
+    ]
+    if len(existing) > 1:
+        names = ", ".join(path.name for path in existing)
+        raise ValueError(
+            f"Hay dos archivos ERA5-Land para {year}-{month:02d}: {names}. "
+            "Conserva solo una copia antes de continuar."
+        )
+    return existing[0] if existing else None
+
+
 def iterar_meses(start_date: date, end_date: date) -> list[tuple[int, int]]:
     """Devuelve los meses incluidos en un intervalo de fechas inclusivo."""
     if start_date > end_date:
@@ -93,10 +121,11 @@ def descargar_era5_land(
     downloaded: list[Path] = []
 
     for year, month in iterar_meses(start_date, end_date):
-        output_path = output_dir / f"era5_land_galicia_{year}_{month:02d}.nc"
-        if output_path.exists():
-            print(f"Ya existe, se omite: {output_path}")
+        existing = localizar_archivo_mensual(output_dir, year, month)
+        if existing is not None:
+            print(f"Ya existe, se omite: {existing}")
             continue
+        output_path, _ = rutas_archivo_mensual(output_dir, year, month)
         print(f"Solicitando ERA5-Land {year}-{month:02d}...")
         client.retrieve(DATASET, crear_peticion_mensual(year, month), str(output_path))
         downloaded.append(output_path)

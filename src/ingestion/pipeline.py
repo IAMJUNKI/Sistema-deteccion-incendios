@@ -9,6 +9,8 @@ import pandas as pd
 from src.config import DATACUBE_START, EGIF_START, FWI_RAW_DIR, METEOROLOGY_CUBE_PATH
 from src.ingestion.fwi import (
     CANONICAL_DATACUBE_VARIABLE_FLAGS as FWI_FLAGS,
+)
+from src.ingestion.fwi import (
     descargar_fwi_historico,
     interpolar_fwi_al_grid,
 )
@@ -72,8 +74,8 @@ def ejecutar_pipeline_meteorologia(
         end_date,
     )
     if include_fwi:
-        # Igual que ERA5, esta llamada es reanudable: descarga únicamente los
-        # años que no estén disponibles en ``fwi_raw_dir``.
+        # Igual que ERA5, esta llamada es reanudable: reutiliza los años FWI
+        # cuya cobertura sea suficiente y completa los que no lo sean.
         descargar_fwi_historico(
             fwi_raw_dir,
             start_date=pd.Timestamp(fwi_start_date).date(),

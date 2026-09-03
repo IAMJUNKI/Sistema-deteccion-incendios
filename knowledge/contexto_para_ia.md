@@ -1,6 +1,6 @@
 # Contexto para una IA colaboradora
 
-> Estado del proyecto: 2026-08-29. Este archivo resume las decisiones vigentes
+> Estado del proyecto: 2026-09-02. Este archivo resume las decisiones vigentes
 > del TFM. Debe leerse antes de proponer cambios de datos, modelado o pipeline.
 
 ## 1. Objetivo y alcance
@@ -34,10 +34,11 @@ data/processed/tabular/egif/year=2019/dataset_2019.parquet
 data/processed/tabular/egif/year=2023/dataset_2023.parquet
 ```
 
-Al ejecutar el workflow con el XML EGIF vigente se generan cinco particiones
-anuales. El NetCDF cubre 1.791 fechas (2019-01-01 a 2023-11-26), 29.601 celdas
-activas de Galicia y contiene 55 variables: 50 candidatas a predictor y cinco
-resultados o auxiliares excluidos.
+El producto local histórico 2019–2023 debe considerarse una instantánea de
+trabajo, no el contrato temporal del repositorio. El workflow permite construir
+cualquier intervalo de años completos disponible en EGIF. Cada ejecución deja
+su cobertura declarada y su estado (`running` o `completed`) en
+`data/processed/datacube/run_manifest.json`.
 
 ## 3. Contrato espacial y temporal
 
@@ -47,8 +48,8 @@ resultados o auxiliares excluidos.
 | Rejilla | Rectangular, celdas de 1 km × 1 km |
 | CRS de trabajo | EPSG:3035 |
 | Celdas modelables | `is_galicia = 1`: el centro de la celda está dentro del límite de Galicia |
-| Periodo del cubo | 2019-01-01 a 2023-11-26 |
-| Contexto meteorológico | Desde 2018-12-01 para calcular acumulados de hasta 30 días |
+| Periodo del cubo | Años completos elegidos por el usuario; por defecto 2016-01-01 a 2023-12-31 |
+| Contexto meteorológico | Desde el 1 de diciembre anterior al año inicial, para acumulados de hasta 30 días |
 | Target | `target_ignicion`: 1 si hay una o más igniciones EGIF en celda/día; 0 si no |
 | Formato espacial | NetCDF 3D `(time, y, x)`; el Parquet contiene solo celdas activas de Galicia |
 
@@ -187,11 +188,12 @@ Para instalar y ejecutar desde cero, la referencia es
    únicamente en local.
 3. Colocar CORINE 2018 y el XML EGIF en `data/raw/`.
 4. Descargar ERA5 solo si faltan sus ficheros mensuales.
-5. Ejecutar `python -m src.workflow --egif-xml ...`.
+5. Ejecutar `python -m src.workflow --start-year AAAA --end-year AAAA`.
 
-No descargar de nuevo un dato que ya exista. Los scripts de ERA5 omiten los
-meses existentes; las capas estáticas no deben reconstruirse salvo que se cambie
-la rejilla, el DEM, CORINE o el límite.
+No descargar de nuevo un dato que ya cubra el periodo solicitado. Los scripts
+de ERA5 omiten los meses existentes y FWI verifica su cobertura diaria; las
+capas estáticas no deben reconstruirse salvo que se cambie la rejilla, el DEM,
+CORINE o el límite.
 
 ## 8. Modelado: estado, reglas y cautelas
 
@@ -260,7 +262,7 @@ Ejecutar antes de un commit relevante:
 
 Para cambios de datos, validar además:
 
-- cobertura temporal de 2019-01-01 a la última fecha EGIF;
+- cobertura temporal igual al periodo declarado en `run_manifest.json`;
 - `target_ignicion` definido para cada fecha/celda activa;
 - Parquet anual consolidado y suma de filas consistente con `metadata.json`;
 - columnas auxiliares y outcomes fuera de `predictor_columns`;
