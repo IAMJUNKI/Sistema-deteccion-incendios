@@ -32,9 +32,7 @@ De dónde sale cada decisión
 
 2. **Las tres variables acordadas** vienen del datacubo desde el 30 de agosto. Las dos medias
    móviles se verificaron recalculándolas y coinciden hasta el último decimal.
-   `consecutive_dry_days` se deriva al final de la ingesta, a partir de la lluvia ya
-   interpolada a cada celda de 1 km; por ello es un contador entero y no necesita
-   corrección durante el entrenamiento.
+   `consecutive_dry_days` no, y se corrige aquí: ver `src/entrenamiento/dias_secos.py`.
 
 Modelo entregado
 ----------------
@@ -65,7 +63,7 @@ La etapa `circularidad` deja constancia de las dos cosas: cuánto se habría gan
 
 Protocolo
 ---------
-Entrenamiento 2016-2020 · calibración 2021 · validación 2022 · **2023 no se toca**.
+Entrenamiento 2019-2020 · calibración 2021 · validación 2022 · **2023 no se toca**.
 
 El calibrador se ajusta sobre un año que el modelo no ha visto y con su prevalencia real
 intacta: ajustarlo dentro de muestra reproduciría el sobreajuste en lugar de corregirlo.
@@ -104,6 +102,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
@@ -115,6 +114,7 @@ from src.entrenamiento import (  # noqa: E402
     calibracion,
     contrato as mod_contrato,
     datos,
+    dias_secos,
     metricas,
     modelos,
     seleccion,
@@ -137,7 +137,7 @@ ETAPAS = ("contrato", "modelos", "definitivo", "pareado", "circularidad", "impor
 class Configuracion:
     """Parámetros del pipeline. Todo lo que decide un resultado vive aquí y se guarda con él."""
 
-    años_entrenamiento: tuple[int, ...] = (2016, 2017, 2018, 2019, 2020)
+    años_entrenamiento: tuple[int, ...] = (2019, 2020)
     año_calibracion: int = 2021
     año_validacion: int = 2022
     año_reservado: int = 2023
@@ -271,6 +271,9 @@ class Contexto:
         if self.train is not None:
             return
         cfg = self.cfg
+        años = [*cfg.años_entrenamiento, cfg.año_calibracion, cfg.año_validacion]
+        dias_secos.construir_cache(self.contrato, años)
+
         self.train, info = self._muestrear(cfg.años_entrenamiento)
         self.parada, _ = self._muestrear([cfg.año_calibracion])
         self.tasa_negativos = float(info["tasa_negativos"])
@@ -284,7 +287,7 @@ class Contexto:
         marco, info = datos.muestrear_entrenamiento(
             self.contrato, list(años), modulo=self.cfg.modulo_muestreo, columnas_extra=("x", "y")
         )
-        return marco, info
+        return dias_secos.corregir(marco, list(años)), info
 
     def coordenadas(self) -> pd.DataFrame:
         """Mapa `cell_id -> (x, y)`. Es estático, así que se lee una vez de un año cualquiera."""
@@ -320,6 +323,7 @@ class Contexto:
         trozos, filas = [], 0
         for lote in datos.iter_evaluacion(self.contrato, [año], predictores=None):
             filas += len(lote)
+            lote = dias_secos.corregir(lote, [año])
             trozos.append(pd.DataFrame({
                 "fecha": lote["fecha"].to_numpy(),
                 "cell_id": lote["cell_id"].to_numpy(),
@@ -663,6 +667,7 @@ def _variante_pronostico(ctx: Contexto) -> tuple[dict, int]:
     trozos, filas = [], 0
     for lote in datos.iter_evaluacion(ctx.contrato, [cfg.año_validacion], predictores=None):
         filas += len(lote)
+        lote = dias_secos.corregir(lote, [cfg.año_validacion])
         lote, _ = _desfasar(lote)
         trozos.append(pd.DataFrame({
             "fecha": lote["fecha"].to_numpy(),
@@ -793,15 +798,31 @@ def etapa_semilla(ctx: Contexto) -> pd.DataFrame:
     return tabla
 
 
+#: Columna del FWI oficial descargado de Copernicus CEMS, si el datacubo la publica.
+COL_FWI_CEMS = "fire_weather_index"
+
+
 def etapa_fwi(ctx: Contexto, ruta_fwi: Path) -> pd.DataFrame:
-    """Baseline físico: el índice canadiense de peligro de incendio calculado a 1 km.
+    """Baseline físico: el índice canadiense de peligro de incendio, en sus **dos** versiones.
 
     Batir a una regresión logística solo demuestra que el boosting gana a un modelo lineal.
     Para sostener que el sistema aporta algo sobre lo que ya se publica operativamente hay que
     batir al FWI, que es el índice que difunden AEMET y EFFIS.
 
-    A diferencia del script original, aquí un fallo al importar **detiene la ejecución**: un
-    baseline que desaparece en silencio deja un informe que parece completo y no lo está.
+    Se evalúan las dos fuentes del índice de que dispone el proyecto, porque cada una tiene una
+    limitación distinta y ninguna de las dos por separado cierra la discusión:
+
+    - **Oficial (CEMS).** Descargado de Copernicus, calculado como manda la definición, con la
+      lectura del mediodía solar. Es literalmente lo que se publica. Su límite es la resolución:
+      nace a 27,5 km y llega a 1 km por interpolación, así que dentro de una celda de 27,5 km
+      todas nuestras celdas comparten valor y no puede discriminar entre ellas.
+    - **Van Wagner a 1 km.** Calculado desde nuestra propia meteorología, a resolución nativa.
+      Su límite es que sustituye la lectura del mediodía por los extremos de la ventana 12-18 h
+      —máxima de temperatura, mínima de humedad, racha máxima—, lo que sobreestima el índice de
+      forma sistemática e invalida sus categorías oficiales de peligro.
+
+    Superar a las dos cierra las dos réplicas posibles a la vez: que ganamos solo por tener más
+    resolución, y que el índice con el que comparamos no es el de verdad.
     """
     sys.path.insert(0, str(ruta_fwi))
     try:
@@ -821,32 +842,61 @@ def etapa_fwi(ctx: Contexto, ruta_fwi: Path) -> pd.DataFrame:
         raise SystemExit(f"El dataset no trae las columnas que necesita el FWI: {faltan}")
 
     año = ctx.cfg.año_validacion
-    marco = pd.read_parquet(ctx.contrato.ruta(año),
-                            columns=["cell_id", "fecha", *necesarias, "target_ignicion"])
-    print(f"  calculando el índice sobre {len(marco):,} filas (es acumulado: no se trocea)")
+    disponibles = set(pq.ParquetFile(ctx.contrato.ruta(año)).schema_arrow.names)
+    hay_cems = COL_FWI_CEMS in disponibles
+
+    columnas = ["cell_id", "fecha", *necesarias, "target_ignicion"]
+    if hay_cems:
+        columnas.append(COL_FWI_CEMS)
+    marco = pd.read_parquet(ctx.contrato.ruta(año), columns=columnas)
+
+    print(f"  calculando Van Wagner sobre {len(marco):,} filas (es acumulado: no se trocea)")
     indices = calcular_fwi(marco, col_t=necesarias[0], col_h=necesarias[1],
                            col_w=necesarias[2], col_p=necesarias[3], verbose=False)
-    puntuado = pd.DataFrame({
-        "fecha": marco["fecha"].to_numpy(),
-        "cell_id": marco["cell_id"].to_numpy(),
-        "y": marco["target_ignicion"].to_numpy(),
-        "score": np.nan_to_num(indices["fwi"].to_numpy(), nan=0.0).astype("float32"),
-    })
+
+    base_comun = {"fecha": marco["fecha"].to_numpy(), "cell_id": marco["cell_id"].to_numpy(),
+                  "y": marco["target_ignicion"].to_numpy()}
+    variantes = [("FWI Van Wagner 1 km",
+                  np.nan_to_num(indices["fwi"].to_numpy(), nan=0.0).astype("float32"))]
+    if hay_cems:
+        variantes.append(("FWI oficial CEMS",
+                          np.nan_to_num(marco[COL_FWI_CEMS].to_numpy(), nan=0.0).astype("float32")))
+        print("  el datacubo publica además el FWI oficial de CEMS: se evalúan los dos")
+    else:
+        print(f"  el datacubo no publica `{COL_FWI_CEMS}`; solo se evalúa la versión a 1 km")
     del marco, indices
 
-    resultado = ctx.metricas_de(puntuado)
-    ctx.puntuaciones["FWI"] = puntuado.score.to_numpy()
-    base = ctx.resultados.get("definitivo")
+    filas, base = [], ctx.resultados.get("definitivo")
+    for nombre, puntuacion in variantes:
+        puntuado = pd.DataFrame({**base_comun, "score": puntuacion})
+        resultado = ctx.metricas_de(puntuado)
+        ctx.puntuaciones[nombre] = puntuacion
+        fila = {"variante": nombre, **resultado}
+        if base:
+            fila["ventaja_del_modelo"] = base[ctx.clave_recall] - resultado[ctx.clave_recall]
+            fila["igniciones_adicionales"] = fila["ventaja_del_modelo"] * base["n_positives"]
+            print(f"  {nombre:24s} recall {resultado[ctx.clave_recall]:.4f} · "
+                  f"ROC-día {resultado['roc_auc_dentro_del_dia']:.4f} · "
+                  f"el modelo le saca {fila['ventaja_del_modelo']:+.4f} "
+                  f"({fila['igniciones_adicionales']:+.0f} igniciones)")
+        filas.append(fila)
+        del puntuado
+
     if base:
-        ventaja = base[ctx.clave_recall] - resultado[ctx.clave_recall]
-        print(f"  recall del modelo   {base[ctx.clave_recall]:.4f}")
-        print(f"  recall del FWI      {resultado[ctx.clave_recall]:.4f}")
-        print(f"  ventaja             {ventaja:+.4f}  ≈ "
-              f"{ventaja * base['n_positives']:+.0f} igniciones al año")
-    print("\n  Nota obligatoria para la memoria: el FWI se calcula aquí con los extremos de la")
-    print("  ventana 12-18 h y no con valores de mediodía solar, lo que lo sobreestima de forma")
-    print("  sistemática. Vale como ordenación de riesgo, no como categoría oficial de peligro.")
-    return pd.DataFrame([{"variante": "baseline FWI", "n_variables": 4, **resultado}])
+        print(f"\n  recall del modelo definitivo: {base[ctx.clave_recall]:.4f}")
+
+    print("\n  Salvedades que deben constar en la memoria, una por cada versión:")
+    print("  · Van Wagner 1 km — se alimenta de los extremos de la ventana 12-18 h en lugar de")
+    print("    la lectura de mediodía solar que exige la definición, lo que sobreestima el")
+    print("    índice. Vale como ordenación de riesgo, no como categoría oficial de peligro.")
+    print("    La sustitución le favorece: los extremos de la tarde describen mejor el momento")
+    print("    en que arde, así que el baseline sale reforzado, no debilitado.")
+    if hay_cems:
+        print("  · Oficial CEMS — es la definición correcta, pero nace a 27,5 km. Al interpolarlo")
+        print("    a 1 km, todas las celdas bajo un mismo píxel comparten valor, de modo que no")
+        print("    puede discriminar dentro de él. Es la limitación real del producto operativo,")
+        print("    no un defecto de nuestro cálculo, y es justo lo que el modelo viene a superar.")
+    return pd.DataFrame(filas)
 
 
 def etapa_errores(ctx: Contexto) -> pd.DataFrame:
@@ -985,6 +1035,9 @@ def etapa_ciego(ctx: Contexto) -> pd.DataFrame:
     print(f"  Configuración congelada: {ctx.cfg.modelo} · {len(ctx.variables)} variables · "
           f"entrenamiento {list(ctx.cfg.años_entrenamiento)}")
 
+    # El año reservado queda fuera de `preparar_datos` a propósito, así que su caché de rachas
+    # no existe todavía. Se construye aquí, que es el único punto donde se le da uso.
+    dias_secos.construir_cache(ctx.contrato, [año])
     marco = ctx.puntuar(ctx.modelo, año, ctx.variables)
     prob = ctx.calibrador.aplicar(marco.score.to_numpy())
     resultado = ctx.metricas_de(marco, prob=prob)
