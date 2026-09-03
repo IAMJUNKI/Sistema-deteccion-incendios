@@ -1,8 +1,8 @@
-"""Recálculo de `consecutive_dry_days` a partir de la lluvia publicada.
+"""Utilidad heredada para reparar Parquet antiguos de `consecutive_dry_days`.
 
 Por qué existe este módulo
 --------------------------
-El datacubo exporta `consecutive_dry_days`, pero el valor publicado no es reproducible a
+Las versiones antiguas del datacubo exportaban `consecutive_dry_days`, pero el valor publicado no era reproducible a
 partir del resto de la fila. Se calcula sobre la rejilla original de ERA5 (unos 9 km) y
 después se interpola espacialmente a la rejilla de 1 km, y esa interpolación destruye el
 significado de la variable.
@@ -21,6 +21,14 @@ Evidencia medida sobre 2022 (29.601 celdas x 365 días)
 - 42.550 celda-día en los que la celda no registra lluvia en su propia `precipitation_sum`
   y aun así el contador desciende.
 - 123.935 celda-día en los que llueven más de 1 mm y el contador no se reinicia.
+
+Estado actual
+-------------
+El pipeline de ingesta vigente calcula la racha directamente desde
+``precipitation_sum`` ya interpolada al grid final de 1 km. Por tanto, el
+pipeline de entrenamiento no usa este módulo: conserva continuidad entre años
+y publica un contador entero. Este archivo solo sirve para reparar datasets
+Parquet heredados construidos con la versión anterior.
 
 Qué hace este módulo
 --------------------

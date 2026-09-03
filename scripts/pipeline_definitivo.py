@@ -32,7 +32,9 @@ De dónde sale cada decisión
 
 2. **Las tres variables acordadas** vienen del datacubo desde el 30 de agosto. Las dos medias
    móviles se verificaron recalculándolas y coinciden hasta el último decimal.
-   `consecutive_dry_days` no, y se corrige aquí: ver `src/entrenamiento/dias_secos.py`.
+   `consecutive_dry_days` se deriva al final de la ingesta, a partir de la lluvia ya
+   interpolada a cada celda de 1 km; por ello es un contador entero y no necesita
+   corrección durante el entrenamiento.
 
 Modelo entregado
 ----------------
@@ -63,7 +65,7 @@ La etapa `circularidad` deja constancia de las dos cosas: cuánto se habría gan
 
 Protocolo
 ---------
-Entrenamiento 2019-2020 · calibración 2021 · validación 2022 · **2023 no se toca**.
+Entrenamiento 2016-2020 · calibración 2021 · validación 2022 · **2023 no se toca**.
 
 El calibrador se ajusta sobre un año que el modelo no ha visto y con su prevalencia real
 intacta: ajustarlo dentro de muestra reproduciría el sobreajuste en lugar de corregirlo.
@@ -113,7 +115,6 @@ from src.entrenamiento import (  # noqa: E402
     calibracion,
     contrato as mod_contrato,
     datos,
-    dias_secos,
     metricas,
     modelos,
     seleccion,
@@ -136,7 +137,7 @@ ETAPAS = ("contrato", "modelos", "definitivo", "pareado", "circularidad", "impor
 class Configuracion:
     """Parámetros del pipeline. Todo lo que decide un resultado vive aquí y se guarda con él."""
 
-    años_entrenamiento: tuple[int, ...] = (2019, 2020)
+    años_entrenamiento: tuple[int, ...] = (2016, 2017, 2018, 2019, 2020)
     año_calibracion: int = 2021
     año_validacion: int = 2022
     año_reservado: int = 2023
@@ -270,9 +271,6 @@ class Contexto:
         if self.train is not None:
             return
         cfg = self.cfg
-        años = [*cfg.años_entrenamiento, cfg.año_calibracion, cfg.año_validacion]
-        dias_secos.construir_cache(self.contrato, años)
-
         self.train, info = self._muestrear(cfg.años_entrenamiento)
         self.parada, _ = self._muestrear([cfg.año_calibracion])
         self.tasa_negativos = float(info["tasa_negativos"])
@@ -286,7 +284,7 @@ class Contexto:
         marco, info = datos.muestrear_entrenamiento(
             self.contrato, list(años), modulo=self.cfg.modulo_muestreo, columnas_extra=("x", "y")
         )
-        return dias_secos.corregir(marco, list(años)), info
+        return marco, info
 
     def coordenadas(self) -> pd.DataFrame:
         """Mapa `cell_id -> (x, y)`. Es estático, así que se lee una vez de un año cualquiera."""
@@ -322,7 +320,6 @@ class Contexto:
         trozos, filas = [], 0
         for lote in datos.iter_evaluacion(self.contrato, [año], predictores=None):
             filas += len(lote)
-            lote = dias_secos.corregir(lote, [año])
             trozos.append(pd.DataFrame({
                 "fecha": lote["fecha"].to_numpy(),
                 "cell_id": lote["cell_id"].to_numpy(),
@@ -666,7 +663,6 @@ def _variante_pronostico(ctx: Contexto) -> tuple[dict, int]:
     trozos, filas = [], 0
     for lote in datos.iter_evaluacion(ctx.contrato, [cfg.año_validacion], predictores=None):
         filas += len(lote)
-        lote = dias_secos.corregir(lote, [cfg.año_validacion])
         lote, _ = _desfasar(lote)
         trozos.append(pd.DataFrame({
             "fecha": lote["fecha"].to_numpy(),
@@ -989,9 +985,6 @@ def etapa_ciego(ctx: Contexto) -> pd.DataFrame:
     print(f"  Configuración congelada: {ctx.cfg.modelo} · {len(ctx.variables)} variables · "
           f"entrenamiento {list(ctx.cfg.años_entrenamiento)}")
 
-    # El año reservado queda fuera de `preparar_datos` a propósito, así que su caché de rachas
-    # no existe todavía. Se construye aquí, que es el único punto donde se le da uso.
-    dias_secos.construir_cache(ctx.contrato, [año])
     marco = ctx.puntuar(ctx.modelo, año, ctx.variables)
     prob = ctx.calibrador.aplicar(marco.score.to_numpy())
     resultado = ctx.metricas_de(marco, prob=prob)

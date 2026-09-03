@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 class Configuracion:
     """Parámetros de un experimento. Se rellena desde el YAML o desde un notebook."""
 
-    anios_train: Sequence[int] = (2019, 2020, 2021)
+    anios_train: Sequence[int] = (2016, 2017, 2018, 2019, 2020)
     anios_validacion: Sequence[int] = (2022,)
     anios_test: Sequence[int] = (2023,)
     modelos: Sequence[str] = ("lightgbm", "xgboost", "logistic_regression", "random_forest")
