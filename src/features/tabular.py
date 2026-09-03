@@ -114,6 +114,10 @@ def exportar_datacubo_tabular(
             frame["target_ignicion"] = frame["target_ignicion"].astype(np.uint8)
             if "large_fire_500ha" in frame:
                 frame["large_fire_500ha"] = frame["large_fire_500ha"].astype(np.uint8)
+            if "consecutive_dry_days" in frame:
+                if frame["consecutive_dry_days"].isna().any():
+                    raise ValueError("consecutive_dry_days contiene ausencias en celdas de Galicia.")
+                frame["consecutive_dry_days"] = frame["consecutive_dry_days"].astype(np.int16)
             frame["year"] = pd.to_datetime(frame["fecha"]).dt.year.astype(np.int16)
             complete_rows = frame.dropna(subset=predictors)
             dropped_incomplete += len(frame) - len(complete_rows)

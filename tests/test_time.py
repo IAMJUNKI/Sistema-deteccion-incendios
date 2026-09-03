@@ -9,8 +9,8 @@ def test_cubo_temporal_por_defecto_cubre_periodo_historico() -> None:
     """El rango coincide exactamente con el periodo objetivo definido."""
     dataset = crear_datacubo_temporal()
 
-    assert len(dataset.time) == 1791
-    assert str(dataset.time.min().values)[:10] == "2019-01-01"
+    assert len(dataset.time) == 2887
+    assert str(dataset.time.min().values)[:10] == "2016-01-01"
     assert str(dataset.time.max().values)[:10] == "2023-11-26"
     assert not dataset.data_vars
 

@@ -2,7 +2,11 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from src.ingestion.meteorology import add_meteorology_accumulations, crear_meteorologia_diaria
+from src.ingestion.meteorology import (
+    _anadir_consecutive_dry_days_al_grid,
+    add_meteorology_accumulations,
+    crear_meteorologia_diaria,
+)
 
 
 def test_crear_meteorologia_diaria_convierte_unidades_y_acumulado() -> None:
@@ -29,7 +33,7 @@ def test_crear_meteorologia_diaria_convierte_unidades_y_acumulado() -> None:
     assert 0 <= daily["relative_humidity_min"].item() <= 100
     assert daily["temperature_mean"].attrs["units"] == "degC"
     assert daily["temperature_mean"].attrs["long_name"] == "Daily mean 2 m air temperature"
-    assert daily["consecutive_dry_days"].attrs["units"] == "days"
+    assert "consecutive_dry_days" not in daily
 
 
 def test_acumulados_incluyen_el_dia_observado_sin_shift() -> None:
@@ -74,3 +78,33 @@ def test_medias_moviles_meteorologicas_incluyen_el_dia_observado() -> None:
     assert result["relative_humidity_mean_14d"].sel(time="2020-01-14").item() == 56.5
     assert result["wind_speed_mean_7d"].attrs["units"] == "km h-1"
     assert result["relative_humidity_mean_14d"].attrs["units"] == "%"
+
+
+def test_racha_seca_se_calcula_en_grid_final_como_entero(tmp_path) -> None:
+    output = tmp_path / "meteorologia_grid.nc"
+    xr.Dataset(
+        {
+            "is_galicia": (("y", "x"), np.array([[1, 0], [1, 1]], dtype=np.uint8)),
+            "precipitation_sum": (
+                ("time", "y", "x"),
+                np.array(
+                    [
+                        [[0.0, np.nan], [0.5, 2.0]],
+                        [[0.0, np.nan], [2.0, 0.0]],
+                        [[3.0, np.nan], [0.0, 0.0]],
+                    ],
+                    dtype=np.float32,
+                ),
+            ),
+        },
+        coords={"time": pd.date_range("2020-01-01", periods=3), "y": [0, 1], "x": [0, 1]},
+    ).to_netcdf(output)
+
+    _anadir_consecutive_dry_days_al_grid(output)
+
+    with xr.open_dataset(output) as result:
+        np.testing.assert_array_equal(
+            result["consecutive_dry_days"].values[:, [0, 1, 1], [0, 0, 1]],
+            np.array([[1, 1, 0], [2, 0, 1], [0, 1, 2]], dtype=np.float32),
+        )
+        assert result["consecutive_dry_days"].attrs["spatial_derivation"] == "target_grid_precipitation"

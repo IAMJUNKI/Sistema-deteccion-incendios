@@ -107,7 +107,7 @@ continúan almacenándose, pero nunca se usan como predictores.
 |---|---|---|
 | Añadidas | `vpd_mean`, `vpd_max_12_18h` | El déficit de presión de vapor (kPa) resume conjuntamente temperatura y sequedad del aire; la ventana de tarde representa la condición más desfavorable. |
 | Añadida | `fire_weather_index` | Baseline físico diario de CEMS/EFFIS, interpolado por vecino más cercano desde 0,25°; se evalúa de forma separada, nunca como predictor de ML. |
-| Añadidas | `wind_speed_mean_7d`, `relative_humidity_mean_14d`, `consecutive_dry_days` | Amplían la memoria meteorológica: viento medio reciente, humedad a dos semanas y duración interpretable de la racha seca (`precipitation_sum < 1 mm`). |
+| Añadidas | `wind_speed_mean_7d`, `relative_humidity_mean_14d`, `consecutive_dry_days` | Amplían la memoria meteorológica: viento medio reciente, humedad a dos semanas y duración interpretable de la racha seca (`precipitation_sum < 1 mm`). La racha se deriva tras interpolar la precipitación al grid final de 1 km, por lo que es un contador entero por celda (no una interpolación de contadores). |
 | Añadidas | `road_length_main_km`, `road_length_local_km`, `road_length_track_km`, `road_length_other_km` | Desagregan la intensidad y el tipo de acceso humano; su suma es `road_length_km`. |
 | Añadidas | `residential_area_fraction`, `building_area_fraction` | Miden intensidad de ocupación humana dentro de la celda, evitando la saturación de una simple distancia. |
 | Excluidas | `roughness_mean`, `roughness_std` | Redundantes con la pendiente y elevación; se conservan solo en las fuentes intermedias si hicieran falta auditorías. |

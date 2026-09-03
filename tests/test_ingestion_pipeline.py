@@ -22,14 +22,14 @@ def test_ejecutar_pipeline_procesa_e_interpola(monkeypatch: pytest.MonkeyPatch) 
         "static.nc", "grid.gpkg", raw_dir="raw", daily_output_path="daily.nc"
     )
 
-    assert calls[0] == ("daily", "raw", Path("daily.nc"), "2018-12-01", "2023-11-26")
+    assert calls[0] == ("daily", "raw", Path("daily.nc"), "2015-12-01", "2023-11-26")
     assert calls[1] == (
         "grid",
         Path("daily.nc"),
         "static.nc",
         "grid.gpkg",
         DEFAULT_METEOROLOGY_CUBE,
-        "2018-12-01",
+        "2015-12-01",
         "2023-11-26",
     )
 

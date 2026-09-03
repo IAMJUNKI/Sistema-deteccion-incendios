@@ -84,7 +84,7 @@ Coloca los dos ficheros que el proyecto **no descarga automáticamente**:
 | Dato | Qué debe descargar la persona | Dónde guardarlo |
 |---|---|---|
 | CORINE Land Cover 2018 | GeoTIFF `U2018_CLC2018_V2020_20u1.tif` | `data/raw/corine/` |
-| Histórico oficial EGIF | XML descargado de MITECO, desde 2018 | `data/raw/fire_history/` |
+| Histórico oficial EGIF | Uno o varios XML de MITECO que cubran 2016–2023 | `data/raw/fire_history/` |
 
 El límite de Galicia se descarga automáticamente si falta cuando se usa
 `--rebuild-static`. El DEM Copernicus GLO-30 también se descarga automáticamente
@@ -101,7 +101,7 @@ largas involuntarias. Se descarga una vez con este comando:
 ```powershell
 python -m src.ingestion.era5 `
   --output-dir data/raw/meteorology/era5 `
-  --start-date 2018-12-01 `
+  --start-date 2015-12-01 `
   --end-date 2023-11-26
 ```
 
@@ -118,11 +118,12 @@ Primero mira el nombre exacto del XML que hayas puesto:
 Get-ChildItem data/raw/fire_history
 ```
 
-Después sustituye `NOMBRE_DEL_ARCHIVO.xml` por ese nombre:
+El workflow acepta directamente la carpeta y unirá los XML que haya dentro,
+eliminando por `egif_id` los posibles duplicados entre intervalos solapados:
 
 ```powershell
 python -m src.workflow `
-  --egif-xml data/raw/fire_history/NOMBRE_DEL_ARCHIVO.xml `
+  --egif-xml data/raw/fire_history `
   --rebuild-static
 ```
 
@@ -145,7 +146,7 @@ nuevo ERA5, FWI ni recalcular DEM/CORINE. Ejecuta:
 
 ```powershell
 python -m src.workflow `
-  --egif-xml data/raw/fire_history/NOMBRE_DEL_ARCHIVO.xml `
+  --egif-xml data/raw/fire_history `
   --skip-daily-meteorology
 ```
 
@@ -165,7 +166,7 @@ Al terminar deben existir:
 ```text
 data/processed/datacube/galicia_1km.nc
 data/processed/tabular/egif/metadata.json
-data/processed/tabular/egif/year=2019/dataset_2019.parquet
+data/processed/tabular/egif/year=2016/dataset_2016.parquet
 …
 data/processed/tabular/egif/year=2023/dataset_2023.parquet
 ```

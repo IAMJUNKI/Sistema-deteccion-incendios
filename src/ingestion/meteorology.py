@@ -9,6 +9,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
+from netCDF4 import Dataset as NetCDFDataset
 
 from src.config import DATACUBE_END, ERA5_DAILY_PATH, METEOROLOGY_CONTEXT_START
 
@@ -131,8 +132,10 @@ def _daily(data: xr.DataArray, operation: str) -> xr.DataArray:
     return result.rename({"date": "time"}).assign_coords(time=pd.to_datetime(result.date.values))
 
 
-def add_meteorology_accumulations(daily: xr.Dataset) -> xr.Dataset:
-    """Añade acumulados de lluvia y rachas secas, incluyendo el día observado.
+def add_meteorology_accumulations(
+    daily: xr.Dataset, include_consecutive_dry_days: bool = True
+) -> xr.Dataset:
+    """Añade acumulados de lluvia y, opcionalmente, rachas secas.
 
     No aplica desplazamiento temporal: por ejemplo, ``precipitation_sum_30d``
     para la fecha T contiene la precipitación de T-29 a T, ambas inclusive.
@@ -170,20 +173,23 @@ def add_meteorology_accumulations(daily: xr.Dataset) -> xr.Dataset:
             ),
         }
 
-    values = precipitation.values
-    dry_days = np.zeros(values.shape, dtype=np.float32)
-    streak = np.zeros(values.shape[1:], dtype=np.float32)
-    for time_index in range(values.shape[0]):
-        is_dry = np.isfinite(values[time_index]) & (values[time_index] < DRY_DAY_THRESHOLD_MM)
-        streak = np.where(is_dry, streak + 1, 0.0)
-        dry_days[time_index] = np.where(np.isfinite(values[time_index]), streak, np.nan)
-    output["consecutive_dry_days"] = (precipitation.dims, dry_days)
-    output["consecutive_dry_days"].attrs = {
-        "long_name": "Consecutive dry days",
-        "units": "days",
-        "dry_day_threshold": f"precipitation_sum < {DRY_DAY_THRESHOLD_MM} mm",
-        "time_contract": "Includes the observation date; no temporal shift applied.",
-    }
+    if include_consecutive_dry_days:
+        values = precipitation.values
+        dry_days = np.zeros(values.shape, dtype=np.float32)
+        streak = np.zeros(values.shape[1:], dtype=np.float32)
+        for time_index in range(values.shape[0]):
+            is_dry = np.isfinite(values[time_index]) & (
+                values[time_index] < DRY_DAY_THRESHOLD_MM
+            )
+            streak = np.where(is_dry, streak + 1, 0.0)
+            dry_days[time_index] = np.where(np.isfinite(values[time_index]), streak, np.nan)
+        output["consecutive_dry_days"] = (precipitation.dims, dry_days)
+        output["consecutive_dry_days"].attrs = {
+            "long_name": "Consecutive dry days",
+            "units": "days",
+            "dry_day_threshold": f"precipitation_sum < {DRY_DAY_THRESHOLD_MM} mm",
+            "time_contract": "Includes the observation date; no temporal shift applied.",
+        }
     return output
 
 
@@ -225,7 +231,10 @@ def crear_meteorologia_diaria(
             "precipitation_sum": _daily(hourly["tp"] * 1000, "max"),
         }
     ).astype(np.float32)
-    output = add_meteorology_accumulations(output)
+    # Las rachas secas se calculan después de interpolar la precipitación al
+    # grid de 1 km. Interpolar una racha ya calculada produce valores
+    # fraccionarios que no representan un número de días.
+    output = add_meteorology_accumulations(output, include_consecutive_dry_days=False)
     output.attrs = {
         "title": "Daily ERA5-Land meteorology for Galicia",
         "source": "Copernicus CDS reanalysis-era5-land",
@@ -234,7 +243,8 @@ def crear_meteorologia_diaria(
         "precipitation_method": "Daily maximum of ERA5-Land hourly accumulation in mm.",
     }
     for name, (long_name, units) in METEOROLOGY_METADATA.items():
-        output[name].attrs.update({"long_name": long_name, "units": units})
+        if name in output:
+            output[name].attrs.update({"long_name": long_name, "units": units})
     flags = DATACUBE_VARIABLE_FLAGS if inclusion_flags is None else inclusion_flags
     return output[[name for name in output.data_vars if flags.get(name, False)]]
 
@@ -292,7 +302,9 @@ def interpolar_al_grid(
                 coords={"time": daily.time, "y": cube.y, "x": cube.x},
             ).to_netcdf(destination)
 
-        variables = list(daily.data_vars)
+        # ``consecutive_dry_days`` no se interpola: se deriva posteriormente
+        # de precipitation_sum ya situada sobre las celdas finales de 1 km.
+        variables = [name for name in daily.data_vars if name != "consecutive_dry_days"]
         for position, name in enumerate(variables, start=1):
             if name in completed:
                 continue
@@ -330,6 +342,66 @@ def interpolar_al_grid(
                 mode="a",
                 encoding={name: {"zlib": True, "complevel": 4, "dtype": "float32"}},
             )
+
+    _anadir_consecutive_dry_days_al_grid(output_path)
+
+
+def _anadir_consecutive_dry_days_al_grid(output_path: str | Path) -> None:
+    """Deriva rachas secas enteras desde la precipitación interpolada a 1 km.
+
+    Se escribe por día para mantener un consumo de memoria bajo. El valor -1
+    es relleno fuera de Galicia; dentro de la máscara todo valor es un entero
+    no negativo y la racha mantiene continuidad entre años.
+    """
+    destination = Path(output_path)
+    with NetCDFDataset(destination, mode="a") as dataset:
+        if "consecutive_dry_days" in dataset.variables:
+            variable = dataset.variables["consecutive_dry_days"]
+            if getattr(variable, "spatial_derivation", "") == "target_grid_precipitation":
+                return
+            raise RuntimeError(
+                "El archivo meteorológico contiene una versión antigua de "
+                "consecutive_dry_days. Elimine la salida y reconstruya el cubo."
+            )
+        if "precipitation_sum" not in dataset.variables or "is_galicia" not in dataset.variables:
+            raise ValueError("La salida interpolada no contiene precipitation_sum e is_galicia.")
+
+        precipitation = dataset.variables["precipitation_sum"]
+        active = np.asarray(dataset.variables["is_galicia"][:], dtype=bool)
+        rows, cols = np.nonzero(active)
+        streak = np.zeros(len(rows), dtype=np.int16)
+        output = dataset.createVariable(
+            "consecutive_dry_days",
+            "i2",
+            ("time", "y", "x"),
+            zlib=True,
+            complevel=4,
+            fill_value=np.int16(-1),
+        )
+        output.setncatts(
+            {
+                "long_name": "Consecutive dry days",
+                "units": "days",
+                "dry_day_threshold": f"precipitation_sum < {DRY_DAY_THRESHOLD_MM} mm",
+                "time_contract": "Includes the observation date; no temporal shift applied.",
+                "spatial_derivation": "target_grid_precipitation",
+                "description": (
+                    "Integer dry-day streak derived after precipitation was interpolated "
+                    "to the final 1 km grid."
+                ),
+            }
+        )
+        for time_index in range(precipitation.shape[0]):
+            day = np.ma.filled(precipitation[time_index, :, :], np.nan)
+            values = day[rows, cols]
+            if not np.isfinite(values).all():
+                raise ValueError(
+                    "La precipitación interpolada contiene valores ausentes dentro de Galicia."
+                )
+            streak = np.where(values < DRY_DAY_THRESHOLD_MM, streak + 1, 0).astype(np.int16)
+            full_day = np.full(active.shape, -1, dtype=np.int16)
+            full_day[rows, cols] = streak
+            output[time_index, :, :] = full_day
 
 
 def main() -> None:

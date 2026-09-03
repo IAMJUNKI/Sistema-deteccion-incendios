@@ -18,10 +18,11 @@ from src.config import (
     EGIF_METADATA_PATH,
     EGIF_START,
     EGIF_TARGET_PATH,
+    FIRE_HISTORY_RAW_DIR,
 )
 
 GALICIA_PROVINCES = {"15", "27", "32", "36"}
-DEFAULT_RAW_DIR = Path("data/raw/fire_history")
+DEFAULT_RAW_DIR = FIRE_HISTORY_RAW_DIR
 DEFAULT_EVENTS_OUTPUT = EGIF_EVENTS_PATH
 DEFAULT_TARGET_OUTPUT = EGIF_TARGET_PATH
 DEFAULT_METADATA_OUTPUT = EGIF_METADATA_PATH
@@ -42,6 +43,18 @@ EVENT_COLUMNS = [
     "longitud",
     "fuente_coordenadas",
     "geometry",
+]
+EVENT_FINGERPRINT_COLUMNS = [
+    "fecha",
+    "provincia",
+    "municipio",
+    "causa",
+    "superficie_ha",
+    "utm_zone",
+    "utm_x",
+    "utm_y",
+    "latitud",
+    "longitud",
 ]
 
 
@@ -101,24 +114,52 @@ def _event_record(pif: ET.Element) -> dict[str, Any] | None:
     }
 
 
+def _listar_xml_egif(xml_path: str | Path) -> list[Path]:
+    """Resuelve un XML EGIF o todos los XML contenidos en una carpeta."""
+    source = Path(xml_path)
+    if source.is_file():
+        return [source]
+    if source.is_dir():
+        files = sorted(source.glob("*.xml"))
+        if files:
+            return files
+        raise FileNotFoundError(f"No se encontraron XML EGIF en: {source}")
+    raise FileNotFoundError(f"No se encontró el XML EGIF ni su carpeta: {source}")
+
+
 def parse_egif_xml(xml_path: str | Path) -> pd.DataFrame:
-    """Parsea el XML EGIF y devuelve los registros gallegos sin geometría.
+    """Parsea uno o varios XML EGIF y devuelve los registros gallegos.
 
-    La función no presupone que el primer hijo del XML sea un incendio: el
-    fichero oficial incorpora un esquema XSD como primer elemento.
+    Si se indica una carpeta, une todos sus XML y deduplica el solapamiento por
+    ``egif_id``. Esto permite ampliar el intervalo histórico sin editar ni
+    concatenar manualmente los archivos XML originales.
     """
-    xml_path = Path(xml_path)
-    if not xml_path.exists():
-        raise FileNotFoundError(f"No se encontró el archivo EGIF XML en: {xml_path}")
+    frames: list[pd.DataFrame] = []
+    for path in _listar_xml_egif(xml_path):
+        root = ET.parse(path).getroot()
+        records = [
+            record
+            for pif in root.iter()
+            if _local_name(pif.tag) == "pif"
+            if (record := _event_record(pif)) is not None
+        ]
+        if records:
+            frames.append(pd.DataFrame(records))
 
-    root = ET.parse(xml_path).getroot()
-    records = [
-        record
-        for pif in root.iter()
-        if _local_name(pif.tag) == "pif"
-        if (record := _event_record(pif)) is not None
-    ]
-    return pd.DataFrame(records)
+    if not frames:
+        return pd.DataFrame(columns=[column for column in EVENT_COLUMNS if column != "geometry"])
+    fires = pd.concat(frames, ignore_index=True)
+    # Los intervalos EGIF descargados pueden solaparse. Primero preservamos la
+    # versión más reciente de cada identificador y después eliminamos cualquier
+    # réplica indistinguible aunque tenga un identificador diferente o nulo.
+    by_identifier = fires.loc[fires["egif_id"].notna()].drop_duplicates("egif_id", keep="last")
+    without_identifier = fires.loc[fires["egif_id"].isna()]
+    merged = pd.concat([by_identifier, without_identifier], ignore_index=True)
+    fingerprint = merged.copy()
+    for column in ("superficie_ha", "utm_x", "utm_y", "latitud", "longitud"):
+        fingerprint[column] = fingerprint[column].round(6)
+    keep_rows = ~fingerprint.duplicated(EVENT_FINGERPRINT_COLUMNS, keep="last")
+    return merged.loc[keep_rows].sort_values(["fecha", "egif_id"], kind="stable").reset_index(drop=True)
 
 
 def crear_geodatos_incendios(fires: pd.DataFrame) -> gpd.GeoDataFrame:

@@ -10,7 +10,7 @@ CEMS/EFFIS.
 - Área: Galicia, rejilla regular de 1 km, `EPSG:3035`.
 - Contexto meteorológico: desde 30 días antes del inicio hasta la última fecha
   registrada en el XML EGIF.
-- Periodo de modelado: 2019-01-01 hasta la última fecha registrada en EGIF.
+- Periodo de modelado: 2016-01-01 hasta la última fecha registrada en EGIF.
 - Target: `target_ignicion` de EGIF. Un cero significa ausencia de ignición.
 - Temporalidad: las variables meteorológicas y sus acumulados describen el
   mismo día `T`; este producto es un **nowcast/análisis diario**, no una

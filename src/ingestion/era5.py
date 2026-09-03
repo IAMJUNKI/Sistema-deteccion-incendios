@@ -8,8 +8,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-DEFAULT_START_DATE = date(2018, 12, 1)
-DEFAULT_END_DATE = date(2023, 11, 26)
+from src.config import DATACUBE_END, METEOROLOGY_CONTEXT_START
+
+DEFAULT_START_DATE = date.fromisoformat(METEOROLOGY_CONTEXT_START)
+DEFAULT_END_DATE = date.fromisoformat(DATACUBE_END)
 DATASET = "reanalysis-era5-land"
 GALICIA_AREA = [43.8, -9.3, 41.8, -6.7]
 ERA5_VARIABLES = [

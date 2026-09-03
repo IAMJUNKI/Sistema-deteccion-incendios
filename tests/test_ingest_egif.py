@@ -25,6 +25,40 @@ def test_parsear_egif_omite_esquema_y_filtra_galicia(tmp_path) -> None:
     assert fires.loc[0, "superficie_ha"] == 2.0
 
 
+def test_parsear_carpeta_egif_combina_xml_y_deduplica_por_identificador(tmp_path) -> None:
+    """Los intervalos EGIF solapados se unen sin duplicar el mismo incendio."""
+    folder = tmp_path / "fire_history"
+    folder.mkdir()
+
+    def xml_event(identifier: str, detected_at: str, forest_area: str) -> str:
+        return (
+            "<Pif><idpif>"
+            f"{identifier}</idpif><pif_localizacion><idprovincia>15</idprovincia>"
+            "<huso>29</huso><x>550000</x><y>4800000</y><latitud>42.0</latitud>"
+            "<longitud>-8.0</longitud></pif_localizacion><pif_tiempos><deteccion>"
+            f"{detected_at}</deteccion></pif_tiempos><pif_perdidas><superficiearboladatotal>"
+            f"{forest_area}</superficiearboladatotal><superficienoarboladatotal>0</superficienoarboladatotal>"
+            "</pif_perdidas></Pif>"
+        )
+
+    (folder / "egif_2016.xml").write_text(
+        f"<pifs>{xml_event('old', '2016-01-02 15:00', '1')}</pifs>", encoding="utf-8"
+    )
+    (folder / "egif_2018.xml").write_text(
+        "<pifs>"
+        + xml_event("old", "2016-01-02 15:00", "2")
+        + xml_event("new", "2018-01-03 15:00", "3")
+        + xml_event("alternative_id", "2018-01-03 15:00", "3")
+        + "</pifs>",
+        encoding="utf-8",
+    )
+
+    fires = parse_egif_xml(folder)
+
+    assert fires["egif_id"].tolist() == ["old", "alternative_id"]
+    assert fires["superficie_ha"].tolist() == [2.0, 3.0]
+
+
 def test_asignar_incendio_a_rejilla_activa() -> None:
     fires = pd.DataFrame(
         {
