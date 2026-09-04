@@ -49,6 +49,9 @@ CANONICAL_DATACUBE_VARIABLE_FLAGS = {name: True for name in DAILY_VARIABLES}
 DATACUBE_VARIABLE_FLAGS = CANONICAL_DATACUBE_VARIABLE_FLAGS
 PRECIPITATION_WINDOWS = (3, 7, 14, 30)
 DRY_DAY_THRESHOLD_MM = 1.0
+# Un bloque mensual mantiene bajo el uso de memoria y evita miles de escrituras
+# pequeñas sobre NetCDF sin alterar los valores científicos del cubo.
+TIME_WRITE_CHUNK_DAYS = 31
 
 METEOROLOGY_METADATA = {
     "temperature_mean": ("Daily mean 2 m air temperature", "degC"),
@@ -266,7 +269,9 @@ def procesar_era5(
         encoding = {
             name: {"zlib": True, "complevel": 4, "dtype": "float32"} for name in daily.data_vars
         }
+        logger.info("      Guardando meteorología diaria: %s", destination)
         daily.to_netcdf(destination, encoding=encoding)
+        logger.info("      Meteorología diaria guardada (%s bytes).", destination.stat().st_size)
     finally:
         hourly.close()
 
@@ -279,7 +284,12 @@ def interpolar_al_grid(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> None:
-    """Interpola ERA5 diario al grid 1 km, escribiendo una variable cada vez."""
+    """Interpola ERA5 diario al grid de 1 km en bloques temporales.
+
+    La interpolación y la escritura se realizan por bloques de días para no
+    materializar una variable completa de varios años en memoria ni reescribir
+    el archivo NetCDF completo en cada operación.
+    """
     with xr.open_dataset(daily_path) as daily, xr.open_dataset(cube_path) as cube:
         if start_date or end_date:
             daily = daily.sel(time=slice(start_date, end_date))
@@ -292,15 +302,14 @@ def interpolar_al_grid(
         cols = (active["cell_id"].to_numpy() % cube.sizes["x"]).astype(int)
         destination = Path(output_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if destination.exists():
-            with xr.open_dataset(destination) as existing:
-                completed = set(existing.data_vars)
-        else:
-            completed = set()
+        if not destination.exists():
             xr.Dataset(
                 {"is_galicia": cube["is_galicia"]},
                 coords={"time": daily.time, "y": cube.y, "x": cube.x},
             ).to_netcdf(destination)
+
+        with NetCDFDataset(destination) as existing:
+            completed = set(existing.variables)
 
         # ``consecutive_dry_days`` no se interpola: se deriva posteriormente
         # de precipitation_sum ya situada sobre las celdas finales de 1 km.
@@ -318,32 +327,66 @@ def interpolar_al_grid(
                 .sortby("latitude")
                 .sortby("longitude")
             )
-            linear = source.interp(latitude=latitude, longitude=longitude, method="linear")
             # ERA5-Land contiene píxeles marítimos nulos. Antes de pedir el vecino
             # más cercano, se rellenan esos huecos espaciales con el píxel terrestre
             # válido más próximo para que las celdas costeras de Galicia no queden
             # fuera del dominio tabular por falta de meteorología.
-            nearest_source = source.interpolate_na(
-                dim="latitude", method="nearest", fill_value="extrapolate"
-            ).interpolate_na(dim="longitude", method="nearest", fill_value="extrapolate")
-            nearest = nearest_source.sel(latitude=latitude, longitude=longitude, method="nearest")
-            values = linear.where(linear.notnull(), nearest).values.astype(np.float32)
-            full = np.full(
-                (len(daily.time), cube.sizes["y"], cube.sizes["x"]), np.nan, dtype=np.float32
-            )
-            full[:, rows, cols] = values
-            interpolated = xr.Dataset({name: (("time", "y", "x"), full)})
-            interpolated[name].attrs = dict(daily[name].attrs)
-            interpolated[name].attrs["spatial_interpolation"] = (
+            attributes = dict(daily[name].attrs)
+            attributes["spatial_interpolation"] = (
                 "Linear interpolation; nearest valid ERA5-Land pixel used for missing values."
             )
-            interpolated.to_netcdf(
+            logger.info(
+                "      Guardando meteorología interpolada (%d/%d): %s en %s",
+                position,
+                len(variables),
+                name,
                 destination,
-                mode="a",
-                encoding={name: {"zlib": True, "complevel": 4, "dtype": "float32"}},
             )
+            with NetCDFDataset(destination, mode="a") as output:
+                variable = output.createVariable(
+                    name,
+                    "f4",
+                    ("time", "y", "x"),
+                    zlib=True,
+                    complevel=4,
+                    chunksizes=(
+                        min(TIME_WRITE_CHUNK_DAYS, len(daily.time)),
+                        cube.sizes["y"],
+                        cube.sizes["x"],
+                    ),
+                    fill_value=np.float32(np.nan),
+                )
+                variable.setncatts(attributes)
+                for start in range(0, len(daily.time), TIME_WRITE_CHUNK_DAYS):
+                    stop = min(start + TIME_WRITE_CHUNK_DAYS, len(daily.time))
+                    source_block = source.isel(time=slice(start, stop))
+                    nearest_source_block = source_block.interpolate_na(
+                        dim="latitude", method="nearest", fill_value="extrapolate"
+                    ).interpolate_na(dim="longitude", method="nearest", fill_value="extrapolate")
+                    linear = source_block.interp(
+                        latitude=latitude, longitude=longitude, method="linear"
+                    )
+                    nearest = nearest_source_block.sel(
+                        latitude=latitude, longitude=longitude, method="nearest"
+                    )
+                    values = linear.where(linear.notnull(), nearest).values.astype(np.float32)
+                    full = np.full(
+                        (stop - start, cube.sizes["y"], cube.sizes["x"]),
+                        np.nan,
+                        dtype=np.float32,
+                    )
+                    full[:, rows, cols] = values
+                    variable[start:stop, :, :] = full
+                    if (
+                        stop == len(daily.time)
+                        or start // 365 != (stop - 1) // 365
+                    ):
+                        logger.info("      %s: %d/%d días guardados.", name, stop, len(daily.time))
+            logger.info("      Variable meteorológica guardada: %s", name)
 
+    logger.info("      Calculando consecutive_dry_days sobre la rejilla final de 1 km.")
     _anadir_consecutive_dry_days_al_grid(output_path)
+    logger.info("      Meteorología interpolada completa: %s", output_path)
 
 
 def _anadir_consecutive_dry_days_al_grid(output_path: str | Path) -> None:
@@ -391,17 +434,25 @@ def _anadir_consecutive_dry_days_al_grid(output_path: str | Path) -> None:
                 ),
             }
         )
-        for time_index in range(precipitation.shape[0]):
-            day = np.ma.filled(precipitation[time_index, :, :], np.nan)
-            values = day[rows, cols]
-            if not np.isfinite(values).all():
+        total_days = precipitation.shape[0]
+        logger.info("      Escribiendo rachas secas para %d días.", total_days)
+        for start in range(0, total_days, TIME_WRITE_CHUNK_DAYS):
+            stop = min(start + TIME_WRITE_CHUNK_DAYS, total_days)
+            days = np.ma.filled(precipitation[start:stop, :, :], np.nan)
+            values_block = days[:, rows, cols]
+            if not np.isfinite(values_block).all():
                 raise ValueError(
                     "La precipitación interpolada contiene valores ausentes dentro de Galicia."
                 )
-            streak = np.where(values < DRY_DAY_THRESHOLD_MM, streak + 1, 0).astype(np.int16)
-            full_day = np.full(active.shape, -1, dtype=np.int16)
-            full_day[rows, cols] = streak
-            output[time_index, :, :] = full_day
+            full_block = np.full((stop - start, *active.shape), -1, dtype=np.int16)
+            for local_index, values in enumerate(values_block):
+                streak = np.where(values < DRY_DAY_THRESHOLD_MM, streak + 1, 0).astype(np.int16)
+                full_block[local_index, rows, cols] = streak
+            output[start:stop, :, :] = full_block
+            if stop == total_days or start // 365 != (stop - 1) // 365:
+                logger.info(
+                    "      Rachas secas escritas: %d/%d días.", stop, total_days
+                )
 
 
 def main() -> None:

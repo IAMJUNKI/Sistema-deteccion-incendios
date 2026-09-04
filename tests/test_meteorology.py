@@ -1,11 +1,14 @@
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
+from shapely.geometry import Point
 
 from src.ingestion.meteorology import (
     _anadir_consecutive_dry_days_al_grid,
     add_meteorology_accumulations,
     crear_meteorologia_diaria,
+    interpolar_al_grid,
 )
 
 
@@ -108,3 +111,49 @@ def test_racha_seca_se_calcula_en_grid_final_como_entero(tmp_path) -> None:
             np.array([[1, 1, 0], [2, 0, 1], [0, 1, 2]], dtype=np.float32),
         )
         assert result["consecutive_dry_days"].attrs["spatial_derivation"] == "target_grid_precipitation"
+
+
+def test_interpolar_al_grid_por_bloques_conserva_valores_y_racha_seca(tmp_path) -> None:
+    """La escritura mensual conserva valores al atravesar más de un bloque."""
+    time = pd.date_range("2020-01-01", periods=40, freq="D")
+    latitude = [42.0, 43.0]
+    longitude = [-9.0, -8.0]
+    base = np.arange(40, dtype=np.float32).reshape(40, 1, 1)
+    offsets = np.array([[0.0, 1.0], [10.0, 11.0]], dtype=np.float32)
+    temperature = base + offsets
+    precipitation = np.zeros((40, 2, 2), dtype=np.float32)
+    precipitation[5, :, :] = 2.0
+
+    daily_path = tmp_path / "daily.nc"
+    xr.Dataset(
+        {
+            "temperature_mean": (("time", "latitude", "longitude"), temperature),
+            "precipitation_sum": (("time", "latitude", "longitude"), precipitation),
+        },
+        coords={"time": time, "latitude": latitude, "longitude": longitude},
+    ).to_netcdf(daily_path)
+
+    cube_path = tmp_path / "spatial.nc"
+    xr.Dataset(
+        {"is_galicia": (("y", "x"), np.ones((2, 2), dtype=np.uint8))},
+        coords={"y": [0.0, 1.0], "x": [0.0, 1.0]},
+    ).to_netcdf(cube_path)
+
+    grid_path = tmp_path / "grid.gpkg"
+    geometry = gpd.GeoSeries(
+        [Point(-9, 42), Point(-8, 42), Point(-9, 43), Point(-8, 43)], crs="EPSG:4326"
+    ).to_crs("EPSG:3035")
+    gpd.GeoDataFrame(
+        {"cell_id": [0, 1, 2, 3], "is_galicia": [1, 1, 1, 1]},
+        geometry=geometry,
+    ).to_file(grid_path, driver="GPKG")
+
+    output_path = tmp_path / "grid_meteorology.nc"
+    interpolar_al_grid(daily_path, cube_path, grid_path, output_path)
+
+    with xr.open_dataset(output_path) as result:
+        np.testing.assert_array_equal(result["temperature_mean"].values, temperature)
+        assert result["temperature_mean"].attrs["spatial_interpolation"].startswith("Linear")
+        assert result["consecutive_dry_days"].isel(time=4, y=0, x=0).item() == 5
+        assert result["consecutive_dry_days"].isel(time=5, y=0, x=0).item() == 0
+        assert result["consecutive_dry_days"].isel(time=39, y=0, x=0).item() == 34

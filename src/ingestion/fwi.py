@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections import defaultdict
 from datetime import date
@@ -13,6 +14,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 DATASET = "cems-fire-historical-v1"
 EWDS_API_URL = "https://ewds.climate.copernicus.eu/api"
@@ -273,6 +276,9 @@ def interpolar_fwi_al_grid(
                 f"No existe la capa meteorológica de destino: {destination}. Procesa ERA5 primero."
             )
 
+        logger.info(
+            "      Interpolando FWI al grid de 1 km (%s a %s).", start_date, end_date
+        )
         with xr.open_dataset(cube_path) as cube, xr.open_dataset(destination) as meteorology:
             if FWI_VARIABLE in meteorology.data_vars:
                 return
@@ -303,6 +309,7 @@ def interpolar_fwi_al_grid(
             )
             interpolated[FWI_VARIABLE].attrs = FWI_METADATA
         try:
+            logger.info("      Guardando FWI interpolado en %s.", destination)
             interpolated.to_netcdf(
                 destination,
                 mode="a",
@@ -314,7 +321,9 @@ def interpolar_fwi_al_grid(
             # modificar el original hasta que la nueva copia esté completa.
             if "HDF error" not in str(error):
                 raise
+            logger.info("      Reescribiendo NetCDF temporal para añadir FWI de forma segura.")
             _escribir_fwi_por_reemplazo_atomico(destination, interpolated)
+        logger.info("      FWI interpolado guardado.")
     finally:
         fwi.close()
 
