@@ -1,7 +1,7 @@
 # Modelado final: consolidación de los tres análisis independientes
 
 **Sistema de predicción de igniciones forestales en Galicia**
-Fase de modelado · Documento de cierre · 2 de septiembre de 2026
+Fase de modelado · Documento de cierre · 5 de septiembre de 2026
 
 ---
 
@@ -12,28 +12,30 @@ entrada reproducible los tres análisis que el equipo había realizado por separ
 dataset EGIF. Sustituye a los estudios previos como referencia para el capítulo de modelado de
 la memoria.
 
-El modelo entregado es un **LightGBM sobre 48 predictores**, calibrado con regresión de Platt y
-validado sobre el año 2022 completo sin submuestrear.
+El modelo entregado es un **LightGBM sobre 48 predictores**, entrenado sobre 2016-2020,
+calibrado con regresión de Platt y validado sobre el año 2022 completo sin submuestrear.
 
 | Métrica | Valor |
 |---|---|
-| Recall con el 5 % del territorio en alerta | **38,03 %** (IC 90 %: 36,17 – 40,08) |
-| Recall en el 1 % de celdas más críticas del día | 6,69 % (IC 90 %: 5,67 – 7,72) |
-| ROC-AUC global | 0,8634 |
-| ROC-AUC en temporada (junio–septiembre) | 0,7964 |
-| ROC-AUC dentro del día | 0,7351 |
-| PR-AUC | 0,00141 (lift 9,15× sobre azar) |
+| Recall con el 5 % del territorio en alerta | **39,66 %** (IC 90 %: 37,67 – 41,71) |
+| Recall en el 1 % de celdas más críticas del día | 7,66 % |
+| ROC-AUC global | 0,8659 |
+| ROC-AUC en temporada (junio–septiembre) | 0,8052 |
+| ROC-AUC dentro del día | 0,7431 |
+| PR-AUC | 0,00141 (lift 9,18× sobre azar) |
 | Filas evaluadas | 10.804.365 |
 | Igniciones | 1.659 (prevalencia 0,0154 %) |
 
-**El resultado principal para la memoria:** el modelo detecta **14,1 puntos más** de igniciones
-que el índice FWI —el estándar operativo que publican AEMET y EFFIS— con el mismo presupuesto de
-vigilancia. Sobre las 1.659 igniciones de 2022 equivale a **234 incendios adicionales al año**.
+**El resultado principal para la memoria:** el modelo supera a las **dos** versiones del índice
+FWI disponibles. Frente al oficial de Copernicus CEMS, +17,2 puntos, equivalentes a **286
+igniciones adicionales al año** con el mismo presupuesto de vigilancia; frente al calculado a
+1 km con las ecuaciones de Van Wagner, +15,7 puntos y 261 igniciones.
 
-**El resultado metodológicamente más relevante:** una variante que solo usa información
-disponible al terminar el día anterior alcanza el 35,93 % de recall y **sigue superando al FWI
-en doce puntos**. El sistema no es únicamente un índice de diagnóstico: funciona como aviso
-anticipado.
+**El resultado metodológicamente más relevante:** una variante que solo emplea información
+disponible al terminar el día anterior alcanza el 39,54 % de recall, **estadísticamente
+indistinguible del modelo completo** (0,12 puntos de diferencia frente a un suelo de ruido de
+1,93). El sistema no es únicamente un índice de diagnóstico: funciona como aviso anticipado sin
+coste medible.
 
 ---
 
@@ -47,21 +49,23 @@ conclusiones parcialmente divergentes. Este trabajo tenía tres objetivos:
    calibración, que producía diferencias de más de seis puntos de recall.
 3. **Cerrar las objeciones metodológicas** pendientes con evidencia medida, no con argumentos.
 
-El resultado es `scripts/pipeline_definitivo.py`, con catorce etapas que producen tanto el
-modelo de producción como toda la evidencia que lo respalda.
+El resultado es `scripts/pipeline_definitivo.py`: trece etapas que se ejecutan de forma
+ordinaria y producen tanto el modelo de producción como la evidencia que lo respalda, más una
+decimocuarta —el test ciego— que solo se activa a petición expresa.
 
 ---
 
 ## 2. Datos de partida
 
-El dataset procede del datacubo canónico, publicado el 30 de agosto de 2026 en formato Parquet
-particionado por año.
+El dataset procede del datacubo canónico, reconstruido el 5 de septiembre de 2026 con la serie
+histórica completa, en formato Parquet particionado por año.
 
 | Concepto | Valor |
 |---|---|
 | Predictores declarados | 50 |
-| Años disponibles | 2019–2023 |
-| Filas totales | 53.015.391 |
+| Años disponibles | 2016–2023 |
+| Filas totales | 86.494.122 |
+| Igniciones registradas | 12.699 |
 | Filas descartadas por predictores incompletos | 0 |
 | Contrato temporal | Sin desfase; los acumulados incluyen la fecha T |
 | Codificación cíclica del calendario | Ninguna |
@@ -88,10 +92,10 @@ Antes de entrenar se verificó la coherencia interna del dataset:
   extremos de la ventana 12–18 h contenidos en el rango del día completo. Se cumplen en los
   10,8 millones de filas de 2022 **sin una sola excepción**.
 
-### 2.2 Corrección aplicada: `consecutive_dry_days`
+### 2.2 Incidencia detectada y corregida: `consecutive_dry_days`
 
-La auditoría detectó que una de las tres variables acordadas en la reunión del 29 de agosto no
-era reproducible a partir del resto de la fila. Los días consecutivos sin lluvia significativa
+Sobre la versión anterior del datacubo, la auditoría detectó que una de las tres variables
+acordadas en la reunión del 29 de agosto no era reproducible a partir del resto de la fila. Los días consecutivos sin lluvia significativa
 presentaban tres anomalías incompatibles con su definición:
 
 | Anomalía | Alcance (año 2022) |
@@ -108,15 +112,16 @@ ninguna de las dos. Las otras dos variables acordadas —medias móviles de hume
 sobreviven a la interpolación, y de hecho coinciden con el recálculo independiente hasta el
 límite de la precisión de coma flotante simple.
 
-**Solución.** La variable se reconstruye desde la columna `precipitation_sum` que el propio
-Parquet publica, con lo que queda coherente con la lluvia de su misma fila y es reproducible por
-cualquiera que disponga del dataset. La implementación está en `src/entrenamiento/dias_secos.py`
-y no requiere regenerar el datacubo.
+**Solución.** El pipeline de ingesta se corrigió para derivar la racha al final del proceso, a
+partir de la precipitación ya interpolada a cada celda de 1 km. La versión vigente del datacubo
+publica un contador entero, coherente con la lluvia de su propia fila y con continuidad entre
+años. La incidencia queda resuelta en origen.
 
-**Limitación conocida.** El recálculo se realiza año a año, de modo que el contador se reinicia
-el 1 de enero y las rachas que cruzan el fin de año quedan truncadas. Afecta a los primeros días
-de enero, fuera de la temporada de incendios. Se documenta por ser una diferencia real respecto
-a la versión del datacubo, que sí arrastra el mes de diciembre anterior.
+**Salvaguarda permanente.** `src/entrenamiento/dias_secos.py` conserva la reparación para
+Parquet heredados, y el pipeline **diagnostica la columna al arrancar**: mide la proporción de
+valores no enteros y de días con lluvia que no reinician el contador, y solo repara si detecta
+el patrón. Sobre el datacubo actual el diagnóstico da 0,00 % en ambos síntomas y la columna no
+se toca. Así la decisión no depende de que nadie recuerde qué versión del dataset tiene delante.
 
 ---
 
@@ -124,12 +129,20 @@ a la versión del datacubo, que sí arrastra el mes de diciembre anterior.
 
 ### 3.1 Separación temporal de los años
 
-| Año | Papel |
-|---|---|
-| 2019–2020 | Entrenamiento |
-| 2021 | Parada temprana y ajuste del calibrador |
-| 2022 | Validación: conjunto sobre el que se tomaron las decisiones |
-| 2023 | **Test ciego: no interviene en ninguna decisión** |
+| Año | Papel | Igniciones |
+|---|---|---|
+| 2016–2020 | Entrenamiento | 9.584 |
+| 2021 | Parada temprana y ajuste del calibrador | 926 |
+| 2022 | Validación: conjunto sobre el que se tomaron las decisiones | 1.659 |
+| 2023 | **Test ciego: no interviene en ninguna decisión** | 530 |
+
+El periodo de entrenamiento se amplió a cinco años al reconstruir el datacubo. Antes de
+adoptarlo se comprobó que el registro EGIF no estuviera infrarregistrado en los años nuevos:
+2016 y 2017 son, de hecho, los peores de la serie (2.246 y 2.980 igniciones frente a las 1.659
+de 2022), de modo que aportan comportamiento de fuego extremo que el modelo no había visto.
+
+El año reservado, 2023, es el más flojo de la serie con 530 igniciones. Sus intervalos de
+confianza serán por tanto más anchos que los de validación, y así debe advertirse al reportarlo.
 
 La separación es temporal y no aleatoria. Un reparto aleatorio de filas colocaría días
 consecutivos de la misma ola de calor a ambos lados de la partición, y el modelo obtendría
@@ -183,7 +196,7 @@ responden a la pregunta operativa real.
 - **Recall en el 1 % diario.** La misma idea aplicada día a día: las 296 celdas más críticas de
   cada jornada. Más exigente y más próximo al despliegue real de medios.
 - **ROC-AUC en tres versiones.** Global, restringido a temporada (junio–septiembre) y calculado
-  dentro de cada día y promediado. La progresión 0,8634 → 0,7964 → 0,7351 es informativa: mide
+  dentro de cada día y promediado. La progresión 0,8659 → 0,8052 → 0,7431 es informativa: mide
   cuánto del rendimiento procede de distinguir agosto de enero —algo que el calendario ya
   resuelve— y cuánto de discriminar celdas dentro de un mismo día, que es la aportación real.
 - **Intervalos de confianza al 90 % por bootstrap sobre las igniciones**, no sobre todas las
@@ -198,9 +211,9 @@ responden a la pregunta operativa real.
 
 ### 4.1 Justificación de la exclusión
 
-La versión de 48 variables obtiene 38,03 % de recall frente al 36,95 % del conjunto completo.
-**Esa diferencia de 1,09 puntos no justifica la decisión**: es inferior al suelo de ruido de
-1,45 puntos que establece la etapa `semilla`, por lo que ambas versiones son estadísticamente
+La versión de 48 variables obtiene 39,66 % de recall frente al 39,12 % del conjunto completo.
+**Esa diferencia de 0,54 puntos no justifica la decisión**: es muy inferior al suelo de ruido de
+1,93 puntos que establece la etapa `semilla`, por lo que ambas versiones son estadísticamente
 indistinguibles. Presentar la diferencia como una mejora sería interpretar ruido, y además la
 comparación se realizó sobre el conjunto de validación, lo que la invalidaría como criterio de
 selección.
@@ -221,7 +234,7 @@ No se realizó búsqueda de hiperparámetros. Dos de los tres análisis previos 
 ajuste fino aporta menos que el ruido de implementación, por lo que se emplean valores estables
 y se documenta la decisión: 800 árboles como techo, tasa de aprendizaje 0,05, 63 hojas, mínimo
 30 observaciones por hoja, submuestreo de filas y columnas al 80 %, y parada temprana a 50
-rondas sobre el año de calibración. El modelo final utilizó 304 árboles.
+rondas sobre el año de calibración.
 
 Se fija `deterministic` y `force_row_wise` para que la ejecución sea reproducible.
 
@@ -237,21 +250,21 @@ modelo lineal, interpretable y explicable en dos frases.
 
 | Modelo | Recall @5 % | Recall 1 % diario | ROC dentro del día |
 |---|---|---|---|
-| **LightGBM** | **38,03 %** | **6,69 %** | **0,7351** |
-| XGBoost | 31,71 % | 5,30 % | 0,7008 |
-| Random Forest | 31,34 % | 6,33 % | 0,6783 |
-| Regresión logística | 29,54 % | 4,46 % | 0,6970 |
+| **LightGBM** | **39,66 %** | **7,66 %** | **0,7431** |
+| XGBoost | 35,74 % | 7,11 % | 0,7321 |
+| Random Forest | 34,00 % | 7,11 % | 0,6903 |
+| Regresión logística | 30,98 % | 3,98 % | 0,7011 |
 
 La comparación se completó con el test pareado sobre las mismas igniciones y el estadístico de
 McNemar. LightGBM supera a los otros tres de forma concluyente:
 
 | Comparación | Diferencia | p (McNemar) |
 |---|---|---|
-| LightGBM vs. regresión logística | +8,50 pp | 5,0 · 10⁻¹² |
-| LightGBM vs. Random Forest | +6,69 pp | 3,5 · 10⁻⁸ |
-| LightGBM vs. XGBoost | +6,33 pp | 4,6 · 10⁻⁸ |
+| LightGBM vs. regresión logística | +8,68 pp | 6,4 · 10⁻¹⁶ |
+| LightGBM vs. Random Forest | +5,67 pp | 1,1 · 10⁻⁶ |
+| LightGBM vs. XGBoost | +3,92 pp | 1,8 · 10⁻⁴ |
 
-Las diferencias superan ampliamente el suelo de ruido de 1,45 puntos. **Conviene señalar que
+Las diferencias superan el suelo de ruido de 1,93 puntos. **Conviene señalar que
 esto corrige una conclusión anterior**: análisis previos sobre versiones distintas del dataset
 habían encontrado empate entre LightGBM y XGBoost. Con el dataset de 50 predictores no lo hay.
 
@@ -261,15 +274,15 @@ Cinco reentrenamientos idénticos salvo por la semilla aleatoria:
 
 | Semilla | Recall @5 % | Recall 1 % diario |
 |---|---|---|
-| 42 | 38,03 % | 6,69 % |
-| 7 | 38,82 % | 6,93 % |
-| 123 | 38,52 % | 6,87 % |
-| 2024 | 37,37 % | 5,67 % |
-| 31 | 37,97 % | 6,21 % |
+| 42 | 39,66 % | 7,66 % |
+| 7 | 39,60 % | 8,38 % |
+| 123 | 39,42 % | 8,44 % |
+| 2024 | 39,96 % | 8,50 % |
+| 31 | 41,35 % | 8,86 % |
 
-**Dispersión: 1,45 puntos de recall**, equivalentes a 24 igniciones. Este valor es el suelo de
+**Dispersión: 1,93 puntos de recall**, equivalentes a 32 igniciones. Este valor es el suelo de
 ruido del estudio y condiciona la lectura de todas las demás etapas: ninguna diferencia inferior
-a 1,45 puntos puede presentarse como un hallazgo.
+a 1,93 puntos puede presentarse como un hallazgo. Es un listón exigente y conviene que lo sea.
 
 Sin esta medición, cualquier comparación del trabajo sería ininterpretable.
 
@@ -287,10 +300,10 @@ creciente:
 
 | Escenario | Variables | Recall @5 % | ROC dentro del día |
 |---|---|---|---|
-| **Modelo entregado** | 48 | **38,03 %** | 0,7351 |
-| Completo (incluye el día T) | 50 | 36,95 % | 0,7395 |
-| **Pronóstico (solo hasta T-1)** | 36 | **35,93 %** | 0,7362 |
-| Amplia (sin ningún acumulado) | 40 | 34,12 % | 0,7277 |
+| **Modelo entregado** | 48 | **39,66 %** | 0,7431 |
+| **Pronóstico (solo hasta T-1)** | 36 | **39,54 %** | 0,7344 |
+| Completo (incluye el día T) | 50 | 39,12 % | 0,7400 |
+| Amplia (sin ningún acumulado) | 40 | 36,23 % | 0,7413 |
 
 El escenario de pronóstico merece detalle. Los acumulados pueden despojarse del día T mediante
 aritmética exacta sobre las columnas publicadas: una suma de siete días que incluye hoy, menos
@@ -300,11 +313,18 @@ transformación se verificó contra ejemplos calculados a mano. Retirando ademá
 del propio día quedan 36 variables que solo contienen información disponible al terminar el día
 T-1.
 
-**Ese modelo alcanza el 35,93 % de recall y sigue superando al FWI en doce puntos.** La
-implicación es sustantiva: el sistema no se limita a describir el día en curso, sino que puede
-emitir un aviso la tarde anterior, que es el horizonte que un servicio de extinción necesita para
-movilizar medios. Y responde a la objeción de forma definitiva: aun rechazando por completo el
-uso de datos del propio día, las conclusiones del trabajo se mantienen.
+**Ese modelo alcanza el 39,54 % de recall, a 0,12 puntos del modelo completo.** La diferencia es
+un orden de magnitud menor que el suelo de ruido de 1,93: son estadísticamente indistinguibles.
+
+La implicación es sustantiva. Renunciar por completo a los datos del día que se predice **no
+tiene coste medible**, de modo que el sistema no se limita a describir el día en curso: puede
+emitir el aviso la tarde anterior, que es el horizonte que un servicio de extinción necesita
+para movilizar medios, y sigue superando a las dos versiones del FWI por más de quince puntos.
+
+Y responde a la objeción del contrato temporal de forma definitiva: aun rechazando de plano el
+uso de información del propio día, las conclusiones del trabajo se mantienen intactas. Merece
+la pena señalar que con el periodo de entrenamiento anterior esta variante perdía 2,1 puntos;
+al disponer de cinco años de entrenamiento la pérdida desaparece.
 
 ### 5.4 Comparación con el estándar operativo (`fwi`)
 
@@ -317,14 +337,22 @@ El FWI se calculó a resolución de 1 km sobre nuestro propio dataset, con las e
 Wagner, en lugar de descargarlo de CEMS a 27,5 km e interpolarlo. El resultado es un baseline
 más exigente que el de la referencia bibliográfica.
 
-| | Recall @5 % | ROC global | ROC dentro del día |
-|---|---|---|---|
-| Modelo | **38,03 %** | 0,8634 | **0,7351** |
-| FWI | 23,93 % | 0,8095 | 0,6148 |
+Se evalúan las dos fuentes del índice de que dispone el proyecto, porque cada una tiene una
+limitación distinta y ninguna por separado cierra la discusión. El **oficial de CEMS** está
+calculado como manda la definición, pero nace a 27,5 km: al interpolarlo a 1 km, todas las
+celdas bajo un mismo píxel comparten valor y no puede discriminar dentro de él. El de **Van
+Wagner a 1 km** sí distingue celda a celda, pero sustituye la lectura de mediodía por los
+extremos de la ventana 12–18 h.
 
-**Ventaja: 14,1 puntos, equivalentes a 234 igniciones adicionales al año** con idéntico
-presupuesto de vigilancia. La distancia se amplía en la métrica dentro del día, que es la
-operativamente significativa.
+| | Recall @5 % | ROC dentro del día | Ventaja del modelo |
+|---|---|---|---|
+| **Modelo** | **39,66 %** | **0,7431** | — |
+| FWI Van Wagner 1 km | 23,93 % | 0,6148 | +15,7 pp · **261 igniciones/año** |
+| FWI oficial CEMS | 22,42 % | 0,6015 | +17,2 pp · **286 igniciones/año** |
+
+Superar a las dos cierra a la vez las dos réplicas posibles: que la ventaja proceda únicamente
+de disponer de mayor resolución, y que el índice con el que se compara no sea el que realmente
+se publica.
 
 **Salvedad que debe constar en la memoria:** el FWI oficial se define sobre observaciones de
 mediodía solar, mientras que aquí se calcula con los extremos de la ventana 12–18 h. Esa
@@ -338,12 +366,12 @@ invalida el uso de los umbrales oficiales de la tabla de peligro.
 
 | Variable | Caída de ROC-AUC |
 |---|---|
-| `precipitation_sum_3d` | 0,0256 |
-| `relative_humidity_mean_7d` | 0,0172 |
-| `vpd_mean` | 0,0156 |
-| `wind_speed_max_12_18h` | 0,0119 |
-| `road_length_local_km` | 0,0104 |
-| `elevation_mean` | 0,0103 |
+| `precipitation_sum_3d` | 0,0265 |
+| `relative_humidity_mean_7d` | 0,0216 |
+| `elevation_mean` | 0,0120 |
+| `vpd_mean` | 0,0108 |
+| `road_length_local_km` | 0,0106 |
+| `precipitation_sum_7d` | 0,0102 |
 
 La presencia de `road_length_local_km` entre las primeras es coherente con la etiología conocida
 de los incendios en Galicia, de origen humano en su gran mayoría.
@@ -352,15 +380,19 @@ de los incendios en Galicia, de origen humano en su gran mayoría.
 
 | Grupo retirado | Variables restantes | Recall @5 % | Δ |
 |---|---|---|---|
-| Meteorología | 28 | 21,64 % | **−16,40 pp** |
-| Topografía | 36 | 35,14 % | −2,89 pp |
-| Actividad humana | 41 | 36,35 % | −1,69 pp |
-| Cobertura del suelo | 39 | 36,95 % | −1,08 pp |
-| Ninguno | 48 | 38,03 % | — |
+| Meteorología | 28 | 25,92 % | **−13,74 pp** |
+| Topografía | 36 | 37,49 % | −2,17 pp |
+| Actividad humana | 41 | 38,76 % | −0,90 pp |
+| Cobertura del suelo | 39 | 39,18 % | −0,48 pp |
+| Ninguno | 48 | 39,66 % | — |
 
-La meteorología es el núcleo del modelo. La **cobertura del suelo se queda en −1,08 puntos, por
-debajo del suelo de ruido de 1,45**: su aportación no es distinguible de la variación aleatoria.
-Nueve variables sobre composición de la vegetación cuya contribución no puede demostrarse.
+La meteorología es el núcleo del modelo: sin ella el recall cae más de trece puntos. La
+topografía aporta 2,17 puntos, por encima del suelo de ruido de 1,93 y por tanto demostrable.
+
+**Actividad humana y cobertura del suelo quedan por debajo del suelo de ruido** (0,90 y 0,48
+puntos): su contribución no es distinguible de la variación aleatoria. Son dieciséis variables
+cuya aportación el estudio no puede demostrar. Conviene enunciarlo así —«no demostrable»— y no
+como «no aportan nada», que es una afirmación más fuerte de lo que el dato sostiene.
 
 ### 5.6 Generalización espacial (`espacial`)
 
@@ -375,16 +407,16 @@ porque Galicia presenta un gradiente climático acusado entre la costa atlántic
 ourensano: unos cuadrantes dejarían algún pliegue sin litoral y el modelo fallaría por no haber
 visto ese régimen climático, no por incapacidad de generalizar.
 
-| Banda | Celdas | Igniciones | Recall @5 % | ROC dentro del día |
-|---|---|---|---|---|
-| 0 | 5.961 | 646 | 24,30 % | 0,6091 |
-| 1 | 5.943 | 442 | 28,51 % | 0,6758 |
-| 2 | 5.877 | 253 | 26,48 % | 0,6430 |
-| 3 | 5.901 | 166 | 24,70 % | 0,5808 |
-| 4 | 5.919 | 152 | 17,11 % | 0,5500 |
+| Banda | Igniciones | Recall @5 % | ROC dentro del día |
+|---|---|---|---|
+| 0 | 646 | 26,01 % | 0,5920 |
+| 1 | 442 | 28,96 % | 0,6705 |
+| 2 | 253 | 24,90 % | 0,6557 |
+| 3 | 166 | 27,11 % | 0,6361 |
+| 4 | 152 | 29,61 % | 0,5869 |
 
-**ROC dentro del día: 0,7351 con el reparto habitual, 0,6117 en territorio no visto.** La caída
-de 0,123 debe declararse explícitamente en la memoria: cuantifica la fracción del rendimiento
+**ROC dentro del día: 0,7431 con el reparto habitual, 0,6282 en territorio no visto.** La caída
+de 0,115 debe declararse explícitamente en la memoria: cuantifica la fracción del rendimiento
 que **no se transfiere** a una zona no representada en el entrenamiento. El sistema está
 validado para Galicia; su despliegue en otra comunidad exigiría reentrenamiento.
 
@@ -395,19 +427,20 @@ Un recall del 38 % implica que seis de cada diez igniciones no se detectan. Iden
 
 | Mes | Igniciones | Recall |
 |---|---|---|
-| Enero | 115 | 49,57 % |
-| Febrero | 139 | 46,76 % |
-| Marzo | 72 | **2,78 %** |
-| Abril | 94 | 20,21 % |
-| Mayo | 116 | 25,00 % |
-| Junio | 50 | 6,00 % |
-| Julio | 428 | **50,70 %** |
-| Agosto | 491 | 41,55 % |
-| Septiembre | 122 | 23,77 % |
+| Enero | 115 | 42,61 % |
+| Febrero | 139 | 40,29 % |
+| Marzo | 72 | **0,00 %** |
+| Abril | 94 | 18,09 % |
+| Mayo | 116 | 21,55 % |
+| Junio | 50 | 2,00 % |
+| Julio | 428 | **55,37 %** |
+| Agosto | 491 | 48,07 % |
+| Septiembre | 122 | 25,41 % |
 | Octubre | 29 | 20,69 % |
 
 El rendimiento se concentra donde importa: julio y agosto acumulan 919 de las 1.659 igniciones y
-el modelo detecta cerca de la mitad. El fracaso de marzo (2,78 %) es coherente con la etiología:
+el modelo detecta más de la mitad en julio. El fracaso de marzo —**cero de setenta y dos**— es
+coherente con la etiología:
 las igniciones de marzo proceden mayoritariamente de quemas agrícolas descontroladas, un
 fenómeno cultural y de calendario laboral que el modelo no observa, ya que solo dispone de
 meteorología, terreno y vegetación.
@@ -420,18 +453,17 @@ severidad meteorológica y que lo que se le escapa son los fuegos cuyo origen no
 
 La tabla de fiabilidad, sobre doce tramos de igual tamaño, muestra correspondencia monótona
 entre probabilidad predicha y frecuencia observada, con **infraestimación sistemática en torno a
-un factor dos** (tramo superior: 8,90 · 10⁻⁴ predicho frente a 9,22 · 10⁻⁴ observado; tramos
-intermedios con desviaciones mayores). La salida es apta para ordenar y para fijar umbrales; no
+un factor 1,4** (tramo superior: 6,89 · 10⁻⁴ predicho frente a 9,47 · 10⁻⁴ observado). La salida es apta para ordenar y para fijar umbrales; no
 debe interpretarse como probabilidad absoluta sin advertirlo.
 
 Traducción a niveles operativos, por cuantiles de la probabilidad calibrada:
 
 | Nivel | % del territorio | Celdas-día | Igniciones | Incidencia | Veces sobre «Bajo» |
 |---|---|---|---|---|---|
-| Bajo | 90,0 % | 9.723.928 | 742 | 7,6 · 10⁻⁵ | 1,0 |
-| Moderado | 8,0 % | 864.349 | 571 | 6,6 · 10⁻⁴ | 8,7 |
-| Alto | 1,5 % | 162.066 | 208 | 1,3 · 10⁻³ | 16,8 |
-| Extremo | 0,5 % | 54.022 | 138 | 2,6 · 10⁻³ | **33,5** |
+| Bajo | 90,0 % | 9.723.928 | 735 | 7,6 · 10⁻⁵ | 1,0 |
+| Moderado | 8,0 % | 864.349 | 526 | 6,1 · 10⁻⁴ | 8,1 |
+| Alto | 1,5 % | 162.066 | 238 | 1,5 · 10⁻³ | 19,4 |
+| Extremo | 0,5 % | 54.022 | 160 | 3,0 · 10⁻³ | **39,2** |
 
 Lo relevante no es la posición de los cortes sino que la incidencia observada crece de forma
 marcada y monótona entre niveles. Es lo que permite a quien recibe el aviso confiar en que
@@ -444,15 +476,15 @@ el mismo modelo sobre subconjuntos definidos por superficie quemada:
 
 | Definición | Igniciones | Recall @5 % | ROC dentro del día |
 |---|---|---|---|
-| Todas | 1.659 | 38,03 % | 0,7351 |
-| ≥ 1 ha | 351 | 37,89 % | 0,6847 |
-| ≥ 10 ha | 106 | 38,68 % | 0,6407 |
-| ≥ 100 ha | 29 | 37,93 % | 0,6374 |
-| ≥ 500 ha | 12 | 25,00 % | 0,4320 |
+| Todas | 1.659 | 39,66 % | 0,7431 |
+| ≥ 1 ha | 351 | 38,18 % | 0,6919 |
+| ≥ 10 ha | 106 | 35,85 % | 0,6306 |
+| ≥ 100 ha | 29 | 27,59 % | 0,6077 |
+| ≥ 500 ha | 12 | 25,00 % | 0,4529 |
 
-El recall se mantiene estable, lo que indica que el modelo no debe su rendimiento a acertar
-conatos irrelevantes. **En el estrato de grandes incendios el ROC dentro del día cae a 0,4320,
-por debajo del azar**; debe reportarse, si bien con la cautela que impone un tamaño de muestra de
+El recall se mantiene razonablemente estable hasta las 10 ha, lo que indica que el modelo no
+debe su rendimiento a acertar conatos irrelevantes, aunque desciende en los estratos superiores.
+**En el de grandes incendios el ROC dentro del día cae a 0,4529, por debajo del azar**; debe reportarse, si bien con la cautela que impone un tamaño de muestra de
 doce casos, insuficiente para sostener conclusión alguna.
 
 ---
@@ -486,21 +518,24 @@ documenta el proceso de selección.
 
 Se enumeran de forma explícita por integridad metodológica:
 
-1. **Generalización espacial limitada.** El ROC dentro del día desciende de 0,7351 a 0,6117 en
+1. **Generalización espacial limitada.** El ROC dentro del día desciende de 0,7431 a 0,6282 en
    territorio no representado en el entrenamiento. El sistema está validado para Galicia.
-2. **Igniciones de origen no meteorológico.** El recall se desploma en marzo (2,78 %), cuando
-   predominan las quemas agrícolas. El modelo no dispone de variables que capturen ese
-   fenómeno.
+2. **Igniciones de origen no meteorológico.** El recall es nulo en marzo (0 de 72) y del 2 % en
+   junio, cuando predominan las quemas agrícolas. El modelo no dispone de variables que
+   capturen ese fenómeno.
 3. **Grandes incendios.** Sin capacidad demostrada de discriminación en el estrato de más de 500
    hectáreas, aunque con una muestra de doce casos que no permite concluir.
-4. **Calibración conservadora.** Infraestima el riesgo en torno a un factor dos; apta para
+4. **Calibración conservadora.** Infraestima el riesgo en torno a un factor 1,4; apta para
    ordenación y umbrales, no para lectura como probabilidad absoluta.
-5. **FWI sobreestimado.** El baseline se calcula con extremos de la ventana 12–18 h en lugar de
+5. **Aportación no demostrable de dos familias de variables.** Actividad humana y cobertura del
+   suelo quedan por debajo del suelo de ruido en la ablación. No se afirma que sobren, sino que
+   este estudio no puede demostrar su contribución.
+6. **FWI sobreestimado.** El baseline se calcula con extremos de la ventana 12–18 h en lugar de
    observaciones de mediodía solar. Válido como ordenación, no para las categorías oficiales.
-6. **Rachas truncadas en el cambio de año.** El recálculo de días secos se realiza por año, con
-   efecto limitado a los primeros días de enero, fuera de temporada.
 7. **Un único año de validación.** Las conclusiones se apoyan en 2022; una validación cruzada
    temporal sobre varios años reduciría la incertidumbre, a costa de consumir el año reservado.
+8. **Año ciego pequeño.** 2023 es el año más flojo de la serie (530 igniciones), de modo que la
+   estimación insesgada que produzca tendrá intervalos más anchos que los de validación.
 
 ---
 
@@ -510,21 +545,23 @@ Se enumeran de forma explícita por integridad metodológica:
 
 ```bash
 conda activate incendios-forestales
-python scripts/pipeline_definitivo.py                    # las trece etapas
+python scripts/pipeline_definitivo.py                    # las trece etapas ordinarias
 python scripts/pipeline_definitivo.py --etapas modelos,fwi
 python scripts/pipeline_definitivo.py --rehacer          # ignora resultados previos
 python scripts/pipeline_definitivo.py --abrir-test-ciego # solo al cerrar, una vez
 ```
 
 Cada etapa guarda su tabla y se omite si el fichero ya existe, de modo que una ejecución
-interrumpida se retoma donde estaba. Tiempo total aproximado: 25 minutos.
+interrumpida se retoma donde estaba. Tiempo total aproximado: 30 minutos sobre el periodo
+2016-2023.
 
 ### Artefactos
 
 | Ruta | Contenido |
 |---|---|
-| `scripts/pipeline_definitivo.py` | Pipeline completo, catorce etapas |
-| `src/entrenamiento/dias_secos.py` | Corrección de `consecutive_dry_days` |
+| `scripts/pipeline_definitivo.py` | Pipeline completo: trece etapas más el test ciego |
+| `src/entrenamiento/dias_secos.py` | Diagnóstico y reparación de `consecutive_dry_days` |
+| `src/entrenamiento/platt.py` | Calibrador, en módulo propio para que el modelo sea portable |
 | `data/models/modelo_definitivo.pkl` | Modelo, calibrador, variables y configuración |
 | `docs/technical/pipeline_*.csv` | Una tabla por etapa |
 | `docs/technical/importancia_permutacion.csv` | Importancia de las 48 variables |
@@ -537,7 +574,7 @@ hasta los parámetros exactos que lo produjeron.
 
 ### Verificación del propio pipeline
 
-Antes de ejecutarlo sobre los datos reales, las catorce etapas se validaron sobre un dataset
+Antes de ejecutarlo sobre los datos reales, todas las etapas se validaron sobre un dataset
 sintético en miniatura con esquema idéntico al real. La prueba no se limitó a comprobar que el
 código no falla: los datos sintéticos se construyeron con señal inyectada en una única variable,
 y las etapas de importancia y ablación la identificaron correctamente, verificando que miden lo
