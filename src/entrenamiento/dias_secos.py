@@ -1,9 +1,9 @@
-"""Utilidad heredada para reparar Parquet antiguos de `consecutive_dry_days`.
+"""Reparación de `consecutive_dry_days` para Parquet construidos con versiones antiguas.
 
 Por qué existe este módulo
 --------------------------
-Las versiones antiguas del datacubo exportaban `consecutive_dry_days`, pero el valor publicado no era reproducible a
-partir del resto de la fila. Se calcula sobre la rejilla original de ERA5 (unos 9 km) y
+Las versiones antiguas del datacubo exportaban `consecutive_dry_days`, pero el valor publicado
+no era reproducible a partir del resto de la fila. Se calcula sobre la rejilla original de ERA5 (unos 9 km) y
 después se interpola espacialmente a la rejilla de 1 km, y esa interpolación destruye el
 significado de la variable.
 
@@ -15,8 +15,8 @@ su valor de hoy depende de toda la historia previa de la celda. Al interpolarla 
 promediando la racha de una celda que lleva un mes seca con la de su vecina, a la que llovió
 ayer, y el resultado no es la racha de ninguna de las dos.
 
-Evidencia medida sobre 2022 (29.601 celdas x 365 días)
-------------------------------------------------------
+Evidencia medida sobre el datacubo antiguo, año 2022 (29.601 celdas x 365 días)
+-------------------------------------------------------------------------------
 - El 11,25 % de los valores publicados no son enteros, siendo una cuenta de días.
 - 42.550 celda-día en los que la celda no registra lluvia en su propia `precipitation_sum`
   y aun así el contador desciende.
@@ -24,11 +24,15 @@ Evidencia medida sobre 2022 (29.601 celdas x 365 días)
 
 Estado actual
 -------------
-El pipeline de ingesta vigente calcula la racha directamente desde
-``precipitation_sum`` ya interpolada al grid final de 1 km. Por tanto, el
-pipeline de entrenamiento no usa este módulo: conserva continuidad entre años
-y publica un contador entero. Este archivo solo sirve para reparar datasets
-Parquet heredados construidos con la versión anterior.
+El pipeline de ingesta vigente deriva la racha al final del proceso, desde la
+``precipitation_sum`` ya interpolada al grid de 1 km. Esa versión conserva la continuidad entre
+años y publica un contador entero, de modo que sobre el datacubo actual **este módulo no llega
+a aplicarse**.
+
+No se retira porque la decisión no debe depender de que nadie recuerde qué versión del dataset
+tiene delante. `pipeline_definitivo.py` llama a `diagnosticar()` al arrancar y solo repara si
+encuentra el patrón del fallo; sobre el datacubo vigente el diagnóstico da cero en ambos
+síntomas y la columna se usa tal cual viene.
 
 Qué hace este módulo
 --------------------
@@ -158,6 +162,51 @@ def construir_cache(contrato, años: Iterable[int], recalcular: bool = False) ->
         del marco, salida, matriz, lluvia
 
     return rutas
+
+
+def diagnosticar(contrato, año: int, filas: int = 2_000_000) -> dict:
+    """Comprueba si la columna publicada es ya un contador de días coherente.
+
+    Existe para que nadie tenga que acordarse de qué versión del datacubo tiene delante. El
+    pipeline de ingesta vigente calcula la racha correctamente y esta reparación sobra; sobre
+    un Parquet heredado, en cambio, es imprescindible. En lugar de decidirlo por convención
+    —que envejece mal y falla en silencio— se mira el dato.
+
+    Dos síntomas bastan para distinguirlos, y ambos son consecuencia directa de haber
+    interpolado espacialmente un contador:
+
+    1. **Valores no enteros.** Una cuenta de días no puede valer 8,87. Aparecen al promediar
+       las rachas de celdas vecinas que van por días distintos.
+    2. **Lluvia sin reinicio.** Si en la celda llueve por encima del umbral, la racha tiene que
+       ser cero ese día. Si no lo es, el valor no procede de la lluvia de esa misma fila.
+
+    Returns:
+        Diccionario con la proporción de cada síntoma y la conclusión en `necesita_correccion`.
+    """
+    tabla = pads.dataset(str(contrato.ruta(año)), format="parquet").head(
+        filas, columns=[VARIABLE, ORIGEN]
+    )
+    marco = tabla.to_pandas()
+    del tabla
+
+    racha = marco[VARIABLE].to_numpy(dtype="float64")
+    lluvia = marco[ORIGEN].to_numpy(dtype="float64")
+    validos = np.isfinite(racha) & np.isfinite(lluvia)
+    racha, lluvia = racha[validos], lluvia[validos]
+
+    no_enteros = float(np.mean(np.abs(racha - np.round(racha)) > 1e-4)) if len(racha) else 0.0
+    llueve = lluvia >= UMBRAL_LLUVIA_MM
+    sin_reinicio = float(np.mean(racha[llueve] > 0.5)) if llueve.any() else 0.0
+
+    return {
+        "año": año,
+        "filas_examinadas": int(len(racha)),
+        "proporcion_no_enteros": no_enteros,
+        "proporcion_lluvia_sin_reinicio": sin_reinicio,
+        # Umbrales holgados: el fallo de interpolación producía un 11 % y un 1,2 %
+        # respectivamente, mientras que un contador correcto da exactamente cero en ambos.
+        "necesita_correccion": bool(no_enteros > 0.001 or sin_reinicio > 0.001),
+    }
 
 
 def _clave(celdas: np.ndarray, fechas) -> np.ndarray:
