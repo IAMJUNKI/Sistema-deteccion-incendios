@@ -25,21 +25,25 @@ De dónde sale cada decisión
 ---------------------------
 1. **Modelo: LightGBM.** Ya no se afirma: la etapa `modelos` entrena los cuatro y la etapa
    `pareado` dice con un test estadístico si la diferencia es real o es ruido. Medido sobre
-   2022, LightGBM gana a los otros tres de forma concluyente —6,3 puntos de recall sobre
-   XGBoost, con McNemar en p≈5e-8—, muy por encima del suelo de ruido de 1,45 puntos que fija
+   2022, LightGBM gana a los otros tres de forma concluyente —3,9 puntos de recall sobre
+   XGBoost, con McNemar en p≈2e-4—, por encima del suelo de ruido de 1,93 puntos que fija
    la etapa `semilla`. Los análisis previos que daban empate entre LightGBM y XGBoost se
    hicieron sobre versiones anteriores del dataset; con el actual no lo hay.
 
-2. **Las tres variables acordadas** vienen del datacubo desde el 30 de agosto. Las dos medias
-   móviles se verificaron recalculándolas y coinciden hasta el último decimal.
-   `consecutive_dry_days` no, y se corrige aquí: ver `src/entrenamiento/dias_secos.py`.
+2. **Las tres variables acordadas** vienen del datacubo. Las dos medias móviles se
+   verificaron recalculándolas y coinciden hasta el último decimal. `consecutive_dry_days`
+   venía mal en las versiones anteriores del datacubo —se calculaba en la rejilla de ERA5 y se
+   interpolaba después, lo que destruye un contador— y la ingesta vigente ya lo corrige en
+   origen. El pipeline **diagnostica la columna al arrancar** y solo la repara si hace falta:
+   así funciona igual con un Parquet nuevo o con uno heredado, sin depender de que nadie
+   recuerde cuál tiene delante. Ver `src/entrenamiento/dias_secos.py`.
 
 Modelo entregado
 ----------------
 **48 de los 50 predictores.** Quedan fuera `precipitation_sum` y `consecutive_dry_days`.
 
-El motivo NO es que rinda más. Rinde 38,03 % frente a 36,95 % del conjunto completo, y esa
-diferencia de 1,09 puntos es menor que el suelo de ruido de 1,45 que fija la etapa `semilla`:
+El motivo NO es que rinda más. Rinde 39,66 % frente a 39,12 % del conjunto completo, y esa
+diferencia de 0,54 puntos es muy menor que el suelo de ruido de 1,93 que fija la etapa `semilla`:
 estadísticamente es un empate, y presentarlo como una mejora sería leer ruido. Además, esa
 comparación se hizo sobre el año de validación, así que tampoco serviría para decidir.
 
@@ -63,7 +67,12 @@ La etapa `circularidad` deja constancia de las dos cosas: cuánto se habría gan
 
 Protocolo
 ---------
-Entrenamiento 2019-2020 · calibración 2021 · validación 2022 · **2023 no se toca**.
+Entrenamiento 2016-2020 · calibración 2021 · validación 2022 · **2023 no se toca**.
+
+El periodo de entrenamiento se amplió al reconstruir el datacubo con la serie histórica
+completa: 9.584 igniciones frente a las 3.074 de que se disponía antes. El año reservado, 2023,
+solo tiene 530 igniciones —el más flojo de la serie—, así que sus intervalos de confianza serán
+más anchos que los de validación. Debe advertirse al reportarlo.
 
 El calibrador se ajusta sobre un año que el modelo no ha visto y con su prevalencia real
 intacta: ajustarlo dentro de muestra reproduciría el sobreajuste en lugar de corregirlo.
@@ -107,7 +116,6 @@ import pyarrow.parquet as pq
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
-from sklearn.linear_model import LogisticRegression  # noqa: E402
 from sklearn.metrics import roc_auc_score  # noqa: E402
 
 from src.entrenamiento import (  # noqa: E402
@@ -119,6 +127,7 @@ from src.entrenamiento import (  # noqa: E402
     modelos,
     seleccion,
 )
+from src.entrenamiento.platt import CalibradorPlatt  # noqa: E402
 
 DIR_MODELOS = RAIZ / "data" / "models"
 DIR_TECNICA = RAIZ / "docs" / "technical"
@@ -137,7 +146,12 @@ ETAPAS = ("contrato", "modelos", "definitivo", "pareado", "circularidad", "impor
 class Configuracion:
     """Parámetros del pipeline. Todo lo que decide un resultado vive aquí y se guarda con él."""
 
-    años_entrenamiento: tuple[int, ...] = (2019, 2020)
+    # Cinco años de entrenamiento desde la reconstrucción del datacubo del 5 de septiembre.
+    # 2016 y 2017 son los peores del registro —2.246 y 2.980 igniciones frente a las 1.659 de
+    # 2022— y aportan comportamiento de fuego extremo que el modelo no veía con el periodo
+    # anterior. Se comprobó antes de adoptarlos que el EGIF no está infrarregistrado en esos
+    # años: la serie 2016-2018 suma 6.510 igniciones, más que 2019-2021 juntos.
+    años_entrenamiento: tuple[int, ...] = (2016, 2017, 2018, 2019, 2020)
     año_calibracion: int = 2021
     año_validacion: int = 2022
     año_reservado: int = 2023
@@ -191,45 +205,6 @@ class Configuracion:
 # ---------------------------------------------------------------------------------------
 # Calibración
 # ---------------------------------------------------------------------------------------
-class CalibradorPlatt:
-    """Corrección de prior seguida de un ajuste logístico (Platt).
-
-    Dos etapas, cada una con su cometido:
-
-    1. **Corrección de prior**: el submuestreo de negativos infla las probabilidades en un
-       factor conocido. La corrección lo deshace de forma exacta, sin aprender nada.
-    2. **Ajuste de Platt**: una regresión logística de un solo parámetro sobre el logaritmo de
-       las probabilidades corregidas, ajustada en un año no visto.
-
-    Frente a la alternativa isotónica, Platt es estrictamente monótona. Eso significa que el
-    orden de las celdas por riesgo es idéntico antes y después de calibrar, y que los umbrales
-    operativos pueden fijarse directamente sobre la probabilidad calibrada. La isotónica, al ser
-    escalonada, asigna el mismo valor a millones de celdas y desplaza cualquier corte basado en
-    percentiles. Es la discrepancia que separaba dos de los tres análisis y así queda resuelta.
-    """
-
-    def __init__(self, tasa_negativos: float):
-        self.tasa_negativos = float(tasa_negativos)
-        self.logistica: LogisticRegression | None = None
-
-    @staticmethod
-    def _logit(p: np.ndarray) -> np.ndarray:
-        p = np.clip(p, 1e-9, 1 - 1e-9)
-        return np.log(p / (1 - p))
-
-    def ajustar(self, prob_cruda: np.ndarray, y: np.ndarray) -> "CalibradorPlatt":
-        corregida = calibracion.prior_correction(prob_cruda, self.tasa_negativos)
-        self.logistica = LogisticRegression(C=1e6, solver="lbfgs", max_iter=1000)
-        self.logistica.fit(self._logit(corregida).reshape(-1, 1), y)
-        return self
-
-    def aplicar(self, prob_cruda: np.ndarray) -> np.ndarray:
-        corregida = calibracion.prior_correction(prob_cruda, self.tasa_negativos)
-        if self.logistica is None:
-            return corregida
-        return self.logistica.predict_proba(self._logit(corregida).reshape(-1, 1))[:, 1]
-
-
 # ---------------------------------------------------------------------------------------
 # Contexto compartido entre etapas
 # ---------------------------------------------------------------------------------------
@@ -255,6 +230,8 @@ class Contexto:
         self.prob_calibrada: np.ndarray | None = None
         self.puntuaciones: dict[str, np.ndarray] = {}    # nombre -> score sobre validación
         self.resultados: dict[str, dict] = {}
+        #: Se resuelve en `preparar_datos` mirando el dato, no por convención.
+        self.reparar_rachas: bool | None = None
         self._coordenadas: pd.DataFrame | None = None
 
     @property
@@ -272,7 +249,18 @@ class Contexto:
             return
         cfg = self.cfg
         años = [*cfg.años_entrenamiento, cfg.año_calibracion, cfg.año_validacion]
-        dias_secos.construir_cache(self.contrato, años)
+
+        diagnostico = dias_secos.diagnosticar(self.contrato, cfg.año_validacion)
+        self.reparar_rachas = diagnostico["necesita_correccion"]
+        if self.reparar_rachas:
+            print(f"  `consecutive_dry_days` viene interpolada: "
+                  f"{diagnostico['proporcion_no_enteros']:.1%} de valores no enteros y "
+                  f"{diagnostico['proporcion_lluvia_sin_reinicio']:.1%} de días con lluvia sin "
+                  f"reiniciar.\n  Se recalcula desde `precipitation_sum`.")
+            dias_secos.construir_cache(self.contrato, años)
+        else:
+            print("  `consecutive_dry_days` ya es un contador entero coherente con la lluvia "
+                  "de su fila:\n  el datacubo la calcula bien y no se toca.")
 
         self.train, info = self._muestrear(cfg.años_entrenamiento)
         self.parada, _ = self._muestrear([cfg.año_calibracion])
@@ -283,11 +271,17 @@ class Contexto:
               f"{int(self.parada.target_ignicion.sum())} igniciones")
         print(f"  tasa de negativos conservada: {self.tasa_negativos:.4f}")
 
+    def rachas(self, marco: pd.DataFrame, años) -> pd.DataFrame:
+        """Repara la racha de días secos solo si el diagnóstico dijo que hacía falta."""
+        if self.reparar_rachas:
+            return dias_secos.corregir(marco, list(años))
+        return marco
+
     def _muestrear(self, años) -> tuple[pd.DataFrame, dict]:
         marco, info = datos.muestrear_entrenamiento(
             self.contrato, list(años), modulo=self.cfg.modulo_muestreo, columnas_extra=("x", "y")
         )
-        return dias_secos.corregir(marco, list(años)), info
+        return self.rachas(marco, años), info
 
     def coordenadas(self) -> pd.DataFrame:
         """Mapa `cell_id -> (x, y)`. Es estático, así que se lee una vez de un año cualquiera."""
@@ -323,7 +317,7 @@ class Contexto:
         trozos, filas = [], 0
         for lote in datos.iter_evaluacion(self.contrato, [año], predictores=None):
             filas += len(lote)
-            lote = dias_secos.corregir(lote, [año])
+            lote = self.rachas(lote, [año])
             trozos.append(pd.DataFrame({
                 "fecha": lote["fecha"].to_numpy(),
                 "cell_id": lote["cell_id"].to_numpy(),
@@ -363,6 +357,25 @@ class Contexto:
 # ---------------------------------------------------------------------------------------
 # Métricas propias del proyecto
 # ---------------------------------------------------------------------------------------
+def versiones_librerias() -> dict:
+    """Versiones con las que se serializó el modelo.
+
+    Un estimador de scikit-learn guardado con `pickle` no es portable entre versiones: cambia su
+    estructura interna y al abrirlo con otra distinta puede fallar con un error que no dice nada
+    útil. Registrándolas, quien no consiga cargar el modelo sabe de inmediato por qué y qué
+    necesita instalar, en lugar de perder una tarde.
+    """
+    import lightgbm
+    import sklearn
+    return {
+        "python": sys.version.split()[0],
+        "scikit-learn": sklearn.__version__,
+        "lightgbm": lightgbm.__version__,
+        "numpy": np.__version__,
+        "pandas": pd.__version__,
+    }
+
+
 def roc_en_temporada(marco: pd.DataFrame, meses: tuple[int, ...]) -> float:
     """ROC-AUC restringido a los meses de campaña.
 
@@ -510,7 +523,8 @@ def etapa_definitivo(ctx: Contexto) -> pd.DataFrame:
     with open(DIR_MODELOS / "modelo_definitivo.pkl", "wb") as f:
         pickle.dump({"modelo": ctx.modelo, "calibrador": ctx.calibrador,
                      "variables": ctx.variables, "configuracion": asdict(cfg),
-                     "tasa_negativos": ctx.tasa_negativos}, f)
+                     "tasa_negativos": ctx.tasa_negativos,
+                     "versiones": versiones_librerias()}, f)
     print(f"\n  modelo guardado en {DIR_MODELOS / 'modelo_definitivo.pkl'}")
     return pd.DataFrame([{"variante": "definitivo", "n_variables": len(ctx.variables),
                           **resultado}])
@@ -667,7 +681,7 @@ def _variante_pronostico(ctx: Contexto) -> tuple[dict, int]:
     trozos, filas = [], 0
     for lote in datos.iter_evaluacion(ctx.contrato, [cfg.año_validacion], predictores=None):
         filas += len(lote)
-        lote = dias_secos.corregir(lote, [cfg.año_validacion])
+        lote = ctx.rachas(lote, [cfg.año_validacion])
         lote, _ = _desfasar(lote)
         trozos.append(pd.DataFrame({
             "fecha": lote["fecha"].to_numpy(),
@@ -1037,7 +1051,8 @@ def etapa_ciego(ctx: Contexto) -> pd.DataFrame:
 
     # El año reservado queda fuera de `preparar_datos` a propósito, así que su caché de rachas
     # no existe todavía. Se construye aquí, que es el único punto donde se le da uso.
-    dias_secos.construir_cache(ctx.contrato, [año])
+    if ctx.reparar_rachas:
+        dias_secos.construir_cache(ctx.contrato, [año])
     marco = ctx.puntuar(ctx.modelo, año, ctx.variables)
     prob = ctx.calibrador.aplicar(marco.score.to_numpy())
     resultado = ctx.metricas_de(marco, prob=prob)
@@ -1145,7 +1160,12 @@ def ejecutar(cfg: Configuracion, etapas: list[str], rehacer: bool, ruta_fwi: Pat
     print(f"\n{'=' * 88}")
     print(f"Terminado en {(time.time() - arranque) / 60:.1f} minutos.")
     print(f"Tablas en {DIR_TECNICA}")
-    print(f"El año {cfg.año_reservado} no se ha abierto en ningún momento.")
+    if "ciego" in etapas:
+        print(f"\nSE HA ABIERTO EL AÑO RESERVADO {cfg.año_reservado}. Su resultado es la")
+        print("estimación insesgada del rendimiento y no debe reabrirse: cualquier cambio del")
+        print("modelo a la vista de esa cifra lo convertiría en un segundo año de validación.")
+    else:
+        print(f"El año {cfg.año_reservado} no se ha abierto en ningún momento.")
 
 
 def main() -> None:
