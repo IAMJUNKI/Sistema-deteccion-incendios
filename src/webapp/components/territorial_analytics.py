@@ -25,7 +25,7 @@ def render_territorial_analytics_tab(df_data: pd.DataFrame, all_predictions: pd.
 
     # 1. Resumen por Provincias
     st.markdown("#### Distribución de Riesgo por Provincias")
-    
+
     prov_summary = (
         df_data.groupby("provincia")
         .agg(
@@ -75,7 +75,7 @@ def render_territorial_analytics_tab(df_data: pd.DataFrame, all_predictions: pd.
 
     # 2. Ranking de Distritos Forestales
     st.markdown("#### Ranking de Distritos Forestales por Severidad")
-    
+
     if "distrito_forestal" in df_data.columns:
         dist_summary = (
             df_data.groupby("distrito_forestal")
@@ -99,16 +99,16 @@ def render_territorial_analytics_tab(df_data: pd.DataFrame, all_predictions: pd.
                     "celdas": "Área (km²)",
                     "prob_media": "Riesgo Medio (%)",
                     "prob_max": "Riesgo Máx (%)",
-                    "celdas_top5": "Alerta Urgente (Top 5%)",
-                    "celdas_top05": "Extremo (Top 0.5%)",
+                    "celdas_top5": "Cuadrículas Top 5%",
+                    "celdas_top05": "Cuadrículas Top 0.5%",
                 }
             ).style.format(
                 {
                     "Riesgo Medio (%)": "{:.2f}%",
                     "Riesgo Máx (%)": "{:.2f}%",
                     "Área (km²)": "{:,}",
-                    "Alerta Urgente (Top 5%)": "{:,}",
-                    "Extremo (Top 0.5%)": "{:,}",
+                    "Cuadrículas Top 5%": "{:,}",
+                    "Cuadrículas Top 0.5%": "{:,}",
                 }
             ),
             use_container_width=True,
@@ -119,7 +119,7 @@ def render_territorial_analytics_tab(df_data: pd.DataFrame, all_predictions: pd.
 
     # 3. Top Celdas Críticas y Exportación de Datos
     st.markdown("#### Tabla de Celdas Prioritarias de Intervención")
-    
+
     c_filter_prov, c_filter_limit = st.columns([1, 1])
     with c_filter_prov:
         filter_p = st.selectbox("Filtrar por Provincia:", ["Todas"] + sorted(df_data["provincia"].unique()))
@@ -196,7 +196,7 @@ def render_territorial_analytics_tab(df_data: pd.DataFrame, all_predictions: pd.
         if len(unique_horizons) > 1:
             st.markdown("---")
             st.markdown("#### Evolución Temporal del Riesgo a 72 Horas (T+1 vs T+2 vs T+3)")
-            
+
             evo_data = (
                 all_predictions.groupby(["horizon_days", "provincia"])["prob_riesgo"]
                 .mean()
@@ -204,5 +204,5 @@ def render_territorial_analytics_tab(df_data: pd.DataFrame, all_predictions: pd.
                 * 100
             )
             evo_data.index = [f"T+{int(h)} ({int(h)*24}h)" for h in evo_data.index]
-            
+
             st.line_chart(evo_data)

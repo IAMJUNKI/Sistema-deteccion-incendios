@@ -10,6 +10,7 @@ Group=fire-risk
 WorkingDirectory=/srv/fire-risk/app
 EnvironmentFile=/srv/fire-risk/config/.env
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/fire-risk/app
 ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/streamlit run app.py --server.address=127.0.0.1 --server.port=8501 --server.headless=true --server.enableXsrfProtection=true
 Restart=always
 RestartSec=5
@@ -22,4 +23,3 @@ ReadWritePaths=/srv/fire-risk/data
 
 [Install]
 WantedBy=multi-user.target
-

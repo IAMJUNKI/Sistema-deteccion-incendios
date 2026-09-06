@@ -25,35 +25,37 @@ from src.webapp.utils.geo_helpers import (
 
 
 def get_color_gradient(prob: float, pct: float, mode: str) -> str:
-    """Devuelve un color continuo en gradiente térmico adaptativo."""
-    if "Probabilidad" in mode:
+    """Devuelve un color de la escala cromática de riesgo según el modo de visualización."""
+    if "Probabilidad" in mode or "Absoluto" in mode:
         val = prob * 100
-        if val >= 15.0:
+        if val >= 12.0:
             return "#800026"  # Púrpura / Granate Extremo
-        if val >= 10.0:
+        if val >= 6.0:
             return "#BD0026"  # Rojo Oscuro
-        if val >= 5.0:
+        if val >= 3.0:
             return "#E31A1C"  # Rojo Vivo
-        if val >= 2.5:
+        if val >= 1.5:
             return "#FC4E2A"  # Naranja Intenso
-        if val >= 1.0:
+        if val >= 0.8:
             return "#FD8D3C"  # Naranja Claro
-        if val >= 0.5:
+        if val >= 0.3:
             return "#FEB24C"  # Amarillo Dorado
         return "#FED976"      # Amarillo Suave
-    elif "Percentil" in mode:
+    elif "Percentil" in mode or "Relativa" in mode:
         val = pct * 100
+        if val >= 99.8:
+            return "#800026"  # Top 0.2% Crítico
         if val >= 99.5:
-            return "#800026"  # Top 0.5% (Extremo)
+            return "#BD0026"  # Top 0.5% Muy Alto
         if val >= 98.0:
-            return "#BD0026"  # Top 2.0%
+            return "#E31A1C"  # Top 2.0% Prioritario
         if val >= 95.0:
-            return "#E31A1C"  # Top 5.0%
+            return "#FC4E2A"  # Top 5.0% Despacho
         if val >= 90.0:
-            return "#FC4E2A"  # Top 10.0%
+            return "#FD8D3C"  # Top 10.0% Vigilancia
         if val >= 80.0:
-            return "#FD8D3C"  # Top 20.0%
-        return "#FEB24C"
+            return "#FEB24C"  # Top 20.0%
+        return "#FED976"
     else:
         if pct >= 0.995:
             return "#800026"
@@ -64,11 +66,61 @@ def get_color_gradient(prob: float, pct: float, mode: str) -> str:
         return "#FED976"
 
 
+def build_map_legend_html(color_mode: str) -> str:
+    """Genera la leyenda cartográfica adaptada dinámicamente al modo de simbología seleccionado."""
+    if "Probabilidad" in color_mode or "Absoluto" in color_mode:
+        title = "Escala: Probabilidad P(Y=1)"
+        items = """
+            <span style="background:#800026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Extremo (&ge; 12.0%)<br/>
+            <span style="background:#BD0026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Muy Alto (6.0% &ndash; 12.0%)<br/>
+            <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Alto (3.0% &ndash; 6.0%)<br/>
+            <span style="background:#FC4E2A;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Moderado-Alto (1.5% &ndash; 3.0%)<br/>
+            <span style="background:#FD8D3C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Moderado (0.8% &ndash; 1.5%)<br/>
+            <span style="background:#FEB24C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Bajo / Nominal (&lt; 0.8%)
+        """
+        subtitle = "Severidad física calibrada"
+    elif "Percentil" in color_mode or "Relativa" in color_mode:
+        title = "Escala: Priorización Relativa"
+        items = """
+            <span style="background:#800026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Top 0.2% Crítico (&ge; 99.8%)<br/>
+            <span style="background:#BD0026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Top 0.5% Muy Alto (&ge; 99.5%)<br/>
+            <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Top 2.0% Prioritario (&ge; 98.0%)<br/>
+            <span style="background:#FC4E2A;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Top 5.0% Despacho (&ge; 95.0%)<br/>
+            <span style="background:#FD8D3C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Top 10.0% Vigilancia (&ge; 90.0%)<br/>
+            <span style="background:#FEB24C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Top 20.0% / Resto
+        """
+        subtitle = "Ranking relativo para despacho"
+    else:
+        title = "Escala: Niveles Tácticos"
+        items = """
+            <span style="background:#800026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 4: Crítico (&ge; 99.5%)<br/>
+            <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 3: Muy Alto (&ge; 98.5%)<br/>
+            <span style="background:#FD8D3C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 2: Alto (&ge; 95.0%)<br/>
+            <span style="background:#FED976;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1: Moderado / Bajo
+        """
+        subtitle = "Tramos discretos de intervención"
+
+    return f"""
+    <div style="position: fixed; bottom: 25px; left: 25px; z-index: 9999;
+                background: rgba(15, 23, 42, 0.95); color: #f8fafc; padding: 10px 14px; border-radius: 6px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.4); font-family: 'Inter', sans-serif; font-size: 11px;
+                border: 1px solid #334155; min-width: 175px;">
+        <div style="font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:5px; color:#cbd5e1;">{title}</div>
+        <div style="line-height: 1.6;">
+            {items}
+        </div>
+        <div style="font-size:9px; color:#94a3b8; margin-top:5px; border-top:1px solid #334155; padding-top:4px;">
+            {subtitle}
+        </div>
+    </div>
+    """
+
+
 def render_map_tab(
     df_data: pd.DataFrame,
     selected_horizon: int,
     map_style: str = "Esri Gris Claro (Lienzo Táctico)",
-    color_mode: str = "Gradiente Continuo por Probabilidad P(Y=1)",
+    color_mode: str = "Riesgo Absoluto Calibrado P(Y=1)",
     filter_risk: str = "Top 5.0% Celdas en Riesgo Elevado",
 ) -> None:
     """Renderiza la pestaña del Centro de Mando Cartográfico con rendimiento optimizado."""
@@ -128,6 +180,15 @@ def render_map_tab(
 
     with col_search:
         search_cell = st.text_input("Localizar Celda ID:", value="", placeholder="Ej. 6818")
+
+    # Orientación táctica contextual si se combina filtro estrecho con modo percentil
+    if ("Top 0.5%" in filter_risk or "Top 1.0%" in filter_risk) and ("Percentil" in color_mode or "Relativa" in color_mode):
+        st.info(
+            "💡 **Guía Táctica de Interpretación:** Al filtrar por el Top 0.5% en modo *'Priorización Relativa'*, "
+            "la escala muestra la sub-graduación del percentil superior. Para evaluar la probabilidad física real "
+            "calibrada (ej. de 1.2% a 1.88%), activa **'Riesgo Absoluto Calibrado P(Y=1)'** en la barra lateral.",
+            icon="ℹ️",
+        )
 
     # Determinar centro y zoom según preset o concello seleccionado
     center_lat, center_lon = selected_preset["center"]
@@ -211,24 +272,28 @@ def render_map_tab(
     else:
         df_map = df_ready.copy()
 
-    # Presupuesto de celdas optimizado para carga instantánea
-    if "0.3%" in filter_risk or "0.5%" in filter_risk:
+    # Presupuesto de celdas optimizado para carga instantánea y fluidez GIS
+    if "0.5%" in filter_risk:
         n_cutoff = max(80, int(len(df_map) * 0.005))
         df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
     elif "1.0%" in filter_risk or "1%" in filter_risk:
         n_cutoff = max(80, int(len(df_map) * 0.01))
         df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
-    elif "1.5%" in filter_risk or "2.0%" in filter_risk:
+    elif "2.0%" in filter_risk or "2%" in filter_risk:
         n_cutoff = max(180, int(len(df_map) * 0.02))
         df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
     elif "5.0%" in filter_risk or "5%" in filter_risk:
         n_cutoff = max(350, int(len(df_map) * 0.05))
         df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
-    elif "10%" in filter_risk:
+    elif "10" in filter_risk:
         n_cutoff = max(600, int(len(df_map) * 0.10))
         df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+    elif "20" in filter_risk:
+        n_cutoff = max(900, int(len(df_map) * 0.20))
+        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
     else:
-        df_render = df_map.nlargest(400, "prob_riesgo").copy()
+        n_cutoff = max(350, int(len(df_map) * 0.05))
+        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
 
     # Si hay celdas para renderizar
     if not df_render.empty and "lat_centroid" in df_render.columns and "lon_centroid" in df_render.columns:
@@ -366,22 +431,8 @@ def render_map_tab(
         except ValueError:
             pass
 
-    # Leyenda flotante sobria
-    leyenda_html = """
-    <div style="position: fixed; bottom: 25px; left: 25px; z-index: 9999;
-                background: rgba(15, 23, 42, 0.95); color: #f8fafc; padding: 10px 14px; border-radius: 6px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.4); font-family: 'Inter', sans-serif; font-size: 11px;
-                border: 1px solid #334155;">
-        <div style="font-weight:600; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:5px; color:#cbd5e1;">Escala de Riesgo</div>
-        <div style="line-height: 1.6;">
-            <span style="background:#800026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Extremo (&ge; 15% / Top 0.5%)<br/>
-            <span style="background:#BD0026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Muy Alto (&ge; 10% / Top 2%)<br/>
-            <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Alto (&ge; 5% / Top 5%)<br/>
-            <span style="background:#FC4E2A;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Moderado-Alto (&ge; 2.5%)<br/>
-            <span style="background:#FEB24C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Moderado / Bajo
-        </div>
-    </div>
-    """
+    # Leyenda flotante dinámica adaptada al modo de simbología seleccionado
+    leyenda_html = build_map_legend_html(color_mode)
     m.get_root().html.add_child(folium.Element(leyenda_html))
 
     st_folium(m, use_container_width=True, height=620, returned_objects=[])

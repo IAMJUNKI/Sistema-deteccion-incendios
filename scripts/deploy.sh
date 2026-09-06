@@ -137,6 +137,13 @@ fi
 
 REMOTE_COMMAND="$REMOTE_DEPLOY --base-dir $DEPLOY_PATH --ref $DEPLOY_REF"
 [[ "$DEPLOY_RUN_TESTS" == "true" ]] && REMOTE_COMMAND="$REMOTE_COMMAND --run-tests"
+if [[ "$DEPLOY_USE_SUDO" == "true" ]]; then
+  # Las unidades deben instalarse desde la release recién activada. Esto evita
+  # que el restart use una unidad inexistente o una plantilla de una release
+  # anterior, y mantiene PYTHONPATH alineado con el código desplegado.
+  REMOTE_UNITS="$DEPLOY_PATH/app/scripts/install_systemd_units.sh"
+  REMOTE_COMMAND="$REMOTE_COMMAND && sudo -n bash $REMOTE_UNITS"
+fi
 if [[ "$DEPLOY_RESTART_DASHBOARD" == "true" ]]; then
   if [[ "$DEPLOY_USE_SUDO" == "true" ]]; then
     REMOTE_COMMAND="$REMOTE_COMMAND && sudo -n systemctl restart fire-risk-dashboard.service"

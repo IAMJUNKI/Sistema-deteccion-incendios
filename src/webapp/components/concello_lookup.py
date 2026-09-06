@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+
 import pandas as pd
 import streamlit as st
 
@@ -114,10 +115,10 @@ def render_concello_lookup_tab(df_data: pd.DataFrame, target_date: str) -> None:
     prob_val = float(nearest_row.get("prob_riesgo", 0.02))
     risk_info = get_risk_level_info(prob_val)
 
-    tmax = float(nearest_row.get("tmax_vc", 28.0))
-    rhmin = float(nearest_row.get("rhmin_vc", 40.0))
-    vmax = float(nearest_row.get("vmax_vc", 18.0))
-    prec30 = float(nearest_row.get("prec_acum_30d", 5.0))
+    tmax = float(nearest_row.get("temperature_max_12_18h", nearest_row.get("tmax_vc", 28.0)))
+    rhmin = float(nearest_row.get("relative_humidity_min_12_18h", nearest_row.get("rhmin_vc", 40.0)))
+    vmax = float(nearest_row.get("wind_speed_max_12_18h", nearest_row.get("vmax_vc", 18.0)))
+    prec30 = float(nearest_row.get("precipitation_sum_30d", nearest_row.get("prec_acum_30d", 5.0)))
     distrito = str(nearest_row.get("distrito_forestal", "Distrito Forestal Galicia"))
 
     # Renderizar Tarjeta Semafórica Municipal de forma segura
@@ -137,9 +138,12 @@ def render_concello_lookup_tab(df_data: pd.DataFrame, target_date: str) -> None:
             </div>
             <div style="background: {risk_info['bg_color']}; border: 1px solid {risk_info['border_color']}; padding: 0.6rem 1.1rem; border-radius: 6px; text-align: right;">
                 <div style="font-size: 0.72rem; text-transform: uppercase; color: #cbd5e1; font-weight: 600;">Nivel de Amenaza</div>
-                <div style="font-size: 1.25rem; font-weight: 800; color: {risk_info['badge_color']}; display: flex; align-items: center; gap: 0.4rem;">
+                <div style="font-size: 1.25rem; font-weight: 800; color: {risk_info['badge_color']}; display: flex; align-items: center; justify-content: flex-end; gap: 0.4rem;">
                     <span class="material-symbols-outlined">{risk_info['icon']}</span>
                     {risk_info['level']}
+                </div>
+                <div style="font-size: 0.78rem; color: #cbd5e1; margin-top: 0.25rem;">
+                    Probabilidad P(Y=1): <b style="color: {risk_info['badge_color']};">{prob_val*100:.2f}%</b>
                 </div>
             </div>
         </div>

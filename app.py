@@ -75,13 +75,6 @@ def main() -> None:
             f"Calidad meteorológica: {forecast_quality}. Consulta la pestaña de auditoría "
             "antes de interpretar el mapa como escenario WRF 1 km."
         )
-    state_quality = manifest.get("state", {}).get("feature_quality_counts", {})
-    if isinstance(state_quality, dict) and state_quality.get("legacy_proxy", 0):
-        st.warning(
-            "El estado histórico contiene features meteorológicas proxy derivadas de agregados "
-            "legacy. La memoria de sequedad debe actualizarse con observaciones horarias antes "
-            "de usar el mapa para movilización preventiva."
-        )
 
     # Filtrar por horizonte seleccionado
     if "horizon_days" in predictions.columns:
