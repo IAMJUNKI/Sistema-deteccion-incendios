@@ -150,13 +150,21 @@ def iter_evaluacion(
     anios: Sequence[int],
     predictores: Sequence[str] | None = None,
     filas_por_lote: int = FILAS_POR_LOTE,
+    columnas_extra: Sequence[str] = (),
 ) -> Iterator[pd.DataFrame]:
     """Recorre la población completa de los años pedidos, en lotes acotados en memoria.
 
     No submuestrea nada: es el recorrido sobre el que se calculan las métricas publicables.
+
+    Args:
+        columnas_extra: Columnas que no son predictoras pero hacen falta en cada lote, como
+            `x` e `y` para situar la fila en la rejilla. No se validan contra el contrato,
+            igual que en `muestrear_entrenamiento`, precisamente porque el contrato solo
+            declara predictores.
     """
     predictores = _columnas(contrato, predictores)
-    columnas = list(dict.fromkeys([COL_FECHA, COL_CELDA, COL_TARGET, *predictores]))
+    columnas = list(dict.fromkeys(
+        [COL_FECHA, COL_CELDA, COL_TARGET, *predictores, *columnas_extra]))
     dataset = pads.dataset([str(p) for p in contrato.rutas(anios)], format="parquet")
 
     for lote in dataset.scanner(columns=columnas, batch_size=filas_por_lote).to_batches():

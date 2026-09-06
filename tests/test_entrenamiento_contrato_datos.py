@@ -145,6 +145,22 @@ class TestEvaluacionCompleta:
         vistas = sum(len(lote) for lote in datos.iter_evaluacion(c, [2019], filas_por_lote=97))
         assert vistas == c.filas_por_anio[2019]
 
+    def test_columnas_extra_llegan_a_cada_lote(self, dataset_falso):
+        """Las variables de vecindad necesitan `x`/`y` en cada lote para situar la fila en la
+        rejilla, y esas columnas no son predictoras. `columnas_extra` es la vía para pedirlas
+        sin que la validación del contrato las rechace; aquí se usa `burned_area_ha`, que en
+        el dataset de prueba es igualmente una columna no declarada como predictora."""
+        c = mod_contrato.cargar(dataset_falso)
+        for lote in datos.iter_evaluacion(c, [2019], filas_por_lote=97,
+                                          columnas_extra=("burned_area_ha",)):
+            assert "burned_area_ha" in lote.columns
+
+    def test_columnas_extra_no_entran_como_predictoras(self, dataset_falso):
+        """El contrato sigue mandando sobre qué es una variable: pedir una columna extra no la
+        convierte en predictora."""
+        c = mod_contrato.cargar(dataset_falso)
+        assert "burned_area_ha" not in c.predictores
+
     def test_guardian_de_cobertura(self, dataset_falso):
         """REGRESIÓN. Una ejecución perdió un bloque entero de celdas sin lanzar excepción y
         las métricas salieron MEJORES, porque faltaba una parte difícil del mapa."""
