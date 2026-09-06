@@ -18,6 +18,14 @@ VALIDATION_YEARS = (2022,)
 TEST_YEARS = (2023,)
 
 
+def _day_number(values: pd.Series) -> np.ndarray:
+    """Convierte fechas a días desde el epoch sin asumir una unidad temporal de Pandas."""
+    dates = pd.to_datetime(values, errors="raise")
+    return (
+        (dates - pd.Timestamp("1970-01-01")) // pd.Timedelta(days=1)
+    ).to_numpy(dtype=np.int64)
+
+
 @dataclass(frozen=True)
 class DatasetContract:
     """Metadatos mínimos necesarios para entrenar sin fuga de información."""
@@ -87,9 +95,7 @@ def sample_years_for_training(
     )
     for batch in dataset.scanner(columns=columns, batch_size=100_000).to_batches():
         frame = batch.to_pandas()
-        day_number = (
-            pd.to_datetime(frame["fecha"]).astype("int64").to_numpy() // 86_400_000_000_000
-        )
+        day_number = _day_number(frame["fecha"])
         row_hash = (
             frame["cell_id"].to_numpy(dtype=np.int64) * 1_000_003 + day_number
         ) % negative_cell_modulus

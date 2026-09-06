@@ -39,6 +39,11 @@ def malla(n_filas=12, n_columnas=12, n_dias=40, igniciones=(), semilla=0) -> pd.
     return pd.DataFrame(filas)
 
 
+def dias_desde_inicio(fechas: pd.Series) -> pd.Series:
+    """Obtiene días relativos de forma independiente de la precisión temporal de Pandas."""
+    return (pd.to_datetime(fechas) - pd.Timestamp("2022-06-01")).dt.days
+
+
 class TestRejilla:
     def test_deduce_la_geometria(self):
         m = malla(n_filas=7, n_columnas=9, n_dias=1)
@@ -109,8 +114,7 @@ class TestSinFugaTemporal:
         m = malla(igniciones=[(20, 6, 6)])
         ctx = vecindad.ajustar_contexto_espacial(m, radios=(2,), ventanas=(7,))
         salida = vecindad.anadir_vecindad(m, ctx)
-        salida["dia"] = (pd.to_datetime(salida.fecha).astype("int64")
-                         // 86_400_000_000_000) - ctx.dia_minimo
+        salida["dia"] = dias_desde_inicio(salida.fecha)
 
         misma_celda = salida[(salida.x == 3_000_000.0 + 6 * vecindad.LADO_CELDA) &
                              (salida.y == 2_000_000.0 - 6 * vecindad.LADO_CELDA)]
@@ -124,8 +128,7 @@ class TestSinFugaTemporal:
         m = malla(igniciones=[(20, 6, 6)])
         ctx = vecindad.ajustar_contexto_espacial(m, radios=(3,), ventanas=(30,))
         salida = vecindad.anadir_vecindad(m, ctx)
-        salida["dia"] = (pd.to_datetime(salida.fecha).astype("int64")
-                         // 86_400_000_000_000) - ctx.dia_minimo
+        salida["dia"] = dias_desde_inicio(salida.fecha)
         assert salida[salida.dia <= 20]["igniciones_3km_30d"].sum() == 0
 
     def test_los_dias_transcurridos_tampoco_miran_el_dia_propio(self):
@@ -133,8 +136,7 @@ class TestSinFugaTemporal:
         ctx = vecindad.ajustar_contexto_espacial(m, radios=(2,), ventanas=(7,),
                                                  dias_maximo=90)
         salida = vecindad.anadir_vecindad(m, ctx)
-        salida["dia"] = (pd.to_datetime(salida.fecha).astype("int64")
-                         // 86_400_000_000_000) - ctx.dia_minimo
+        salida["dia"] = dias_desde_inicio(salida.fecha)
         celda = salida[(salida.x == 3_000_000.0 + 6 * vecindad.LADO_CELDA) &
                        (salida.y == 2_000_000.0 - 6 * vecindad.LADO_CELDA)]
         por_dia = celda.set_index("dia")["dias_desde_ignicion_2km"]
@@ -148,8 +150,7 @@ class TestAlcanceEspacial:
         m = malla(igniciones=[(10, 6, 6)])
         ctx = vecindad.ajustar_contexto_espacial(m, radios=(2,), ventanas=(7,))
         salida = vecindad.anadir_vecindad(m, ctx)
-        salida["dia"] = (pd.to_datetime(salida.fecha).astype("int64")
-                         // 86_400_000_000_000) - ctx.dia_minimo
+        salida["dia"] = dias_desde_inicio(salida.fecha)
         dia11 = salida[salida.dia == 11].copy()
         f, c = ctx.rejilla.indices(dia11.x.to_numpy(), dia11.y.to_numpy())
         dia11["dist"] = np.maximum(np.abs(f - 6), np.abs(c - 6))

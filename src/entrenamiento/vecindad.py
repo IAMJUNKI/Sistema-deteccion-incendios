@@ -79,6 +79,19 @@ DIAS_MAXIMO = 90
 FRACCIONES_BOSQUE = ("broadleaf_forest", "coniferous_forest", "mixed_forest")
 
 
+def _day_number(values: pd.Series) -> np.ndarray:
+    """Convierte fechas a días desde el epoch sin depender de la unidad de Pandas.
+
+    Pandas 3 puede representar ``datetime64`` con precisión de microsegundos, mientras que
+    versiones anteriores solían usar nanosegundos. Convertir directamente con ``astype`` y
+    dividir por una constante fija hace que varios días distintos colapsen en el mismo día.
+    """
+    dates = pd.to_datetime(values, errors="raise")
+    return (
+        (dates - pd.Timestamp("1970-01-01")) // pd.Timedelta(days=1)
+    ).to_numpy(dtype=np.int64)
+
+
 @dataclass(frozen=True)
 class Rejilla:
     """Traducción entre coordenadas proyectadas y posiciones de una matriz.
@@ -197,8 +210,7 @@ def ajustar_contexto_espacial(
         raise KeyError(f"El contexto espacial necesita columnas ausentes: {faltan}")
 
     rejilla = construir_rejilla(marco["x"].to_numpy(), marco["y"].to_numpy())
-    dias = (pd.to_datetime(marco[COL_FECHA]).astype("int64").to_numpy()
-            // 86_400_000_000_000)
+    dias = _day_number(marco[COL_FECHA])
     dia_minimo, dia_maximo = int(dias.min()), int(dias.max())
     n_dias = dia_maximo - dia_minimo + 1
     fila, columna = rejilla.indices(marco["x"].to_numpy(), marco["y"].to_numpy())
@@ -320,8 +332,7 @@ def anadir_vecindad(marco: pd.DataFrame, contexto: ContextoEspacial) -> pd.DataF
     procesado antes y permite evaluar el año completo por lotes acotados.
     """
     marco = marco.copy()
-    dias = (pd.to_datetime(marco[COL_FECHA]).astype("int64").to_numpy()
-            // 86_400_000_000_000) - contexto.dia_minimo
+    dias = _day_number(marco[COL_FECHA]) - contexto.dia_minimo
     fila, columna = contexto.rejilla.indices(marco["x"].to_numpy(), marco["y"].to_numpy())
 
     n_dias = next(iter(contexto.acumuladas.values())).shape[0]
