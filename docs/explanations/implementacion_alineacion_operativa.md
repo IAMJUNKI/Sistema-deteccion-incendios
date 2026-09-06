@@ -257,6 +257,43 @@ la promoción real. Solo para pruebas locales se puede usar
 `--allow-provisional`. Para producción científica, primero hay que repetir las
 capas estáticas usando un DEM validado y volver a generar el dataset alineado.
 
+### 6.1 Cierre de la prueba local
+
+La familia ampliada se promocionó localmente con `--allow-provisional` para
+probar el circuito completo. La promoción copió los tres `.joblib`, sus JSON y
+`active_model_manifest.json` a `data/models/`; no cambia el estado de producción
+científica ni autoriza todavía el despliegue en servidor.
+
+La prueba utilizó el forecast archivado del 30 de agosto de 2026 y simuló que
+el último día observado era el 26 de agosto. Antes fue necesario regenerar el
+estado de AEMET utilizando la rejilla EGIF canónica, porque el estado antiguo
+había sido construido con 30.697 celdas frente a las 29.601 de la rejilla
+operativa.
+
+La inferencia ahora detecta también forecasts archivados con `cell_id` de una
+rejilla anterior. Si conservan `forecast_lat` y `forecast_lon`, los reasigna a
+la rejilla canónica y elimina duplicados por coordenada y hora antes de
+agregar. Si no hay coordenadas, falla explícitamente y exige descargar de nuevo
+el forecast.
+
+Resultado de la ejecución validada:
+
+```text
+forecast_quality=fresh
+forecast_grid=1km
+coverage=100 %
+rows=88.803
+cells=29.601
+horizons=T+1,T+2,T+3
+pipeline_run_mode=local_state_simulation
+health_check=status ok
+```
+
+El modelo 48 fue el principal y el modelo 50 se ejecutó en shadow. Las
+predicciones son válidas para comprobar el funcionamiento técnico; no deben
+interpretarse como validación operativa de MeteoGalicia porque el entrenamiento
+se realizó con `era5_perfect_benchmark`.
+
 ## Interpretación temporal
 
 Los tres modelos existen porque el sistema publica tres decisiones distintas:

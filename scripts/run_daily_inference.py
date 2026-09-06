@@ -413,6 +413,48 @@ def _validate_grid_coverage(
             )
 
 
+def _align_forecast_to_grid(
+    forecast_df: pd.DataFrame,
+    grid_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Alinea un forecast con la rejilla operativa, incluso si cambia su ``cell_id``.
+
+    Los Parquet archivados pueden contener identificadores de una rejilla anterior. Si el
+    proveedor conserva las coordenadas del punto meteorológico, es seguro volver a asignar sus
+    valores a la rejilla canónica; aceptar los identificadores antiguos directamente produciría
+    una cobertura aparente pero espacialmente incorrecta.
+    """
+
+    expected_ids = set(grid_df["cell_id"])
+    actual_ids = set(forecast_df["cell_id"]) if "cell_id" in forecast_df.columns else set()
+    if actual_ids == expected_ids:
+        return forecast_df
+
+    required_coordinates = {"forecast_lat", "forecast_lon"}
+    if not required_coordinates.issubset(forecast_df.columns):
+        raise ForecastValidationError(
+            "El forecast usa una rejilla distinta a la operativa y no contiene coordenadas "
+            "para reasignarlo. Descarga de nuevo el forecast sobre la rejilla canónica."
+        )
+
+    source = forecast_df.drop(
+        columns=["cell_id", "lat_centroid", "lon_centroid", "source_distance_km"],
+        errors="ignore",
+    )
+    source = source.drop_duplicates(
+        subset=["forecast_lat", "forecast_lon", "valid_time"],
+        keep="first",
+    )
+    aligned = assign_forecast_to_grid(source, grid_df)
+    LOGGER.warning(
+        "Reasignando forecast de %s celdas a la rejilla operativa de %s celdas mediante "
+        "coordenadas; los cell_id de origen no coinciden.",
+        len(actual_ids),
+        len(expected_ids),
+    )
+    return aligned
+
+
 def _fetch_fresh_meteogalicia_forecast(
     grid: gpd.GeoDataFrame,
     *,
@@ -733,9 +775,7 @@ def _load_forecast_with_fallback(
 ) -> tuple[pd.DataFrame, pd.Timestamp, str, dict[str, object]]:
     start_local, end_local = _target_window(issue_time)
     if forecast_df is not None:
-        assigned = forecast_df.copy()
-        if "cell_id" not in assigned.columns:
-            assigned = assign_forecast_to_grid(assigned, grid)
+        assigned = _align_forecast_to_grid(forecast_df.copy(), grid)
         validate_hourly_forecast(
             assigned,
             expected_start=start_local,

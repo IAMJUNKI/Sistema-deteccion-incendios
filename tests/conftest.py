@@ -50,6 +50,8 @@ def _disable_local_simulation_from_project_env(monkeypatch: pytest.MonkeyPatch) 
     """Los tests no deben depender del `.env` local de quien los ejecuta."""
 
     monkeypatch.setenv("LOCAL_SIMULATION_MODE", "false")
+    monkeypatch.setenv("FORECAST_MODEL_FAMILY", "auto")
+    monkeypatch.setenv("SHADOW_50_MODEL", "false")
 
 
 def _marco(anio: int, semilla: int) -> pd.DataFrame:

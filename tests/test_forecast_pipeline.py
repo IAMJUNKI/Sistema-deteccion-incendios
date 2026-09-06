@@ -472,6 +472,26 @@ def test_assign_forecast_to_grid_maps_each_cell_without_hourly_cartesian_search(
     assert assigned.groupby("cell_id")["source_distance_km"].first().max() < 1.0
 
 
+def test_injected_forecast_with_old_cell_ids_is_reassigned_to_operational_grid() -> None:
+    import scripts.run_daily_inference as daily_inference
+
+    forecast = _hourly_forecast()
+    forecast["forecast_lat"] = 42.5
+    grid = pd.DataFrame(
+        {
+            "cell_id": [10, 11],
+            "lat_centroid": [42.501, 42.502],
+            "lon_centroid": [-8.0, -8.0],
+        }
+    )
+
+    aligned = daily_inference._align_forecast_to_grid(forecast, grid)
+
+    assert set(aligned["cell_id"]) == {10, 11}
+    assert len(aligned) == 2 * 72
+    assert aligned.groupby("cell_id")["valid_time"].nunique().eq(72).all()
+
+
 def test_client_batches_provider_requests_at_twenty_points(tmp_path) -> None:
     calls: list[dict] = []
     progress: list[tuple[int, int]] = []

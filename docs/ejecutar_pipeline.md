@@ -222,3 +222,61 @@ Si la ejecución se interrumpe, no borres `data/raw/`: al repetir, se reutilizar
 **Falla una solicitud FWI de EWDS.** Conserva los raw ya descargados y reintenta más tarde: el servicio puede rechazar solicitudes temporalmente. `--skip-fwi` permite comprobar el resto del flujo, pero no sustituye la ejecución final con FWI.
 
 **Quiero empezar en otro año.** No hace falta borrar nada. Añade los XML EGIF necesarios y ejecuta con otro `--start-year`; el workflow validará y completará solo los raw meteorológicos que falten.
+
+## 10. Probar localmente la familia EGIF 48
+
+Para probar el modelo nuevo en un ordenador sin tratar las capas estáticas
+provisionales como definitivas, configura en `.env`:
+
+```env
+PIPELINE_ENVIRONMENT=local
+LOCAL_SIMULATION_MODE=true
+LOCAL_SIMULATION_AS_OF_DATE=2026-08-26
+FORECAST_PROVIDER=meteogalicia
+FORECAST_MODEL_FAMILY=egif_48
+SHADOW_50_MODEL=true
+```
+
+Si el estado meteorológico fue generado con una rejilla anterior, regénéralo
+con la rejilla EGIF y el periodo que termina en la fecha simulada:
+
+```bash
+PYTHONPATH=. python scripts/ingest_aemet_weather_state.py \
+  --grid data/processed/grid/galicia_grid_1km_egif.parquet \
+  --start-date 2026-07-28 \
+  --end-date 2026-08-26 \
+  --days 30
+```
+
+Promociona localmente la familia ampliada, permitiendo provisionalmente las
+capas estáticas:
+
+```bash
+PYTHONPATH=. python scripts/promote_model_family.py \
+  --source-dir data/models/experiments/expanded \
+  --destination-dir data/models \
+  --dataset-dir data/processed/tabular/egif_operational \
+  --prefix forecast_risk_egif_48 \
+  --allow-provisional
+```
+
+Ejecuta la inferencia con un forecast archivado:
+
+```bash
+PYTHONPATH=. python scripts/run_daily_inference.py \
+  --issue-time 2026-08-30T05:00:00+02:00 \
+  --forecast-file data/raw/meteogalicia/forecast_20260830T000000Z_1km.parquet \
+  --no-stale
+```
+
+Comprueba el resultado:
+
+```bash
+PYTHONPATH=. python scripts/check_operational_run.py \
+  --allow-local-simulation
+```
+
+La prueba correcta debe mostrar tres horizontes, 29.601 celdas, cobertura
+horaria completa y `status=ok`. `--allow-provisional` y
+`--allow-local-simulation` son exclusivamente locales y no deben utilizarse
+en el servicio de producción.
