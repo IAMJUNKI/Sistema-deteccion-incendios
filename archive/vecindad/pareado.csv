@@ -1,0 +1,3 @@
+metrica,modelo_a,modelo_b,n_incendios,recall_a,recall_b,diferencia,dif_ci90_low,dif_ci90_high,concluyente,ambos,ninguno,mcnemar_p,veredicto,solo_a,solo_b
+recall@fpr5,sin vecindad,con vecindad,1659,0.39059674502712477,0.4472573839662447,-0.056660638939119934,-0.0741410488245931,-0.039783001808318286,True,551,820,3.240063877148092e-08,con vecindad mejor,97,191
+recall@top1%/día,sin vecindad,con vecindad,1659,0.07474382157926461,0.09282700421940929,-0.018083182640144677,-0.028330319469559967,-0.007233273056057865,True,83,1464,0.005890172980413241,con vecindad mejor,41,71
