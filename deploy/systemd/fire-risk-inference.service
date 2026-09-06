@@ -10,6 +10,7 @@ Group=fire-risk
 WorkingDirectory=/srv/fire-risk/app
 EnvironmentFile=/srv/fire-risk/config/.env
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/fire-risk/app
 ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/run_daily_inference.py
 NoNewPrivileges=true
 PrivateTmp=true
@@ -19,4 +20,3 @@ ReadOnlyPaths=/srv/fire-risk/app
 ReadWritePaths=/srv/fire-risk/data
 TimeoutStartSec=30min
 UMask=0027
-
