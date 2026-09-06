@@ -409,7 +409,10 @@ class MeteoGaliciaObservationClient:
             raise MeteoGaliciaObservationError("end_date no puede ser anterior a start_date.")
 
         params = {
-            "datIni": start.strftime("%d/%m/%Y"),
+            # El servicio documenta el parámetro histórico como ``dataIni``.
+            # ``datIni`` puede aparecer en una errata de la documentación, pero
+            # el endpoint no aplica correctamente el rango cuando se envía así.
+            "dataIni": start.strftime("%d/%m/%Y"),
             "dataFin": end.strftime("%d/%m/%Y"),
         }
         headers = {

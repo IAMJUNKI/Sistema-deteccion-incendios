@@ -10,6 +10,8 @@ import pytest
 
 from src.ingestion.aemet_observations import GALICIA_BOUNDS
 from src.ingestion.meteogalicia_observations import (
+    MeteoGaliciaObservationClient,
+    MeteoGaliciaObservationConfig,
     interpolate_meteogalicia_daily_to_grid,
     normalise_meteogalicia_daily_payload,
     utm29n_to_wgs84,
@@ -79,6 +81,40 @@ def test_normalise_meteogalicia_synthetic_payload():
     assert row["vpd_vc"] > 0
     assert row["coverage_hours"] == 24.0
     assert row["source"] == "meteogalicia_ema"
+
+
+def test_client_uses_historical_date_parameter(monkeypatch):
+    """Comprueba que la petición usa el parámetro histórico que entiende la API."""
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"listDatosDiarios": []}
+
+    def fake_get(url, *, params, headers, timeout):
+        captured["url"] = url
+        captured["params"] = params
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        "src.ingestion.meteogalicia_observations.requests.get",
+        fake_get,
+    )
+    client = MeteoGaliciaObservationClient(
+        MeteoGaliciaObservationConfig(max_retries=1)
+    )
+
+    client.fetch_daily_observations("2026-09-03", "2026-09-05")
+
+    assert captured["params"] == {
+        "dataIni": "03/09/2026",
+        "dataFin": "05/09/2026",
+    }
 
 
 def test_normalise_meteogalicia_real_sample():
