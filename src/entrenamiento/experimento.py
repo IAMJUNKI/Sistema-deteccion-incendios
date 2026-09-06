@@ -36,7 +36,7 @@ from typing import Any, Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from src.entrenamiento import calibracion, datos, derivadas, metricas, modelos
+from src.entrenamiento import calibracion, datos, derivadas, metricas, modelos, vecindad
 from src.entrenamiento.contrato import COL_FECHA, COL_TARGET, Contrato
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,12 @@ class Configuracion:
     #: derivadas nuestras, y estas no existen hasta que se han calculado.
     variables_finales: Optional[Sequence[str]] = None
     usar_derivadas: bool = True
+    #: Variables de contexto espacial (`src/entrenamiento/vecindad.py`). Por defecto apagadas:
+    #: se añadieron después de publicar el baseline, y encenderlas por defecto cambiaría en
+    #: silencio cifras que ya están en la memoria y en el notebook de descubrimiento.
+    usar_vecindad: bool = False
+    radios_vecindad: Sequence[int] = vecindad.RADIOS
+    ventanas_vecindad: Sequence[int] = vecindad.VENTANAS
     modulo_negativos: int = 25
     resto_negativos: int = 0
     rondas_parada: int = 100
@@ -77,6 +83,7 @@ class Preparacion:
     variables: list[str]
     contexto: Optional[derivadas.Contexto]
     meta_muestreo: dict
+    contexto_espacial: Optional[vecindad.ContextoEspacial] = None
 
 
 def preparar(contrato: Contrato, cfg: Configuracion) -> Preparacion:
@@ -88,13 +95,17 @@ def preparar(contrato: Contrato, cfg: Configuracion) -> Preparacion:
     """
     base = list(cfg.variables) if cfg.variables else list(contrato.predictores)
 
+    # `x` e `y` se arrastran solo si hacen falta para situar la fila en la rejilla, y nunca
+    # entran como predictoras: memorizar coordenadas no generaliza a un año nuevo.
+    extra = ("x", "y") if cfg.usar_vecindad else ()
+
     inicio = time.perf_counter()
     train, meta = datos.muestrear_entrenamiento(
-        contrato, cfg.anios_train, base,
+        contrato, cfg.anios_train, base, columnas_extra=extra,
         modulo=cfg.modulo_negativos, resto=cfg.resto_negativos,
     )
     parada, _ = datos.muestrear_entrenamiento(
-        contrato, cfg.anios_validacion, base,
+        contrato, cfg.anios_validacion, base, columnas_extra=extra,
         modulo=cfg.modulo_negativos, resto=cfg.resto_negativos,
     )
 
@@ -109,6 +120,22 @@ def preparar(contrato: Contrato, cfg: Configuracion) -> Preparacion:
         train = derivadas.anadir_derivadas(train, contexto, contrato)
         parada = derivadas.anadir_derivadas(parada, contexto, contrato)
         variables += derivadas.columnas_derivadas(contrato)
+
+    contexto_espacial = None
+    if cfg.usar_vecindad:
+        # El contexto abarca entrenamiento y validación: para puntuar un día de 2022 hace
+        # falta el historial de los días anteriores, que empieza en el primer año de train.
+        anios_espaciales = list(cfg.anios_train) + list(cfg.anios_validacion)
+        if cfg.evaluar_test:
+            anios_espaciales += list(cfg.anios_test)
+        contexto_espacial = vecindad.ajustar_desde_contrato(
+            contrato, anios_espaciales,
+            radios=cfg.radios_vecindad, ventanas=cfg.ventanas_vecindad,
+        )
+        train = vecindad.anadir_vecindad(train, contexto_espacial)
+        parada = vecindad.anadir_vecindad(parada, contexto_espacial)
+        variables += [c for c in vecindad.columnas_vecindad(
+            cfg.radios_vecindad, cfg.ventanas_vecindad) if c in train.columns]
 
     faltan = [v for v in variables if v not in train.columns]
     if faltan:
@@ -129,7 +156,7 @@ def preparar(contrato: Contrato, cfg: Configuracion) -> Preparacion:
         "Preparación lista en %.1f s — %s filas de entrenamiento, %s variables",
         time.perf_counter() - inicio, f"{len(train):,}", len(variables),
     )
-    return Preparacion(train, parada, variables, contexto, meta)
+    return Preparacion(train, parada, variables, contexto, meta, contexto_espacial)
 
 
 def puntuar(
@@ -151,10 +178,13 @@ def puntuar(
     vistas = 0
 
     base = list(cfg.variables) if cfg.variables else list(contrato.predictores)
-    for lote in datos.iter_evaluacion(contrato, anios, base):
+    extra = ("x", "y") if prep.contexto_espacial is not None else ()
+    for lote in datos.iter_evaluacion(contrato, anios, base, columnas_extra=extra):
         vistas += len(lote)
         if prep.contexto is not None:
             lote = derivadas.anadir_derivadas(lote, prep.contexto, contrato)
+        if prep.contexto_espacial is not None:
+            lote = vecindad.anadir_vecindad(lote, prep.contexto_espacial)
         X = modelos.matriz(lote, list(variables))
         puntuaciones.append(modelo.predict_proba(X)[:, 1].astype(np.float32))
         etiquetas.append(lote[COL_TARGET].to_numpy(dtype=np.int8))

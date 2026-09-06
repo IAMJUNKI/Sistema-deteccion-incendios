@@ -92,6 +92,10 @@ def cargar_configuracion(ruta: Path, args: argparse.Namespace) -> Configuracion:
         cfg.variables_finales = _conjunto(args.conjunto)
         if not cfg.etiqueta.endswith(args.conjunto):
             cfg.etiqueta = f"{cfg.etiqueta}_{args.conjunto}"
+    if args.con_vecindad:
+        cfg.usar_vecindad = True
+        if not cfg.etiqueta.endswith("vecindad"):
+            cfg.etiqueta = f"{cfg.etiqueta}_vecindad"
     if args.resto is not None:
         cfg.resto_negativos = args.resto
     if args.etiqueta:
@@ -109,6 +113,11 @@ def main() -> int:
     parser.add_argument("--modelos", nargs="+", metavar="MODELO")
     parser.add_argument("--sin-derivadas", action="store_true",
                         help="Entrena solo con las variables del dataset.")
+    parser.add_argument("--con-vecindad", action="store_true",
+                        help="Añade las variables de contexto espacial (historial de "
+                             "igniciones del entorno hasta D-1 y continuidad del "
+                             "combustible). La etiqueta se sufija para que la bitácora "
+                             "distinga las dos variantes.")
     parser.add_argument("--conjunto", metavar="NOMBRE",
                         help="Conjunto de variables de configs/conjuntos_variables.yaml, "
                              "generado por scripts/seleccionar_variables.py.")
