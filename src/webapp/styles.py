@@ -32,11 +32,17 @@ html, body, [class*="css"] {
     color: #e2e8f0;
 }
 
-/* Reducir padding de la página principal para sensación de software de escritorio */
+/* Ajustar padding de la página principal para evitar solapamiento con la barra superior de Streamlit */
 .block-container {
-    padding-top: 1.25rem !important;
+    padding-top: 3.25rem !important;
     padding-bottom: 2rem !important;
     max-width: 100% !important;
+}
+
+header[data-testid="stHeader"] {
+    background: rgba(11, 15, 25, 0.7) !important;
+    backdrop-filter: blur(8px) !important;
+    z-index: 50 !important;
 }
 
 /* ==========================================================================
@@ -46,7 +52,8 @@ html, body, [class*="css"] {
     background: #0d1322;
     border: 1px solid #1e293b;
     border-radius: 8px;
-    padding: 1.1rem 1.4rem;
+    padding: 1.25rem 1.4rem;
+    margin-top: 0.25rem;
     margin-bottom: 1rem;
     display: flex;
     justify-content: space-between;
@@ -64,7 +71,9 @@ html, body, [class*="css"] {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    margin: 0;
+    margin: 0 !important;
+    padding: 2px 0 0 0 !important;
+    line-height: 1.35 !important;
 }
 
 .command-subtitle {

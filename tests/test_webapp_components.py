@@ -8,8 +8,8 @@ import pytest
 
 from src.webapp.components.concello_lookup import get_risk_level_info
 from src.webapp.components.operational_protocols import generate_executive_briefing
-from src.webapp.styles import CUSTOM_CSS, apply_custom_styles
-from src.webapp.utils.data_loader import enrich_dataset_metadata, load_grid_geometries
+from src.webapp.styles import CUSTOM_CSS
+from src.webapp.utils.data_loader import enrich_dataset_metadata
 from src.webapp.utils.geo_helpers import (
     assign_approx_province,
     assign_comarca_or_distrito,
@@ -68,9 +68,9 @@ def test_enrich_dataset_metadata_with_coordinates():
     assert "percentil_riesgo" in enriched.columns
 
     # Primera celda cumple la regla 30-30-30 (T=35, RH=20, V=35)
-    assert enriched.loc[0, "regla_30_30_activa"] == True
+    assert bool(enriched.loc[0, "regla_30_30_activa"]) is True
     # Segunda celda no la cumple
-    assert enriched.loc[1, "regla_30_30_activa"] == False
+    assert bool(enriched.loc[1, "regla_30_30_activa"]) is False
 
 
 def test_enrich_dataset_metadata_without_coordinates_resilience():
@@ -147,3 +147,103 @@ def test_custom_css_structure():
     assert ".command-header" in CUSTOM_CSS
     assert ".kpi-card" in CUSTOM_CSS
     assert "material-symbols-outlined" in CUSTOM_CSS
+
+
+def test_enrich_dataset_canonical_egif_48():
+    raw_df = pd.DataFrame(
+        {
+            "cell_id": [101, 102],
+            "lat_centroid": [42.0, 43.1],
+            "lon_centroid": [-7.5, -8.0],
+            "temperature_max_12_18h": [34.5, 21.0],
+            "relative_humidity_min_12_18h": [22.0, 65.0],
+            "wind_speed_max_12_18h": [32.0, 14.0],
+            "precipitation_sum_30d": [2.5, 45.0],
+            "slope_mean": [16.5, 4.2],
+            "coniferous_forest": [0.6, 0.0],
+            "broadleaf_forest": [0.2, 0.1],
+            "scrub": [0.1, 0.8],
+            "prob_riesgo": [0.14, 0.01],
+        }
+    )
+
+    enriched = enrich_dataset_metadata(raw_df)
+
+    # Aliases normalizados automáticamente
+    assert enriched.loc[0, "tmax_vc"] == 34.5
+    assert enriched.loc[0, "rhmin_vc"] == 22.0
+    assert enriched.loc[0, "vmax_vc"] == 32.0
+    assert enriched.loc[0, "prec_acum_30d"] == 2.5
+    assert enriched.loc[0, "pendiente_media"] == 16.5
+
+    # Regla 30-30-30 activa en celda 0 (T=34.5, HR=22.0, V=32.0)
+    assert bool(enriched.loc[0, "regla_30_30_activa"]) is True
+    assert bool(enriched.loc[1, "regla_30_30_activa"]) is False
+
+    # Síntesis de cobertura vegetal
+    assert enriched.loc[0, "combustible_pct_forestal"] == pytest.approx(80.0)
+    assert enriched.loc[0, "combustible_clase"] == "Pinar / Coníferas"
+    assert enriched.loc[1, "combustible_clase"] == "Matorral / Brezal"
+
+
+def test_get_color_gradient_modes():
+    from src.webapp.components.map_view import get_color_gradient
+
+    # Modo Absoluto P(Y=1)
+    color_abs_extremo = get_color_gradient(0.15, 0.999, "Riesgo Absoluto Calibrado P(Y=1)")
+    assert color_abs_extremo == "#800026"
+
+    color_abs_bajo = get_color_gradient(0.001, 0.10, "Riesgo Absoluto Calibrado P(Y=1)")
+    assert color_abs_bajo == "#FED976"
+
+    # Modo Relativo Percentil
+    color_rel_top = get_color_gradient(0.001, 0.999, "Priorización Relativa por Percentil (%)")
+    assert color_rel_top == "#800026"
+
+    color_rel_muy_alto = get_color_gradient(0.001, 0.996, "Priorización Relativa por Percentil (%)")
+    assert color_rel_muy_alto == "#BD0026"
+
+    color_rel_low = get_color_gradient(0.15, 0.50, "Priorización Relativa por Percentil (%)")
+    assert color_rel_low == "#FED976"
+
+
+def test_build_map_legend_html_modes():
+    from src.webapp.components.map_view import build_map_legend_html
+
+    legend_abs = build_map_legend_html("Riesgo Absoluto Calibrado P(Y=1)")
+    assert "Probabilidad P(Y=1)" in legend_abs
+    assert "12.0%" in legend_abs
+    assert "Severidad física calibrada" in legend_abs
+
+    legend_rel = build_map_legend_html("Priorización Relativa por Percentil (%)")
+    assert "Priorización Relativa" in legend_rel
+    assert "Top 0.5%" in legend_rel
+    assert "Ranking relativo para despacho" in legend_rel
+
+    legend_tac = build_map_legend_html("Niveles Tácticos Discretos (Top %)")
+    assert "Niveles Tácticos" in legend_tac
+    assert "Nivel 4: Crítico" in legend_tac
+
+
+def test_get_day_severity_info():
+    from src.webapp.components.header_kpis import get_day_severity_info
+
+    # 1.88% debe ser Nivel 2 - Moderado
+    mod = get_day_severity_info(1.88)
+    assert "Nivel 2" in mod["level"]
+    assert mod["card_class"] == "alert-warning"
+
+    # Invierno 0.05% debe ser Nivel 1 - Bajo / Nominal
+    bajo = get_day_severity_info(0.05)
+    assert "Nivel 1" in bajo["level"]
+    assert bajo["card_class"] == "alert-success"
+
+    # 4.5% debe ser Nivel 3 - Alto
+    alto = get_day_severity_info(4.5)
+    assert "Nivel 3" in alto["level"]
+    assert alto["card_class"] == "alert-warning"
+
+    # Verano extremo 15.0% debe ser Nivel 5 - Extremo
+    extremo = get_day_severity_info(15.0)
+    assert "Nivel 5" in extremo["level"]
+    assert extremo["card_class"] == "alert-critical"

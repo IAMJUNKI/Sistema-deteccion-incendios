@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -83,10 +84,10 @@ def render_shap_and_simulator_tab(
         render_html_safely(action_box_html)
 
     with col_info_box:
-        tmax = float(c_info.get("tmax_vc", 25.0))
-        rhmin = float(c_info.get("rhmin_vc", 35.0))
-        vmax = float(c_info.get("vmax_vc", 15.0))
-        prec30 = float(c_info.get("prec_acum_30d", 5.0))
+        tmax = float(c_info.get("temperature_max_12_18h", c_info.get("tmax_vc", 25.0)))
+        rhmin = float(c_info.get("relative_humidity_min_12_18h", c_info.get("rhmin_vc", 35.0)))
+        vmax = float(c_info.get("wind_speed_max_12_18h", c_info.get("vmax_vc", 15.0)))
+        prec30 = float(c_info.get("precipitation_sum_30d", c_info.get("prec_acum_30d", 5.0)))
         raw_fuel = c_info.get("combustible_clase")
         fuel_type = (
             str(raw_fuel).capitalize()
@@ -94,10 +95,10 @@ def render_shap_and_simulator_tab(
             else "Matorral / Monte Bajo"
         )
         forest_pct = float(c_info.get("combustible_pct_forestal", 0.0))
-        slope = float(c_info.get("pendiente_media", 12.0))
+        slope = float(c_info.get("slope_mean", c_info.get("pendiente_media", 12.0)))
 
         st.markdown("#### Factores Clave Observados en el Terreno")
-        
+
         fc1, fc2 = st.columns(2)
         with fc1:
             box1_html = f"""
@@ -132,7 +133,7 @@ def render_shap_and_simulator_tab(
 
     # Explicación en Lenguaje Natural
     st.markdown("#### Conclusión del Diagnóstico")
-    
+
     explanation_df = None
     if dashboard_model is not None:
         try:
@@ -190,10 +191,30 @@ def render_shap_and_simulator_tab(
 
     # Crear vector de features simulado
     sim_row = c_info.copy()
-    sim_row["tmax_vc"] = float(np.clip(c_info.get("tmax_vc", 25.0) + delta_temp, 5.0, 50.0))
-    sim_row["rhmin_vc"] = float(np.clip(c_info.get("rhmin_vc", 35.0) + delta_rh, 5.0, 100.0))
-    sim_row["vmax_vc"] = float(np.clip(c_info.get("vmax_vc", 15.0) + delta_wind, 0.0, 100.0))
-    sim_row["vpd_vc"] = float(calculate_vpd(np.array([sim_row["tmax_vc"]]), np.array([sim_row["rhmin_vc"]]))[0])
+    new_tmax = float(np.clip(tmax + delta_temp, 5.0, 50.0))
+    new_rhmin = float(np.clip(rhmin + delta_rh, 5.0, 100.0))
+    new_vmax = float(np.clip(vmax + delta_wind, 0.0, 100.0))
+    new_vpd = float(calculate_vpd(np.array([new_tmax]), np.array([new_rhmin]))[0])
+
+    # Sincronizar campos canónicos EGIF y legacy
+    sim_row["tmax_vc"] = new_tmax
+    sim_row["temperature_max_12_18h"] = new_tmax
+    sim_row["temperature_max"] = new_tmax
+    if "temperature_mean" in sim_row:
+        sim_row["temperature_mean"] = float(np.clip(c_info.get("temperature_mean", 18.0) + delta_temp * 0.7, 0.0, 45.0))
+
+    sim_row["rhmin_vc"] = new_rhmin
+    sim_row["relative_humidity_min_12_18h"] = new_rhmin
+    sim_row["relative_humidity_min"] = new_rhmin
+
+    sim_row["vmax_vc"] = new_vmax
+    sim_row["wind_speed_max_12_18h"] = new_vmax
+    sim_row["wind_speed_max"] = new_vmax
+
+    sim_row["vpd_vc"] = new_vpd
+    sim_row["vpd_max_12_18h"] = new_vpd
+    if "vpd_mean" in sim_row:
+        sim_row["vpd_mean"] = new_vpd * 0.7
 
     if dashboard_model is not None and hasattr(dashboard_model, "predict_proba"):
         try:
@@ -216,8 +237,10 @@ def render_shap_and_simulator_tab(
         res1_html = f"""
         <div style="background:#0f172a; padding:1rem; border-radius:6px; border:1px solid #1e293b;">
             <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase;">Nivel Actual Previsto</div>
-            <div style="font-size:1.3rem; font-weight:700; color:{risk_info['badge_color']};">{risk_info['level']}</div>
-            <div style="font-size:0.8rem; color:#94a3b8;">T: {tmax:.1f}°C · HR: {rhmin:.1f}% · Viento: {vmax:.1f} km/h</div>
+            <div style="font-size:1.3rem; font-weight:700; color:{risk_info['badge_color']};">
+                {risk_info['level']} <span style="font-size:0.92rem; font-weight:600; color:#cbd5e1;">({prob*100:.2f}%)</span>
+            </div>
+            <div style="font-size:0.8rem; color:#94a3b8; margin-top:0.25rem;">T: {tmax:.1f}°C · HR: {rhmin:.1f}% · Viento: {vmax:.1f} km/h</div>
         </div>
         """
         render_html_safely(res1_html)
@@ -226,8 +249,10 @@ def render_shap_and_simulator_tab(
         res2_html = f"""
         <div style="background:#0f172a; padding:1rem; border-radius:6px; border:2px solid {sim_risk_info['border_color']};">
             <div style="font-size:0.75rem; color:#94a3b8; text-transform:uppercase;">Nuevo Nivel Simulado</div>
-            <div style="font-size:1.3rem; font-weight:700; color:{sim_risk_info['badge_color']};">{sim_risk_info['level']}</div>
-            <div style="font-size:0.8rem; color:#94a3b8;">T: {sim_row['tmax_vc']:.1f}°C · HR: {sim_row['rhmin_vc']:.1f}% · Viento: {sim_row['vmax_vc']:.1f} km/h</div>
+            <div style="font-size:1.3rem; font-weight:700; color:{sim_risk_info['badge_color']};">
+                {sim_risk_info['level']} <span style="font-size:0.92rem; font-weight:600; color:#cbd5e1;">({sim_prob_val*100:.2f}%)</span>
+            </div>
+            <div style="font-size:0.8rem; color:#94a3b8; margin-top:0.25rem;">T: {sim_row['tmax_vc']:.1f}°C · HR: {sim_row['rhmin_vc']:.1f}% · Viento: {sim_row['vmax_vc']:.1f} km/h</div>
         </div>
         """
         render_html_safely(res2_html)

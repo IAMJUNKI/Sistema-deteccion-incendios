@@ -20,16 +20,7 @@ def render_sidebar(predictions: pd.DataFrame) -> dict:
         unsafe_allow_html=True,
     )
 
-    # 1. Selector de Dataset / Ejecución
-    available_datasets = list_available_inference_datasets()
-    selected_dataset_name = st.sidebar.selectbox(
-        "Conjunto de Inferencia:",
-        list(available_datasets.keys()),
-        index=0,
-    )
-    selected_dataset_file = available_datasets.get(selected_dataset_name)
-
-    # 2. Selector de Horizonte Temporal
+    # 1. Selector de Horizonte Temporal (Control Primario)
     if not predictions.empty and "horizon_days" in predictions.columns:
         available_horizons = sorted(predictions["horizon_days"].dropna().astype(int).unique())
     else:
@@ -44,57 +35,36 @@ def render_sidebar(predictions: pd.DataFrame) -> dict:
 
     st.sidebar.markdown("---")
 
-    # 3. Estilo del Mapa Base
+    # 2. Modo de Visualización de Riesgo (Simbología)
     st.sidebar.markdown(
         """
         <div style="display:flex; align-items:center; gap:0.35rem; margin-bottom:0.25rem;">
-            <span class="material-symbols-outlined" style="font-size:18px; color:#94a3b8;">layers</span>
-            <span style="font-weight:600; font-size:0.85rem; text-transform:uppercase; color:#94a3b8;">Capa Base Cartográfica</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    map_style = st.sidebar.selectbox(
-        "Seleccionar Estilo:",
-        [
-            "Esri Gris Claro (Lienzo Táctico)",
-            "Esri Gris Oscuro (Lienzo Táctico)",
-            "Esri Satellite (Satelital)",
-            "IGN España — PNOA Ortofoto (Oficial)",
-            "OpenTopoMap (Topográfico)",
-            "OpenStreetMap",
-        ],
-        index=0,
-        label_visibility="collapsed",
-    )
-
-    # 4. Modo de Visualización de Color
-    st.sidebar.markdown(
-        """
-        <div style="display:flex; align-items:center; gap:0.35rem; margin-top:0.75rem; margin-bottom:0.25rem;">
             <span class="material-symbols-outlined" style="font-size:18px; color:#94a3b8;">palette</span>
-            <span style="font-weight:600; font-size:0.85rem; text-transform:uppercase; color:#94a3b8;">Criterio Térmico</span>
+            <span style="font-weight:600; font-size:0.85rem; text-transform:uppercase; color:#94a3b8;">Simbología de Riesgo</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
     color_mode = st.sidebar.radio(
-        "Criterio Térmico:",
+        "Simbología de Riesgo:",
         [
-            "Gradiente Continuo por Probabilidad P(Y=1)",
-            "Gradiente Continuo por Percentil Relativo (%)",
-            "Selección Táctica por Niveles Fijos (Top %)",
+            "Riesgo Absoluto Calibrado P(Y=1)",
+            "Priorización Relativa por Percentil (%)",
+            "Niveles Tácticos Discretos (Top %)",
         ],
         index=0,
         label_visibility="collapsed",
     )
+    st.sidebar.caption(
+        "• **Absoluto:** severidad física real del día.\n• **Relativo:** prioriza las celdas más calientes de Galicia."
+    )
 
-    # 5. Filtro de Celdas por Umbral de Riesgo
+    # 3. Filtro Espacial de Celdas
     st.sidebar.markdown(
         """
         <div style="display:flex; align-items:center; gap:0.35rem; margin-top:0.75rem; margin-bottom:0.25rem;">
             <span class="material-symbols-outlined" style="font-size:18px; color:#94a3b8;">filter_alt</span>
-            <span style="font-weight:600; font-size:0.85rem; text-transform:uppercase; color:#94a3b8;">Filtro Espacial</span>
+            <span style="font-weight:600; font-size:0.85rem; text-transform:uppercase; color:#94a3b8;">Filtro de Celdas</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -102,23 +72,66 @@ def render_sidebar(predictions: pd.DataFrame) -> dict:
     filter_risk = st.sidebar.selectbox(
         "Filtro Espacial:",
         [
-            "Top 1.0% Celdas Prioritarias",
-            "Top 5.0% Celdas en Riesgo Elevado",
-            "Top 2.0% Celdas Críticas",
-            "Top 0.5% Riesgo Extremo",
-            "Top 10.0% Celdas de Vigilancia",
-            "Mostrar Todas las Celdas con Riesgo > 0.5%",
+            "Top 0.5%",
+            "Top 1.0%",
+            "Top 2.0%",
+            "Top 5.0%",
+            "Top 10.0%",
+            "Top 20.0%",
         ],
-        index=0,
+        index=3,
         label_visibility="collapsed",
     )
 
     st.sidebar.markdown("---")
 
-    # 6. Botón de Recarga de Caché
-    if st.sidebar.button("Recargar Datos"):
-        st.cache_data.clear()
-        st.rerun()
+    # 4. Configuración Avanzada y Cartografía (Colapsado para reducir carga cognitiva)
+    with st.sidebar.expander("⚙️ Opciones Avanzadas / Capas", expanded=False):
+        st.markdown(
+            """
+            <div style="display:flex; align-items:center; gap:0.35rem; margin-bottom:0.25rem;">
+                <span class="material-symbols-outlined" style="font-size:18px; color:#94a3b8;">layers</span>
+                <span style="font-weight:600; font-size:0.85rem; text-transform:uppercase; color:#94a3b8;">Capa Base Cartográfica</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        map_style = st.selectbox(
+            "Capa Base Cartográfica:",
+            [
+                "Esri Gris Claro (Lienzo Táctico)",
+                "Esri Gris Oscuro (Lienzo Táctico)",
+                "Esri Satellite (Satelital)",
+                "IGN España — PNOA Ortofoto (Oficial)",
+                "OpenTopoMap (Topográfico)",
+                "OpenStreetMap",
+            ],
+            index=0,
+            label_visibility="collapsed",
+        )
+
+        st.markdown(
+            """
+            <div style="display:flex; align-items:center; gap:0.35rem; margin-top:0.6rem; margin-bottom:0.25rem;">
+                <span class="material-symbols-outlined" style="font-size:18px; color:#94a3b8;">database</span>
+                <span style="font-weight:600; font-size:0.85rem; text-transform:uppercase; color:#94a3b8;">Dataset de Inferencia</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        available_datasets = list_available_inference_datasets()
+        selected_dataset_name = st.selectbox(
+            "Dataset:",
+            list(available_datasets.keys()),
+            index=0,
+            label_visibility="collapsed",
+        )
+        selected_dataset_file = available_datasets.get(selected_dataset_name)
+
+        st.markdown("<div style='margin-top:0.75rem;'></div>", unsafe_allow_html=True)
+        if st.button("Recargar Datos de Caché", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
     return {
         "selected_dataset_file": selected_dataset_file,

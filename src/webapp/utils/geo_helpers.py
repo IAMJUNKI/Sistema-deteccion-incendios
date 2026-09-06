@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+
 import geopandas as gpd
 import pandas as pd
+import streamlit as st
 from shapely.geometry import box
 from shapely.ops import unary_union
-import streamlit as st
 
 # Presets de navegación territorial en Galicia
 ZOOM_PRESETS = {

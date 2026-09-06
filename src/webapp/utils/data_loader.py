@@ -143,6 +143,64 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
     elif "distrito_forestal" not in df.columns:
         df["distrito_forestal"] = "Galicia Sur"
 
+    # Normalizar variables meteorológicas y topográficas (canónicas EGIF <-> legacy)
+    if "temperature_max_12_18h" in df.columns and "tmax_vc" not in df.columns:
+        df["tmax_vc"] = df["temperature_max_12_18h"]
+    elif "tmax_vc" in df.columns and "temperature_max_12_18h" not in df.columns:
+        df["temperature_max_12_18h"] = df["tmax_vc"]
+
+    if "relative_humidity_min_12_18h" in df.columns and "rhmin_vc" not in df.columns:
+        df["rhmin_vc"] = df["relative_humidity_min_12_18h"]
+    elif "rhmin_vc" in df.columns and "relative_humidity_min_12_18h" not in df.columns:
+        df["relative_humidity_min_12_18h"] = df["rhmin_vc"]
+
+    if "wind_speed_max_12_18h" in df.columns and "vmax_vc" not in df.columns:
+        df["vmax_vc"] = df["wind_speed_max_12_18h"]
+    elif "vmax_vc" in df.columns and "wind_speed_max_12_18h" not in df.columns:
+        df["wind_speed_max_12_18h"] = df["vmax_vc"]
+
+    if "precipitation_sum_30d" in df.columns and "prec_acum_30d" not in df.columns:
+        df["prec_acum_30d"] = df["precipitation_sum_30d"]
+    elif "prec_acum_30d" in df.columns and "precipitation_sum_30d" not in df.columns:
+        df["precipitation_sum_30d"] = df["prec_acum_30d"]
+
+    if "slope_mean" in df.columns and "pendiente_media" not in df.columns:
+        df["pendiente_media"] = df["slope_mean"]
+    elif "pendiente_media" in df.columns and "slope_mean" not in df.columns:
+        df["slope_mean"] = df["pendiente_media"]
+
+    # Sintetizar cobertura de combustible/vegetación a partir de fracciones CORINE
+    if "combustible_pct_forestal" not in df.columns:
+        forest_cols = [c for c in ["broadleaf_forest", "coniferous_forest", "mixed_forest"] if c in df.columns]
+        if forest_cols:
+            df["combustible_pct_forestal"] = (df[forest_cols].sum(axis=1) * 100).clip(0, 100)
+        else:
+            df["combustible_pct_forestal"] = 0.0
+
+    if "combustible_clase" not in df.columns:
+        def _infer_fuel_class(row: pd.Series) -> str:
+            bf = float(row.get("broadleaf_forest", 0.0) or 0.0)
+            cf = float(row.get("coniferous_forest", 0.0) or 0.0)
+            mf = float(row.get("mixed_forest", 0.0) or 0.0)
+            sc = float(row.get("scrub", 0.0) or 0.0)
+            ag = float(row.get("agriculture", 0.0) or 0.0)
+            max_val = max(bf, cf, mf, sc, ag)
+            if max_val <= 0.05:
+                return "Matorral / Monte Bajo"
+            if max_val == sc:
+                return "Matorral / Brezal"
+            if max_val == cf:
+                return "Pinar / Coníferas"
+            if max_val == bf:
+                return "Frondosas Caducifolias"
+            if max_val == mf:
+                return "Bosque Mixto"
+            if max_val == ag:
+                return "Agrícola / Mosaico"
+            return "Matorral / Monte Bajo"
+
+        df["combustible_clase"] = df.apply(_infer_fuel_class, axis=1)
+
     # Calcular indicador de la Regla Crítica 30-30-30. El contrato EGIF usa
     # nombres canónicos; los aliases legacy se conservan para rollback.
     tmax = pd.to_numeric(
