@@ -24,6 +24,7 @@ _TESTS_GEOESPACIALES = (
     "test_grid.py", "test_human_activity.py", "test_ingest_egif.py",
     "test_ingestion_pipeline.py", "test_landcover.py", "test_meteorology.py",
     "test_topography.py", "test_workflow.py", "test_pipeline.py", "test_era5.py",
+    "test_datacube_profile.py", "test_webapp_components.py", "test_fwi.py",
 )
 
 collect_ignore = (
@@ -33,6 +34,10 @@ collect_ignore = (
 CELDAS = 40
 DIAS_POR_ANIO = 30
 ANIOS = (2019, 2020)
+
+#: Las 40 celdas se disponen en una rejilla de 8 x 5, con el mismo paso de 1 km del datacubo.
+COLUMNAS_REJILLA = 8
+X0, Y0 = 3_000_000.0, 2_500_000.0
 
 #: Predictores del dataset falso, uno por grupo temático para que la clasificación por
 #: patrón quede ejercitada de verdad.
@@ -60,6 +65,12 @@ def _marco(anio: int, semilla: int) -> pd.DataFrame:
     celdas = np.arange(CELDAS, dtype=np.int32)
     malla = pd.MultiIndex.from_product([fechas, celdas], names=["fecha", "cell_id"])
     df = pd.DataFrame(index=malla).reset_index()
+
+    # Coordenadas proyectadas, como en el datacubo real (EPSG:3035, paso de 1 km). No son
+    # predictoras —el contrato no las declara— pero sin ellas no se puede probar el contexto
+    # espacial de extremo a extremo, porque `cell_id` no revela dónde está la celda.
+    df["x"] = (X0 + (df.cell_id % COLUMNAS_REJILLA) * 1000.0).astype(np.float64)
+    df["y"] = (Y0 - (df.cell_id // COLUMNAS_REJILLA) * 1000.0).astype(np.float64)
 
     n = len(df)
     df["temperature_max"] = rng.normal(28, 5, n).astype(np.float32)
