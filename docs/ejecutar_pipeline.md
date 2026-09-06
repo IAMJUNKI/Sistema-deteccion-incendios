@@ -54,6 +54,18 @@ python -m pytest tests -q
 
 ## 3. Datos raw: qué guardar y cómo se llaman
 
+Si el equipo ha compartido los archivos en `misc/Datos/raw`, normalízalos antes
+de ejecutar `src.workflow`. La migración copia y verifica cada archivo con
+SHA-256 y conserva el origen hasta que el cubo final haya sido validado:
+
+```bash
+PYTHONPATH=. python scripts/migrate_raw_data.py --apply
+```
+
+El detalle de la operación queda en `data/raw/migration_manifest.json`. No uses
+`--remove-source` hasta haber comprobado el datacubo, los Parquet y sus
+checksums.
+
 No descargues a mano un dato que ya exista en estas carpetas. El workflow comprueba primero los archivos locales.
 
 | Bloque | Carpeta | Nombre habitual | Origen |
@@ -81,6 +93,19 @@ python -m src.workflow --start-year 2016 --end-year 2023 --rebuild-static
 ```
 
 `--rebuild-static` recalcula límite, rejilla, topografía, CORINE y actividad humana. Puede descargar límite, DEM y OpenStreetMap si faltan; por eso es el comando más lento.
+
+Al terminar la reconstrucción, genera la rejilla vectorial operativa de las
+29.601 celdas activas que consume la inferencia:
+
+```bash
+PYTHONPATH=. python scripts/prepare_operational_grid.py \
+  --cube data/processed/static/spatial_grid_1km.nc \
+  --output data/processed/grid/galicia_grid_1km_egif.parquet
+```
+
+La rejilla rectangular del datacubo puede conservar celdas exteriores para
+operaciones espaciales internas; el Parquet anterior es el contrato de
+producción y solo contiene celdas activas de Galicia.
 
 ### Regenerar cubo y Parquet con los raw locales
 
@@ -151,7 +176,27 @@ python -m src.ingestion.era5 `
 
 Esta descarga es mensual y omite los meses ya presentes. No procesa meteorología, no descarga FWI y no modifica `data/processed/`.
 
-## 7. Seguimiento y validación
+## 7. Preparar el dataset para entrenamiento operativo
+
+El Parquet histórico es retrospectivo y sus acumulaciones incluyen el día de
+la fila. Antes de entrenar los modelos operativos hay que crear la copia
+alineada, que recalcula las memorias hasta el día anterior:
+
+```bash
+PYTHONPATH=. python scripts/build_operational_benchmark.py \
+  --source-dir data/processed/tabular/egif \
+  --output-dir data/processed/tabular/egif_operational \
+  --years 2016-2023 \
+  --static-layer-quality provisional_import
+```
+
+No se debe borrar ni sobrescribir `data/processed/tabular/egif/`. El proceso
+publica `metadata.json` con la versión de alineación y el hash del dataset
+padre. La formación de modelos, la comparación con el control de 50 variables
+y la promoción están documentadas en
+`docs/explanations/implementacion_alineacion_operativa.md`.
+
+## 8. Seguimiento y validación
 
 El avance se escribe en la terminal. Al finalizar revisa:
 
@@ -168,7 +213,7 @@ En PyCharm, usando el kernel `incendios-forestales`, ejecuta:
 
 Si la ejecución se interrumpe, no borres `data/raw/`: al repetir, se reutilizarán los archivos ya completos. Es normal que `data/processed/` se regenere.
 
-## 8. Problemas habituales
+## 9. Problemas habituales
 
 **Faltan XML EGIF.** Coloca uno o varios `*.xml` en `data/raw/fire_history/` y repite el comando. El pipeline lee todos los XML y elimina duplicados de periodos solapados.
 

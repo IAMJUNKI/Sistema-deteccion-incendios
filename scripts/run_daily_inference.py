@@ -29,7 +29,13 @@ try:
 except ImportError:  # pragma: no cover - el entorno de producción incluye GeoPandas
     gpd = None
 
-from src.features.canonical_contract import CANONICAL_FEATURES, CANONICAL_WEATHER_FEATURES
+from src.features.canonical_contract import (
+    CANONICAL_FEATURES,
+    CANONICAL_FEATURE_SCHEMA_VERSION,
+    CANONICAL_WEATHER_FEATURES,
+    EGIF_48_FEATURE_CONTRACT_VERSION,
+    EGIF_48_FEATURES,
+)
 from src.features.operational_features import build_operational_features
 from src.ingestion.aemet_forecast import (
     AEMET_API_VERSION,
@@ -75,6 +81,61 @@ DEFAULT_METEOSIX_URL = "https://servizos.meteogalicia.gal/apiv5"
 DEFAULT_METEOSIX_GRIDS = ("1km", "04km")
 DEFAULT_QUERY_RESOLUTION_KM = 4.0
 DEFAULT_FORECAST_PROVIDER = "auto"
+
+
+def _resolve_model_family(model_dir: str | Path) -> tuple[str, dict[str, int]]:
+    """Resuelve una familia completa sin mezclar contratos en la misma ejecución."""
+
+    directory = Path(model_dir)
+    counts = {
+        "egif_48": sum(
+            (directory / f"forecast_risk_egif_48_t{horizon}.joblib").exists()
+            for horizon in HORIZONS
+        ),
+        "canonical": sum(
+            (directory / f"forecast_risk_egif_t{horizon}.joblib").exists()
+            for horizon in HORIZONS
+        ),
+        "legacy": sum(
+            (directory / f"forecast_risk_t{horizon}.joblib").exists()
+            for horizon in HORIZONS
+        ),
+    }
+    configured = os.getenv("FORECAST_MODEL_FAMILY", "auto").strip().lower()
+    aliases = {
+        "48": "egif_48",
+        "egif48": "egif_48",
+        "egif-48": "egif_48",
+        "egif-2d-48": "egif_48",
+        EGIF_48_FEATURE_CONTRACT_VERSION: "egif_48",
+        "50": "canonical",
+        "egif50": "canonical",
+        "egif_50": "canonical",
+        "egif-2d": "canonical",
+    }
+    configured = aliases.get(configured, configured)
+    if configured not in {"auto", "egif_48", "canonical", "legacy"}:
+        raise ForecastError(
+            "FORECAST_MODEL_FAMILY debe ser auto, egif_48, canonical o legacy."
+        )
+    if configured == "auto":
+        for family in ("egif_48", "canonical", "legacy"):
+            if counts[family] == len(HORIZONS):
+                return family, counts
+        # Permite inyectar modelos en pruebas unitarias sin crear artefactos
+        # ficticios en disco. En una ejecución real ``load_horizon_model``
+        # producirá el error explícito de artefacto ausente.
+        if not any(counts.values()):
+            return "legacy", counts
+        raise ForecastError(
+            "No existe una familia completa de modelos T+1/T+2/T+3: "
+            f"{counts}. Entrena la familia 48 o configura un rollback completo."
+        )
+    if counts[configured] != len(HORIZONS):
+        raise ForecastError(
+            f"La familia {configured} está incompleta ({counts[configured]}/3 artefactos)."
+        )
+    return configured, counts
 
 
 def _max_source_distance_km() -> float:
@@ -836,28 +897,26 @@ def _run_daily_inference_pipeline(
         else issue
     )
     grid = grid_df if grid_df is not None else load_grid(grid_path)
-    configured_model_family = os.getenv("FORECAST_MODEL_FAMILY", "auto").strip().lower()
-    canonical_model_count = sum(
-        (Path(model_dir) / f"forecast_risk_egif_t{horizon}.joblib").exists()
-        for horizon in HORIZONS
+    active_model_family, model_counts = _resolve_model_family(model_dir)
+    active_contract = (
+        EGIF_48_FEATURE_CONTRACT_VERSION
+        if active_model_family == "egif_48"
+        else CANONICAL_FEATURE_SCHEMA_VERSION
+        if active_model_family == "canonical"
+        else "operational-risk-v1"
     )
-    canonical_models_present = (
-        canonical_model_count == len(HORIZONS) and configured_model_family != "legacy"
+    active_features = (
+        EGIF_48_FEATURES if active_model_family == "egif_48" else CANONICAL_FEATURES
     )
-    if canonical_model_count not in {0, len(HORIZONS)} and configured_model_family != "legacy":
-        raise ForecastError(
-            "Hay artefactos EGIF canónicos incompletos: deben existir los tres "
-            "modelos forecast_risk_egif_t1/t2/t3.joblib antes de publicar."
-        )
-    if canonical_models_present:
-        expected_static = set(CANONICAL_FEATURES) - set(CANONICAL_WEATHER_FEATURES)
+    if active_model_family in {"egif_48", "canonical"}:
+        expected_static = set(active_features) - set(CANONICAL_WEATHER_FEATURES)
         missing_static = sorted(expected_static.difference(grid.columns))
         if missing_static:
             raise ForecastError(
                 "La rejilla canónica no contiene todas las variables estáticas del contrato EGIF: "
                 f"{missing_static}. No se permiten columnas estáticas ausentes en inferencia."
             )
-    if canonical_models_present:
+    if active_model_family in {"egif_48", "canonical"}:
         expected_cells = int(os.getenv("CANONICAL_GRID_CELLS", "29601"))
         if len(grid) != expected_cells:
             raise ForecastError(
@@ -924,9 +983,7 @@ def _run_daily_inference_pipeline(
     # El agregador genera también aliases canónicos para facilitar la
     # transición, pero el manifest debe describir el contrato que realmente
     # consume la familia activa (EGIF o rollback legacy).
-    features["feature_schema_version"] = (
-        "egif-2d-v1" if canonical_models_present else "operational-risk-v1"
-    )
+    features["feature_schema_version"] = active_contract
     LOGGER.info(
         "Features operativas listas: %s filas (%s celdas × %s horizontes)",
         len(features),
@@ -987,7 +1044,10 @@ def _run_daily_inference_pipeline(
 
     results = []
     model_report: dict[str, object] = {}
-    use_shadow = os.getenv("SHADOW_LEGACY_MODEL", "false").strip().lower() in {
+    use_shadow_legacy = os.getenv("SHADOW_LEGACY_MODEL", "false").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    use_shadow_50 = os.getenv("SHADOW_50_MODEL", "false").strip().lower() in {
         "1", "true", "yes", "on"
     }
     for horizon in HORIZONS:
@@ -997,7 +1057,8 @@ def _run_daily_inference_pipeline(
             horizon,
             len(horizon_features),
         )
-        model = load_horizon_model(horizon, model_dir=model_dir)
+        load_kwargs = {"model_family": active_model_family} if active_model_family == "egif_48" else {}
+        model = load_horizon_model(horizon, model_dir=model_dir, **load_kwargs)
         probabilities = model.predict_proba(horizon_features)
         scored = add_risk_outputs(horizon_features, probabilities[:, 1])
         schema_version = getattr(
@@ -1005,10 +1066,15 @@ def _run_daily_inference_pipeline(
             "feature_schema_version",
             getattr(model, "metadata", {}).get("feature_schema_version", "operational-risk-v1"),
         )
-        if use_shadow and schema_version == "egif-2d-v1":
+        shadow_family = None
+        if active_model_family == "egif_48" and use_shadow_50:
+            shadow_family = "canonical"
+        elif active_model_family in {"egif_48", "canonical"} and use_shadow_legacy:
+            shadow_family = "legacy"
+        if shadow_family is not None:
             try:
                 shadow_model = load_horizon_model(
-                    horizon, model_dir=model_dir, model_family="legacy"
+                    horizon, model_dir=model_dir, model_family=shadow_family
                 )
                 shadow_probability = shadow_model.predict_proba(horizon_features)[:, 1]
                 scored["shadow_prob_risk"] = shadow_probability
@@ -1018,21 +1084,29 @@ def _run_daily_inference_pipeline(
                 scored["shadow_rank_delta"] = (
                     scored["percentil_riesgo"] - scored["shadow_percentil_riesgo"]
                 )
-                model_report.setdefault(str(horizon), {})["shadow_legacy"] = {
-                    "path": str(Path(model_dir) / f"forecast_risk_t{horizon}.joblib"),
-                    "sha256": sha256_file(Path(model_dir) / f"forecast_risk_t{horizon}.joblib"),
+                shadow_prefix = (
+                    "forecast_risk_egif" if shadow_family == "canonical" else "forecast_risk"
+                )
+                shadow_key = "shadow_50" if shadow_family == "canonical" else "shadow_legacy"
+                model_report.setdefault(str(horizon), {})[shadow_key] = {
+                    "path": str(Path(model_dir) / f"{shadow_prefix}_t{horizon}.joblib"),
+                    "sha256": sha256_file(
+                        Path(model_dir) / f"{shadow_prefix}_t{horizon}.joblib"
+                    ),
                     "feature_schema_version": getattr(
                         shadow_model, "feature_schema_version", "operational-risk-v1"
                     ),
+                    "model_family": getattr(shadow_model, "model_family", shadow_family),
                 }
             except (FileNotFoundError, ValueError, TypeError) as shadow_exc:
                 LOGGER.warning("No se pudo calcular el modelo legacy shadow T+%s: %s", horizon, shadow_exc)
         results.append(scored)
-        model_filename = (
-            f"forecast_risk_egif_t{horizon}.joblib"
-            if schema_version == "egif-2d-v1"
-            else f"forecast_risk_t{horizon}.joblib"
-        )
+        model_prefix = {
+            "egif_48": "forecast_risk_egif_48",
+            "canonical": "forecast_risk_egif",
+            "legacy": "forecast_risk",
+        }[active_model_family]
+        model_filename = f"{model_prefix}_t{horizon}.joblib"
         model_path = Path(model_dir) / model_filename
         primary_report = {
             "path": str(model_path),

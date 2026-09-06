@@ -112,8 +112,21 @@ export GIT_SSH_COMMAND="ssh -F $SSH_CONFIG -o BatchMode=yes"
 git init -q "$RELEASE_TMP"
 git -C "$RELEASE_TMP" remote add origin "$REPO_URL"
 echo "Descargando $REF desde GitHub..."
-git -C "$RELEASE_TMP" fetch --depth=1 origin "$REF"
-git -C "$RELEASE_TMP" checkout --detach --quiet FETCH_HEAD
+if [[ "$REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  # GitHub no siempre expone un SHA como remote ref descargable. Primero se
+  # trae la punta de main y sus tags; si el commit no está en ese shallow
+  # history, se amplía el historial de main antes de resolverlo localmente.
+  git -C "$RELEASE_TMP" fetch --depth=1 origin main --tags
+  if ! git -C "$RELEASE_TMP" cat-file -e "$REF^{commit}" 2>/dev/null; then
+    git -C "$RELEASE_TMP" fetch --unshallow origin main --tags
+  fi
+  git -C "$RELEASE_TMP" cat-file -e "$REF^{commit}" 2>/dev/null ||
+    die "No se encontró el commit $REF en main ni en los tags descargados."
+  git -C "$RELEASE_TMP" checkout --detach --quiet "$REF"
+else
+  git -C "$RELEASE_TMP" fetch --depth=1 origin "$REF"
+  git -C "$RELEASE_TMP" checkout --detach --quiet FETCH_HEAD
+fi
 
 COMMIT="$(git -C "$RELEASE_TMP" rev-parse --verify HEAD)"
 SHORT_COMMIT="$(git -C "$RELEASE_TMP" rev-parse --short=12 HEAD)"
@@ -143,15 +156,15 @@ if [[ "$RUN_TESTS" -eq 1 ]]; then
   )
 fi
 
+# La release se ha descargado en una carpeta temporal nueva. El ``data`` que
+# pueda traer Git (README, .gitkeep o metadatos pequeños) pertenece a la
+# release, no al almacenamiento persistente. Se elimina sólo tras comprobar
+# que la ruta sigue siendo una carpeta temporal bajo RELEASES_DIR; nunca se
+# toca DATA_DIR.
 if [[ -e "$RELEASE_TMP/data" || -L "$RELEASE_TMP/data" ]]; then
-  if [[ -L "$RELEASE_TMP/data" ]]; then
-    rm -f "$RELEASE_TMP/data"
-  elif [[ -d "$RELEASE_TMP/data" ]] && \
-       [[ -z "$(find "$RELEASE_TMP/data" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
-    rmdir "$RELEASE_TMP/data"
-  else
-    die "La release contiene un directorio data no vacío; se aborta para proteger datos."
-  fi
+  [[ "$RELEASE_TMP" == "$RELEASES_DIR"/.release-* ]] ||
+    die "Ruta temporal de release inesperada; se conserva data por seguridad."
+  rm -rf -- "$RELEASE_TMP/data"
 fi
 ln -s "$DATA_DIR" "$RELEASE_TMP/data"
 
@@ -195,4 +208,3 @@ fi
 echo "Release desplegada: $RELEASE_DIR"
 echo "Commit: $COMMIT"
 echo "Código activo: $CURRENT_LINK"
-

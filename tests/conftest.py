@@ -45,6 +45,13 @@ PREDICTORES = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _disable_local_simulation_from_project_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Los tests no deben depender del `.env` local de quien los ejecuta."""
+
+    monkeypatch.setenv("LOCAL_SIMULATION_MODE", "false")
+
+
 def _marco(anio: int, semilla: int) -> pd.DataFrame:
     rng = np.random.default_rng(semilla)
     fechas = pd.date_range(f"{anio}-06-01", periods=DIAS_POR_ANIO, freq="D")

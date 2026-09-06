@@ -2,6 +2,22 @@
 
 > **Propósito:** Este documento recopila y ordena cronológicamente los párrafos redactados y pulidos durante el desarrollo del código. Está estructurado según los capítulos estándar de una memoria técnica de TFM para facilitar la copia directa al documento final.
 
+> **Actualización metodológica — 5 de septiembre de 2026.** La implementación operativa actual
+> congela el contrato `egif-2d-48-v1`: son exactamente 48 predictores, obtenidos del contrato de
+> 50 variables del datacubo excluyendo `precipitation_sum` y `consecutive_dry_days`. El FWI no es
+> predictor y se conserva únicamente como baseline físico. El datacubo continúa almacenando las
+> 50 variables para trazabilidad y rollback, pero los artefactos de producción son
+> `forecast_risk_egif_48_t1/t2/t3.joblib`. Las métricas históricas que aparecen más abajo deben
+> leerse como resultados retrospectivos y no como una evaluación de un forecast operativo real.
+>
+> La semántica temporal de la familia 48 es: `issue_time` + meteorología del día objetivo
+> procedente del forecast + memoria observada/prevista → `target_ignicion` del día objetivo. El
+> benchmark histórico usa ERA5-Land perfecta y por eso se etiqueta `era5_perfect_benchmark`; no
+> mide todavía el error de WRF. La partición comparable es entrenamiento 2019–2020, calibración
+> 2021, validación 2022 y test ciego 2023. La ampliada usa entrenamiento 2016–2020 con el mismo
+> resto de particiones. La familia 48 se calibra por horizonte con corrección de prior seguida de
+> Platt; la familia histórica de 50 se conserva como rollback/shadow y no se mezclan ambas.
+
 ---
 
 ## ÍNDICE DE LA MEMORIA
@@ -49,17 +65,21 @@
 *(Justificación académica del sesgo meteorológico y su mitigación)*
 > La construcción del sistema impone una asimetría de fuentes meteorológicas: el modelo aprende las relaciones de riesgo a partir del reanálisis histórico ERA5-Land, mientras que en producción infiere a partir de la predicción numérica WRF de MeteoGalicia. La API MeteoSIX v5 ofrece una malla WRF de 1 km, que constituye la fuente preferida, y una malla de 4 km como fallback cuando la primera no está disponible o no supera la validación de cobertura. La rejilla de riesgo continúa siendo de 1 km, pero el manifiesto registra la malla meteorológica efectiva y marca `fresh_fallback` cuando se degrada la resolución. La primera versión archiva el forecast bruto y separa el benchmark ERA5 del rendimiento operativo; no aplica Quantile Mapping sin pares históricos forecast-observación. La cuantificación de la brecha de precisión resultante de este cambio de fuente representa uno de los núcleos de investigación de este trabajo.
 
-### 3.5 Gestión del desbalanceo extremo y calibración no paramétrica de probabilidades
+> Para evitar una fuga temporal adicional, el datacubo retrospectivo y el dataset de entrenamiento operativo se mantienen como productos distintos. El primero conserva las acumulaciones inclusivas para auditoría; el segundo recalcula las memorias meteorológicas con una frontera `target_date - 1 day`, arrastrando el contexto de 30 días entre particiones anuales. La familia operativa de 48 variables y el control alineado de 50 solo se entrenan sobre esta segunda salida. Así, el benchmark `era5_perfect_benchmark` documenta la arquitectura con meteorología histórica conocida, pero no se presenta como una evaluación del error real de MeteoGalicia.
+
+### 3.5 Gestión del desbalanceo extremo y calibración de probabilidades
 *(Justificación técnica para el entrenamiento en escenarios de baja prevalencia)*
-> La probabilidad a priori de ignición diaria en la rejilla de Galicia es extremadamente baja ($\approx 0.0026\%$). Para abordar este desbalanceo sin distorsionar la física del problema, se implementa una estrategia en dos etapas: primero, un submuestreo inteligente de negativos (*Hard Negative Mining*) enfocado en días de alta temperatura sin ignición; segundo, la re-calibración de las salidas del modelo mediante Regresión Isotónica sobre una muestra representativa con prevalencia real. Adicionalmente, la evaluación rechaza el área bajo la curva ROC (ROC-AUC) como métrica única debido a su insensibilidad a falsos positivos en grandes volúmenes de ceros, adoptando la curva Precision-Recall (PR-AUC) y el Recall a un nivel de falsa alarma controlado ($FPR \le 5\%$).
+> La probabilidad a priori de ignición diaria en la rejilla de Galicia es extremadamente baja ($\approx 0.0026\%$). Para abordar este desbalanceo sin distorsionar la física del problema, se implementa una estrategia en dos etapas: primero, se conservan todas las igniciones y se submuestrean negativos de forma determinista; segundo, se corrige el prior de las probabilidades y se calibra sobre un año separado con la prevalencia real. En la familia operativa de 48 variables se utiliza Platt por horizonte, mientras que la familia histórica de 50 mantiene su calibrador isotónico para rollback. Adicionalmente, la evaluación rechaza el área bajo la curva ROC (ROC-AUC) como métrica única debido a su insensibilidad a falsos positivos en grandes volúmenes de ceros, adoptando la curva Precision-Recall (PR-AUC), Brier score y recall con presupuesto espacial.
 
 ### 3.6 Diferenciación metodológica: Predicción de Ignición (Día 0) frente a Simulación de Propagación
 *(Justificación de negocio y prevención de Data Leakage temporal)*
 > El sistema separa intencionadamente la **predicción de ignición (Día 0)** de la **simulación de propagación (fuegos activos en días $T+1$)**. El valor operativo del TFM reside en la **alerta temprana preventiva**: predecir dónde el territorio es vulnerable a una nueva chispa antes de que el fuego ocurra. Clasificar como positivos ($Y=1$) todos los días que un incendio arde de forma continuada introduce un sesgo de fuga de datos (*temporal data leakage*), forzando al modelo a memorizar la regla trivial de que si ayer había fuego en una celda, hoy sigue habiendo riesgo. Predecir exclusivamente el Día 0 elimina esa distorsión y garantiza un modelo limpio centrado en la susceptibilidad ambiental real.
 
-### 3.7 Selección de 20 variables explicativas y principio de parsimonia
+### 3.7 Selección de 48 variables explicativas y principio de parsimonia
 *(Justificación de la reducción de la dimensionalidad frente a datasets como IberFire)*
-> Frente a desarrollos como IberFire, que integra 120 variables en ocho categorías, este proyecto aplica inicialmente el principio de parsimonia con un contrato operativo reducido de características densas organizadas en cuatro bloques físicos: meteorología, memoria de sequedad, topografía/combustibles y contexto humano. Esta compactación facilita la trazabilidad y la inferencia en tiempo real. La reducción no se considera definitiva: los índices de vegetación, FWI, población, accesibilidad y humedad del suelo se mantienen como extensiones que deberán justificar su valor mediante ablation tests y validación temporal.
+> Frente a desarrollos como IberFire, que integra más variables en varias categorías, este proyecto aplica inicialmente el principio de parsimonia con un contrato operativo de 48 características densas organizadas en bloques físicos: meteorología, memoria meteorológica, topografía/combustibles y contexto humano. Esta compactación facilita la trazabilidad y la inferencia en tiempo real. Las variables excluidas del contrato —`precipitation_sum` y `consecutive_dry_days`— permanecen en el datacubo para auditoría, pero no se entregan al modelo. El FWI se conserva como baseline y no como extensión silenciosamente incorporada.
+
+> La comparación de 48 y 50 variables se realiza con un control de 50 alineado temporalmente. Los artefactos de 50 variables entrenados con la semántica histórica anterior se conservan únicamente para rollback/shadow, porque no constituyen una comparación experimental perfectamente pareada.
 
 ---
 
@@ -80,7 +100,7 @@
 
 ### 5.1 Protocolo de Evaluación Temporal y Submuestreo
 *(Descripción de la dividisión train/test por años completos para evitar spatial-temporal leakage)*
-> Con el fin de simular con la máxima fidelidad las condiciones de inferencia operativa en producción, la evaluación empírica rechaza el uso de validación cruzada aleatoria (K-Fold tradicional) y adopta una **división temporal estricta**. Se seleccionan los años 2019 a 2022 para el entrenamiento de los algoritmos y se reserva el año 2023 completo como conjunto de test ciego (out-of-sample). El conjunto de entrenamiento se equilibra mediante un submuestreo controlado de la clase negativa (Hard Negative Mining) en proporción 1:50, preservando el 100% de las igniciones reales registradas en la Estadística General de Incendios Forestales (EGIF).
+> Con el fin de simular con la máxima fidelidad las condiciones de inferencia operativa en producción, la evaluación empírica rechaza el uso de validación cruzada aleatoria (K-Fold tradicional) y adopta una **división temporal estricta**. Para la familia operativa de 48 variables se conservan dos experimentos: el comparable usa 2019–2020 para entrenar, 2021 para calibrar, 2022 para validar y 2023 como test ciego; el ampliado sustituye el entrenamiento por 2016–2020. El conjunto de entrenamiento se equilibra mediante submuestreo controlado de negativos, preservando el 100% de las igniciones EGIF. Las métricas se calculan sobre la población completa.
 
 ### 5.2 Comparativa de Algoritmos Tabulares y Selección del Baseline
 *(Resumen de rendimiento entre Regresión Logística, Random Forest, XGBoost y LightGBM evaluado sobre el año 2023 completo)*
@@ -124,14 +144,19 @@
 > 1. **Resolución Espacial de Alta Definición ($1\text{ km} \times 1\text{ km}$ frente a $10\text{--}25\text{ km}$):** Los índices de AEMET y EFFIS operan sobre una cuadrícula gruesa de $100\text{ a } 625\text{ km²}$ por celda, imposibilitando la asignación eficiente de patrullas a nivel comarcal. Este proyecto predice a una resolución espacial fina de $1000\text{ m} \times 1000\text{ m}$ ($1\text{ km²}$), permitiendo delimitar masas forestales específicas e interfaces urbano-forestales vulnerables.
 > 2. **Filtrado Estricto de Falsas Alarmas ($\text{FPR} \le 5\%$ frente a $70\text{--}80\%$ de FWI):** En situaciones de ola de calor, el índice FWI tradicional clasifica en alerta roja masiva entre el $70\%$ y el $80\%$ de la superficie del noroeste peninsular, provocando la saturación de los centros de mando e inactivando la utilidad práctica de la alerta. El modelo desarrollado restringe la tasa de falsas alarmas al $\le 5\%$, aislando con nitidez el $5\%$ de celdas hiper-vulnerables mientras preserva el $95\%$ del territorio libre de alertas innecesarias.
 
-### 5.7 Arquitectura del Paradigma Híbrido en Producción (Física Determinista + Machine Learning)
-*(Justificación metodológica del filtrado hídrico y las condiciones físicas de extinción)*
-> Para resolver el dilema metodológico entre el entrenamiento puramente estadístico y la física del fuego, el sistema adopta una **arquitectura híbrida de inferencia en dos capas**:
+### 5.7 Separación entre baseline físico y modelo supervisado
+*(Decisión metodológica para no confundir un índice de peligro con una probabilidad de ignición)*
+> El sistema no fija determinísticamente la probabilidad del modelo mediante umbrales de lluvia,
+> humedad o biomasa. El modelo LightGBM aprende la relación estadística entre las variables del
+> contrato y `target_ignicion`, mientras que el Fire Weather Index (FWI) se calcula y presenta
+> como baseline físico independiente. Esta separación permite comparar dos señales con objetivos
+> distintos sin introducir reglas no validadas en la probabilidad calibrada ni presentar el FWI
+> como predictor encubierto.
 >
-> 1. **Capa Determinista Física (Filtros de Extinción Hídrica y Cobertura Vegetal):** En física de incendios, la ignición y propagación son imposibles cuando la humedad del combustible fino supera el umbral de extinción ($MC_{ff} > 30\%$) o cuando la celda carece de combustible vegetativo inflamable ($\text{Biomasa Forestal} < 5\%$). Por consiguiente, si $P_{\text{dia}} \ge 5.0\text{ mm}$, si $\text{Biomasa Forestal} < 5\%$ o si $RH_{\min} \ge 65\% \land P_{\text{dia}} \ge 2\text{ mm}$, la probabilidad se fija determinísticamente en $0.0000$.
-> 2. **Capa Estocástica Supervisada (LightGBM en Condición Seca):** Para las celdas en condición operativa de peligro ($P_{\text{dia}} < 5.0\text{ mm}$), el modelo **LightGBM Standard** evalúa las interacciones no lineales entre las 20 características meteorológicas y topográficas.
->
-> Este paradigma híbrido evita la contaminación del dataset con 18.37 millones de ceros invernales triviales (que habrían diluido el gradiente de entrenamiento en ratio 1:15.000) y garantiza la eliminación de artefactos fuera de rango en producción sin degradar la precisión del modelo en época de alto riesgo.
+> El submuestreo de negativos se aplica únicamente durante el entrenamiento y se corrige en el
+> calibrador. La publicación operativa conserva la población completa, la calidad del forecast y
+> el presupuesto espacial de priorización. Cualquier filtro físico adicional deberá proponerse
+> como una nueva versión, entrenarse y evaluarse temporalmente antes de incorporarse.
 
 ### 5.8 Objetivo preventivo y priorización de recursos públicos
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from src.features.canonical_contract import EGIF_48_FEATURE_CONTRACT_VERSION
+
 
 def render_system_status_tab(
     df_data: pd.DataFrame,
@@ -80,9 +82,21 @@ def render_system_status_tab(
             "feature_schema_version", "desconocido"
         )
         feature_count = len(model_metadata.get("feature_columns", [])) or (
-            50 if feature_version == "egif-2d-v1" else 23
+            48
+            if feature_version == EGIF_48_FEATURE_CONTRACT_VERSION
+            else 50
+            if feature_version == "egif-2d-v1"
+            else 23
         )
         model_family = selected_model.get("model_family", "desconocido") if isinstance(selected_model, dict) else "desconocido"
+        calibration_method = model_metadata.get(
+            "calibration_method",
+            "prior_correction+platt"
+            if feature_version == EGIF_48_FEATURE_CONTRACT_VERSION
+            else "prior_correction+isotonic"
+            if feature_version == "egif-2d-v1"
+            else "legacy",
+        )
         st.markdown("#### Arquitectura y Calibración del Modelo")
         st.markdown(
             f"""
@@ -93,7 +107,7 @@ def render_system_status_tab(
                 </div>
                 <div style="font-size:0.82rem; color:#cbd5e1; line-height:1.6;">
                     <b>Algoritmo Base:</b> LightGBM Classifier (Gradient Boosting Decision Trees)<br/>
-                    <b>Calibración de Probabilidades:</b> Regresión Isotónica (Isotonic Regression sobre año completo)<br/>
+                    <b>Calibración de Probabilidades:</b> <code>{calibration_method}</code><br/>
                     <b>Familia:</b> <code>{model_family}</code><br/>
                     <b>Esquema de Features:</b> <code>{feature_version}</code> ({feature_count} variables)<br/>
                     <b>Estrategia de Validación:</b> Bloques temporales anuales completos (Anti-Data Leakage)<br/>

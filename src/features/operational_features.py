@@ -525,13 +525,13 @@ def build_historical_horizon_dataset(
     *,
     horizons: Iterable[int] = (1, 2, 3),
 ) -> dict[int, pd.DataFrame]:
-    """Construye el benchmark histórico ERA5 para cada horizonte.
+    """Construye el benchmark ERA5-perfect con semántica de día objetivo.
 
-    Este benchmark toma las variables observadas en la fecha de emisión y
-    desplaza la etiqueta al día ``issue_date + h``. Sirve para validar la
-    alineación temporal y el modelo de incendios, pero no debe presentarse como
-    evaluación del error real de MeteoGalicia: no contiene vintages históricos
-    de forecasts.
+    Cada fila contiene la meteorología del propio ``target_date`` y sus
+    memorias previas. La fecha de emisión se reconstruye como
+    ``target_date - horizon``. Es deliberadamente un escenario perfecto: en
+    producción esa meteorología será un forecast y no se dispone de históricos
+    de vintages de MeteoGalicia para medir todavía la degradación del tiempo.
     """
 
     is_canonical = "target_ignicion" in daily_df.columns
@@ -544,27 +544,18 @@ def build_historical_horizon_dataset(
     outputs: dict[int, pd.DataFrame] = {}
     for horizon in sorted(set(int(h) for h in horizons)):
         if is_canonical:
-            # La fila de features representa la fecha de emisión. La etiqueta
-            # se obtiene de la misma celda en issue_date + h; no se reutiliza
-            # silenciosamente el target del propio día para los tres modelos.
+            # La fila representa el día objetivo. En el benchmark ERA5-perfect
+            # sus variables se conocen retrospectivamente; la inferencia
+            # operativa sustituirá exactamente esa fila por el forecast del día
+            # objetivo y conservará las memorias observadas/previstas previas.
             output = data.copy()
-            output["issue_date"] = output["fecha"]
-            output["target_date"] = output["issue_date"] + pd.Timedelta(days=horizon)
-            labels = data[["cell_id", "fecha", "target_ignicion"]].rename(
-                columns={"fecha": "target_date", "target_ignicion": "target_horizon"}
-            )
-            output = output.merge(
-                labels,
-                on=["cell_id", "target_date"],
-                how="left",
-                validate="many_to_one",
-            )
-            output = output.dropna(subset=["target_horizon"]).copy()
-            output["target"] = output["target_horizon"].astype("int8")
+            output["target_date"] = output["fecha"]
+            output["issue_date"] = output["target_date"] - pd.Timedelta(days=horizon)
+            output["target"] = output["target_ignicion"].astype("int8")
             output["target_ignicion"] = output["target"]
             output[f"target_t{horizon}"] = output["target"]
-            output = output.drop(columns=["target_horizon"])
-            output["target_alignment"] = "issue_date_plus_horizon"
+            output["target_alignment"] = "target_day_features_issue_date_minus_horizon"
+            output["weather_benchmark"] = "era5_perfect_benchmark"
         else:
             output = data.copy()
             output["horizon_days"] = horizon

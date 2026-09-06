@@ -17,6 +17,10 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 
+from src.features.canonical_contract import (
+    CANONICAL_FEATURE_SCHEMA_VERSION,
+    EGIF_48_FEATURE_CONTRACT_VERSION,
+)
 from src.operational.artifacts import sha256_file
 
 
@@ -145,15 +149,29 @@ def check_run(
         )
 
     feature_contract = str(payload.get("feature_contract_version", "unknown"))
-    if feature_contract == "egif-2d-v1":
+    if feature_contract in {
+        CANONICAL_FEATURE_SCHEMA_VERSION,
+        EGIF_48_FEATURE_CONTRACT_VERSION,
+    }:
         if int(payload.get("n_cells", 29601)) != 29601:
             raise RuntimeError("El manifest canónico no declara las 29.601 celdas EGIF.")
         models = payload.get("models", {})
         if set(str(key) for key in models) != {"1", "2", "3"}:
             raise RuntimeError("El manifest canónico no contiene los tres modelos por horizonte.")
         for horizon, model in models.items():
-            if model.get("feature_schema_version") != "egif-2d-v1":
-                raise RuntimeError(f"El modelo T+{horizon} no usa egif-2d-v1.")
+            if model.get("feature_schema_version") != feature_contract:
+                raise RuntimeError(
+                    f"El modelo T+{horizon} no usa el contrato {feature_contract}."
+                )
+            metadata = model.get("metadata", {})
+            if isinstance(metadata, dict):
+                declared_columns = metadata.get("feature_columns", [])
+                expected_count = 48 if feature_contract == EGIF_48_FEATURE_CONTRACT_VERSION else 50
+                if len(declared_columns) != expected_count:
+                    raise RuntimeError(
+                        f"El modelo T+{horizon} declara {len(declared_columns)} features; "
+                        f"se esperaban {expected_count}."
+                    )
 
     features_path = payload.get("features_path")
     features_sha = payload.get("features_sha256")

@@ -1,19 +1,51 @@
 # Modelado final: consolidación de los tres análisis independientes
 
 **Sistema de predicción de igniciones forestales en Galicia**
-Fase de modelado · Documento de cierre · 5 de septiembre de 2026
+Fase de modelado · Documento científico y puente operativo · 5 de septiembre de 2026
 
 ---
 
-## Resumen
+## Nota de versionado y alcance operativo
+
+Este documento conserva los resultados retrospectivos obtenidos con el datacubo anterior. No
+deben confundirse con una evaluación de un forecast real. Desde esta versión se separan cuatro
+productos:
+
+| Producto | Uso | Meteorología | Horizonte |
+|---|---|---|---|
+| Modelo retrospectivo de 48 variables | Resultado científico | ERA5 perfecta del día observado | Día histórico |
+| Familia operativa `egif-2d-48-v1` | Producción | Forecast MeteoGalicia WRF | T+1/T+2/T+3 |
+| Control alineado de 50 variables | Comparación científica | ERA5-perfect con memoria T-1 | T+1/T+2/T+3 |
+| Familia `egif-2d-v1` de 50 variables | Rollback/shadow | Forecast compatible | T+1/T+2/T+3 |
+| FWI CEMS | Baseline físico | Copernicus | Diario |
+
+La familia operativa de 48 y el control alineado de 50 se entrenan sobre
+`data/processed/tabular/egif_operational/`, no sobre el Parquet canónico. El
+datacubo canónico conserva acumulaciones inclusivas y se mantiene como fuente
+retrospectiva auditable. La construcción de la capa alineada y los comandos
+exactos están documentados en
+`docs/explanations/implementacion_alineacion_operativa.md`.
+
+El modelo retrospectivo de 48 variables y el nuevo modelo operativo comparten el conjunto de
+predictores, pero no son el mismo artefacto: el primero conoce retrospectivamente la meteorología
+del día objetivo; el segundo debe recibirla de MeteoGalicia. Hasta archivar suficientes parejas
+forecast-observación, el benchmark ERA5 se etiqueta como `era5_perfect_benchmark` y no se presenta
+como rendimiento operativo.
+
+La familia operativa nueva se publicará únicamente cuando existan los tres artefactos y hayan
+pasado el contrato, el backtest temporal y la revisión de calidad. Mientras tanto, el modelo de
+50 variables se conserva como rollback; nunca se mezclan columnas de ambas familias.
+
+## Resumen retrospectivo
 
 Este documento describe el pipeline definitivo de modelado, que consolida en un único punto de
 entrada reproducible los tres análisis que el equipo había realizado por separado sobre el
 dataset EGIF. Sustituye a los estudios previos como referencia para el capítulo de modelado de
 la memoria.
 
-El modelo entregado es un **LightGBM sobre 48 predictores**, entrenado sobre 2016-2020,
-calibrado con regresión de Platt y validado sobre el año 2022 completo sin submuestrear.
+El resultado científico documentado es un **LightGBM retrospectivo sobre 48 predictores**,
+calibrado con regresión de Platt y validado sobre el año 2022 completo sin submuestrear. Sus
+cifras no incluyen el error de un forecast meteorológico real.
 
 | Métrica | Valor |
 |---|---|
@@ -49,9 +81,10 @@ conclusiones parcialmente divergentes. Este trabajo tenía tres objetivos:
    calibración, que producía diferencias de más de seis puntos de recall.
 3. **Cerrar las objeciones metodológicas** pendientes con evidencia medida, no con argumentos.
 
-El resultado es `scripts/pipeline_definitivo.py`: trece etapas que se ejecutan de forma
-ordinaria y producen tanto el modelo de producción como la evidencia que lo respalda, más una
-decimocuarta —el test ciego— que solo se activa a petición expresa.
+El resultado científico es `scripts/pipeline_definitivo.py`, con las etapas que producen el
+modelo retrospectivo y la evidencia que lo respalda. La publicación operativa se realiza con
+`scripts/train_egif_operational.py` y `scripts/run_daily_inference.py`, que mantienen su propia
+familia de artefactos, proveedor meteorológico y manifest.
 
 ---
 
@@ -72,6 +105,10 @@ histórica completa, en formato Parquet particionado por año.
 
 Los 50 predictores se agrupan en cuatro familias temáticas: meteorología (22), topografía (12),
 cobertura del suelo (9) y actividad humana (7).
+
+Este apartado describe el snapshot de 2019–2023 utilizado para los resultados retrospectivos.
+La reconstrucción operativa ampliada incorpora 2016–2018 y vuelve a generar el metadata bajo el
+mismo contrato de 50 columnas del datacubo; la familia operativa selecciona 48 de ellas.
 
 La ausencia de variables de calendario es deliberada y se comprueba en la etapa `contrato`. Un
 modelo que dispusiera de la fecha podría alcanzar buenas métricas globales limitándose a
@@ -148,6 +185,11 @@ La separación es temporal y no aleatoria. Un reparto aleatorio de filas colocar
 consecutivos de la misma ola de calor a ambos lados de la partición, y el modelo obtendría
 métricas excelentes sin haber aprendido nada transferible a un año futuro.
 
+La ejecución operativa conservará dos configuraciones comparables: entrenamiento 2019–2020 y
+entrenamiento ampliado 2016–2020. En ambas, 2021 se reserva para calibración, 2022 para
+validación y 2023 para el test ciego. Las métricas de cada configuración y de cada horizonte se
+guardarán en los JSON de los artefactos, no se sustituirán entre sí.
+
 ### 3.2 Submuestreo de negativos y corrección de prior
 
 Con una prevalencia del 0,0154 %, los días-celda sin ignición son masivamente redundantes. Se
@@ -180,9 +222,11 @@ isotónica a la probabilidad de decisión y por eso se degradaba.
 empates, el orden de las celdas es idéntico antes y después de calibrar, y ranking y probabilidad
 calibrada pasan a ser la misma magnitud. El sistema puede así operar sobre un único número.
 
-El calibrador se ajusta sobre 2021, un año que el modelo no ha visto y con su prevalencia real
-intacta. Ajustarlo dentro de la muestra de entrenamiento reproduciría el sobreajuste en lugar de
-corregirlo.
+En la familia operativa de 48 variables el calibrador se ajusta sobre 2021, un año que el modelo
+no ha visto y con su prevalencia real intacta. El orden es corrección de prior por el submuestreo
+y después Platt. El contrato histórico de 50 variables mantiene su calibrador serializado
+existente (corrección de prior más isotónica) para que el rollback siga siendo reproducible; no
+se debe describir ese artefacto como si utilizara Platt.
 
 ### 3.4 Métricas y por qué estas
 
@@ -204,10 +248,16 @@ responden a la pregunta operativa real.
 
 ---
 
-## 4. El modelo entregado
+## 4. El modelo retrospectivo documentado
 
 **LightGBM sobre 48 de los 50 predictores.** Quedan excluidas `precipitation_sum` y
 `consecutive_dry_days`.
+
+La familia operativa que implementa esta misma decisión se identifica como
+`egif-2d-48-v1` y se serializa separadamente como
+`forecast_risk_egif_48_t1.joblib`, `forecast_risk_egif_48_t2.joblib` y
+`forecast_risk_egif_48_t3.joblib`. Los artefactos `forecast_risk_egif_t*.joblib` pertenecen al
+contrato histórico de 50 variables y solo pueden actuar como rollback/shadow.
 
 ### 4.1 Justificación de la exclusión
 
@@ -232,9 +282,11 @@ qué se descartaron las restantes.
 
 No se realizó búsqueda de hiperparámetros. Dos de los tres análisis previos midieron que el
 ajuste fino aporta menos que el ruido de implementación, por lo que se emplean valores estables
-y se documenta la decisión: 800 árboles como techo, tasa de aprendizaje 0,05, 63 hojas, mínimo
-30 observaciones por hoja, submuestreo de filas y columnas al 80 %, y parada temprana a 50
-rondas sobre el año de calibración.
+y se documenta la decisión: 800 árboles como techo para el pipeline científico, tasa de
+aprendizaje 0,05, 63 hojas, mínimo 30 observaciones por hoja, submuestreo de filas y columnas
+al 80 % y parada temprana a 50 rondas sobre el año de calibración. La familia operativa parte
+de 400 árboles como configuración inicial, no aplica parada temprana sobre el test y nunca
+reentrena durante la inferencia.
 
 Se fija `deterministic` y `force_row_wise` para que la ejecución sea reproducible.
 
@@ -536,6 +588,10 @@ Se enumeran de forma explícita por integridad metodológica:
    temporal sobre varios años reduciría la incertidumbre, a costa de consumir el año reservado.
 8. **Año ciego pequeño.** 2023 es el año más flojo de la serie (530 igniciones), de modo que la
    estimación insesgada que produzca tendrá intervalos más anchos que los de validación.
+9. **Error de forecast aún no medido.** La primera familia operativa se entrena con el benchmark
+   ERA5-perfect porque no existe un archivo histórico de predicciones de MeteoGalicia. Hay que
+   archivar varios meses de pares forecast-observación antes de estimar y corregir el sesgo por
+   variable, estación y horizonte.
 
 ---
 
@@ -563,6 +619,7 @@ interrumpida se retoma donde estaba. Tiempo total aproximado: 30 minutos sobre e
 | `src/entrenamiento/dias_secos.py` | Diagnóstico y reparación de `consecutive_dry_days` |
 | `src/entrenamiento/platt.py` | Calibrador, en módulo propio para que el modelo sea portable |
 | `data/models/modelo_definitivo.pkl` | Modelo, calibrador, variables y configuración |
+| `data/models/forecast_risk_egif_48_t*.joblib` | Familia operativa EGIF 48 por horizonte |
 | `docs/technical/pipeline_*.csv` | Una tabla por etapa |
 | `docs/technical/importancia_permutacion.csv` | Importancia de las 48 variables |
 | `docs/technical/errores_por_mes.csv` | Recall mensual |

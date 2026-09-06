@@ -223,7 +223,20 @@ fi
 
 # Mantener modos y timestamps, pero no propagar UID/GID del ordenador local.
 # Es especialmente importante cuando el rsync remoto se ejecuta mediante sudo.
-RSYNC_ARGS=(-a --no-owner --no-group --human-readable --partial --progress --itemize-changes)
+# Los parciales se guardan en un directorio oculto y las actualizaciones se
+# publican al final. Así, una interrupción no deja un Parquet incompleto con
+# el nombre definitivo que pudiera ser leído por la inferencia.
+RSYNC_ARGS=(
+  -a
+  --no-owner
+  --no-group
+  --human-readable
+  --partial
+  --partial-dir=.rsync-partial
+  --delay-updates
+  --progress
+  --itemize-changes
+)
 [[ "$DELETE_REMOTE" -eq 1 ]] && RSYNC_ARGS+=(--delete)
 [[ "$CHECKSUM" -eq 1 ]] && RSYNC_ARGS+=(--checksum)
 [[ "$DRY_RUN" -eq 1 ]] && RSYNC_ARGS+=(--dry-run)
@@ -254,4 +267,6 @@ sync_file() {
   sync_file "$GRID_PATH" "$REMOTE_BASE/processed/grid"
 
 echo "Sincronización finalizada."
-[[ "$DRY_RUN" -eq 1 ]] && echo "Modo dry-run: no se modificó el servidor."
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "Modo dry-run: no se modificó el servidor."
+fi

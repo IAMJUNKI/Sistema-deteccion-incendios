@@ -1,5 +1,49 @@
 # Despliegue del pipeline en un servidor
 
+> **Actualización 2026-09-05:** la familia recomendada para la nueva publicación es
+> `egif-2d-48-v1` (`forecast_risk_egif_48_t1/t2/t3.joblib`). Las referencias a
+> `forecast_risk_egif_t*.joblib` en las secciones de rollback describen la familia histórica de
+> 50 variables y no deben mezclarse con la de 48.
+
+## Anexo: publicación de la familia operativa de 48 variables
+
+Entrena los tres artefactos fuera del servidor de inferencia (o en una máquina con suficiente
+RAM) y sincroniza el conjunto completo de archivos `.joblib` y `.json` de una sola familia. Para
+la familia nueva:
+
+```bash
+PYTHONPATH=. python scripts/train_egif_operational.py \
+  --dataset-dir data/processed/tabular/egif \
+  --output-dir data/models \
+  --feature-contract-version egif-2d-48-v1 \
+  --train-years 2016-2020 \
+  --calibration-year 2021 \
+  --validation-year 2022 \
+  --test-years 2023
+```
+
+Antes de copiar, deben existir exactamente estos tres artefactos y sus metadatos:
+
+```text
+forecast_risk_egif_48_t1.joblib / .json
+forecast_risk_egif_48_t2.joblib / .json
+forecast_risk_egif_48_t3.joblib / .json
+```
+
+En el servidor se puede seleccionar explícitamente la familia con:
+
+```text
+FORECAST_MODEL_FAMILY=egif_48
+```
+
+Para una transición conservadora, `SHADOW_50_MODEL=true` ejecuta también los artefactos
+`forecast_risk_egif_t*.joblib` de 50 variables y registra la diferencia de ranking sin sustituir
+el mapa principal. La promoción debe hacerse solo después de comparar el manifest, las métricas
+y el comportamiento con forecast fresco, fallback y stale.
+
+El health check reconoce los contratos `egif-2d-48-v1` y `egif-2d-v1`, comprueba respectivamente
+48 y 50 columnas y rechaza un manifest cuyos tres modelos no compartan familia y contrato.
+
 ## 1. Objetivo
 
 Este documento explica cómo desplegar el sistema de predicción de peligro de
@@ -243,12 +287,12 @@ La estructura esperada es:
 │   ├── predicciones_operativas.json
 │   └── predicciones_operativas.manifest.json
 └── models/
-    ├── forecast_risk_egif_t1.joblib
-    ├── forecast_risk_egif_t1.json
-    ├── forecast_risk_egif_t2.joblib
-    ├── forecast_risk_egif_t2.json
-    ├── forecast_risk_egif_t3.joblib
-    └── forecast_risk_egif_t3.json
+    ├── forecast_risk_egif_48_t1.joblib
+    ├── forecast_risk_egif_48_t1.json
+    ├── forecast_risk_egif_48_t2.joblib
+    ├── forecast_risk_egif_48_t2.json
+    ├── forecast_risk_egif_48_t3.joblib
+    └── forecast_risk_egif_48_t3.json
 ~~~
 
 Los archivos de datos y modelos no se deben almacenar en Git.
@@ -304,10 +348,11 @@ PREDICTIONS_OUTPUT_PATH=/srv/fire-risk/data/processed/predicciones_operativas.pa
 PREDICTIONS_MANIFEST_PATH=/srv/fire-risk/data/processed/predicciones_operativas.manifest.json
 GRID_PATH=/srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet
 MODEL_DIR=/srv/fire-risk/data/models
-FORECAST_MODEL_FAMILY=canonical
+FORECAST_MODEL_FAMILY=egif_48
 EGIF_DATASET_DIR=/srv/fire-risk/data/external/egif
 CANONICAL_GRID_CELLS=29601
-SHADOW_LEGACY_MODEL=true
+SHADOW_50_MODEL=true
+SHADOW_LEGACY_MODEL=false
 ~~~
 
 El archivo real no debe aparecer en logs, backups públicos, tickets ni
@@ -411,12 +456,12 @@ El entrenamiento recorre por lotes y no debe ejecutarse durante la inferencia.
 Como alternativa se copian los tres artefactos y sus JSON:
 
 ~~~bash
-sudo -u fire-risk cp forecast_risk_egif_t1.joblib /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_egif_t1.json /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_egif_t2.joblib /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_egif_t2.json /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_egif_t3.joblib /srv/fire-risk/data/models/
-sudo -u fire-risk cp forecast_risk_egif_t3.json /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_48_t1.joblib /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_48_t1.json /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_48_t2.joblib /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_48_t2.json /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_48_t3.joblib /srv/fire-risk/data/models/
+sudo -u fire-risk cp forecast_risk_egif_48_t3.json /srv/fire-risk/data/models/
 ~~~
 
 No se debe mezclar T+1, T+2 y T+3 de releases incompatibles. La inferencia y el
@@ -963,7 +1008,7 @@ preferibles por dependencias, estado y logs.
 
 - [ ] rejilla leíble;
 - [ ] tres modelos presentes;
-- [ ] modelos compatibles con egif-2d-v1 y 50 variables;
+- [ ] modelo operativo `egif-2d-48-v1` validado y familia histórica de 50 disponible para rollback;
 - [ ] rejilla canónica con 29.601 celdas y estáticas completas;
 - [ ] estado con 30 días por celda;
 - [ ] forecasts raw y processed tienen retención;

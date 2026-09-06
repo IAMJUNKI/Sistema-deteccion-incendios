@@ -1,9 +1,11 @@
 """Entrenamiento y carga de modelos de riesgo por horizonte.
 
 Cada horizonte diario tiene su propio modelo y calibrador. El modelo base se
-entrena con un muestreo de negativos para hacer viable el problema; el
-calibrador isotónico se ajusta sobre el año de validación completo, preservando
-la prevalencia real antes de exponer ``prob_risk`` en producción.
+entrena con un muestreo de negativos para hacer viable el problema. La familia
+operativa de 48 variables aplica corrección de prior y Platt sobre un año de
+calibración separado; la familia histórica de 50 conserva su calibrador
+isotónico para rollback. En ambos casos se preserva la prevalencia real antes
+de exponer ``prob_risk`` en producción.
 """
 
 from __future__ import annotations
@@ -23,8 +25,14 @@ from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_s
 
 from src.features.canonical_contract import (
     CANONICAL_FEATURE_SCHEMA_VERSION,
-    ensure_canonical_matrix,
-    load_feature_columns,
+    EGIF_48_FEATURE_CONTRACT_VERSION,
+    ensure_feature_matrix_for_contract,
+    load_feature_columns_for_contract,
+    validate_feature_contract,
+)
+from src.features.operational_benchmark import (
+    OPERATIONAL_ALIGNMENT_VERSION,
+    OPERATIONAL_TEMPORAL_SEMANTICS,
 )
 from src.features.operational_features import OPERATIONAL_FEATURES, ensure_feature_matrix
 
@@ -62,8 +70,13 @@ class ForecastRiskModel:
             "feature_schema_version",
             self.metadata.get("feature_schema_version", FEATURE_SCHEMA_VERSION),
         )
-        if schema_version == CANONICAL_FEATURE_SCHEMA_VERSION:
-            matrix = ensure_canonical_matrix(features, self.feature_columns)
+        if schema_version in {
+            CANONICAL_FEATURE_SCHEMA_VERSION,
+            EGIF_48_FEATURE_CONTRACT_VERSION,
+        }:
+            matrix = ensure_feature_matrix_for_contract(
+                features, self.feature_columns, schema_version
+            )
         else:
             matrix = ensure_feature_matrix(features, self.feature_columns)
         raw = self.base_model.predict_proba(matrix)[:, 1]
@@ -233,16 +246,33 @@ def load_horizon_model(
 
     directory = Path(model_dir)
     requested_family = (model_family or os.getenv("FORECAST_MODEL_FAMILY", "auto")).strip().lower()
+    egif48_path = directory / f"forecast_risk_egif_48_t{horizon_days}.joblib"
     canonical_path = directory / f"forecast_risk_egif_t{horizon_days}.joblib"
     legacy_path = directory / f"forecast_risk_t{horizon_days}.joblib"
-    if requested_family not in {"auto", "canonical", "legacy"}:
-        raise ValueError("FORECAST_MODEL_FAMILY debe ser auto, canonical o legacy.")
-    if requested_family == "canonical":
+    aliases = {
+        "48": "egif_48",
+        "egif48": "egif_48",
+        "egif-48": "egif_48",
+        "egif-2d-48": "egif_48",
+        EGIF_48_FEATURE_CONTRACT_VERSION: "egif_48",
+        "50": "canonical",
+        "egif50": "canonical",
+        "egif_50": "canonical",
+        "egif-2d": "canonical",
+    }
+    requested_family = aliases.get(requested_family, requested_family)
+    if requested_family not in {"auto", "egif_48", "canonical", "legacy"}:
+        raise ValueError(
+            "FORECAST_MODEL_FAMILY debe ser auto, egif_48, canonical o legacy."
+        )
+    if requested_family == "egif_48":
+        candidates = [egif48_path]
+    elif requested_family == "canonical":
         candidates = [canonical_path]
     elif requested_family == "legacy":
         candidates = [legacy_path]
     else:
-        candidates = [canonical_path, legacy_path]
+        candidates = [egif48_path, canonical_path, legacy_path]
     path = next((candidate for candidate in candidates if candidate.exists()), None)
     if path is None:
         raise FileNotFoundError(
@@ -266,13 +296,28 @@ def load_horizon_model(
     declared_schema = artifact.metadata.get("feature_schema_version", schema_version)
     if schema_version != declared_schema:
         raise ValueError(f"El artefacto {path} declara dos esquemas de features distintos.")
-    if schema_version == CANONICAL_FEATURE_SCHEMA_VERSION:
-        expected = load_feature_columns(os.getenv("EGIF_DATASET_DIR"))
+    if schema_version in {
+        CANONICAL_FEATURE_SCHEMA_VERSION,
+        EGIF_48_FEATURE_CONTRACT_VERSION,
+    }:
+        expected = load_feature_columns_for_contract(
+            schema_version, os.getenv("EGIF_DATASET_DIR")
+        )
+        validate_feature_contract(artifact.feature_columns, schema_version)
         if artifact.feature_columns != expected:
             raise ValueError(
-                f"El artefacto {path} no coincide con el contrato canónico "
-                f"{CANONICAL_FEATURE_SCHEMA_VERSION}."
+                f"El artefacto {path} no coincide con el contrato {schema_version}."
             )
+        if schema_version == EGIF_48_FEATURE_CONTRACT_VERSION:
+            if artifact.metadata.get("alignment_version") != OPERATIONAL_ALIGNMENT_VERSION:
+                raise ValueError(
+                    f"El artefacto {path} no declara la alineación temporal "
+                    f"{OPERATIONAL_ALIGNMENT_VERSION}."
+                )
+            if artifact.metadata.get("training_temporal_semantics") != OPERATIONAL_TEMPORAL_SEMANTICS:
+                raise ValueError(
+                    f"El artefacto {path} no declara la semántica temporal operativa esperada."
+                )
     elif schema_version == FEATURE_SCHEMA_VERSION:
         if artifact.feature_columns != list(OPERATIONAL_FEATURES):
             raise ValueError(

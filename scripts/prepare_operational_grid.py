@@ -10,6 +10,7 @@ usa el Parquet EGIF y evita mezclarla con la rejilla legacy de 30.697 celdas.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from pathlib import Path
 
@@ -17,7 +18,9 @@ import numpy as np
 import xarray as xr
 
 from src.features.canonical_contract import CANONICAL_FEATURES, CANONICAL_WEATHER_FEATURES
-from src.geospatial.grid import crear_rejilla_vectorial
+from src.geospatial.grid import DEFAULT_CRS, crear_rejilla_vectorial
+
+logger = logging.getLogger(__name__)
 
 
 def prepare_operational_grid(
@@ -25,14 +28,27 @@ def prepare_operational_grid(
     output_path: str | Path,
     *,
     cell_size_meters: float = 1000.0,
+    crs: str | None = None,
 ) -> Path:
-    """Exporta la máscara activa, geometría y estáticas del datacubo EGIF."""
+    """Exporta la máscara activa, geometría y estáticas del datacubo EGIF.
+
+    Algunos NetCDF compartidos por el equipo no conservan el atributo global
+    ``crs``. En ese caso se utiliza el CRS canónico del módulo de rejilla
+    (EPSG:3035), salvo que el llamador proporcione otro mediante ``crs``.
+    """
 
     with xr.open_dataset(cube_path) as cube:
         if "is_galicia" not in cube:
             raise ValueError("El NetCDF no contiene la máscara is_galicia.")
         if not {"x", "y"}.issubset(cube.dims):
             raise ValueError("El NetCDF no contiene dimensiones espaciales x/y.")
+        cube_crs = str(cube.attrs.get("crs") or crs or DEFAULT_CRS)
+        if "crs" not in cube.attrs and crs is None:
+            logger.warning(
+                "El NetCDF no tiene atributo crs; se aplica el CRS canónico %s.",
+                DEFAULT_CRS,
+            )
+        cube.attrs["crs"] = cube_crs
         grid = crear_rejilla_vectorial(cube, cell_size_meters)
         active = grid["is_galicia"].eq(1).to_numpy()
         static_columns = sorted(
@@ -51,9 +67,13 @@ def prepare_operational_grid(
             grid[column] = values.ravel().astype("float32")
 
     result = grid.loc[active].copy()
+    # Los centroides se calculan en el CRS proyectado, donde las celdas están
+    # definidas en metros, y sólo después se transforman para la consulta de
+    # proveedores meteorológicos y la visualización.
+    centroids_wgs84 = result.geometry.centroid.to_crs("EPSG:4326")
     result = result.to_crs("EPSG:4326")
-    result["lat_centroid"] = result.geometry.centroid.y.astype("float64")
-    result["lon_centroid"] = result.geometry.centroid.x.astype("float64")
+    result["lat_centroid"] = centroids_wgs84.y.astype("float64")
+    result["lon_centroid"] = centroids_wgs84.x.astype("float64")
     result = result.drop(columns=["x", "y"], errors="ignore")
     expected = int(os.getenv("CANONICAL_GRID_CELLS", "29601"))
     if len(result) != expected:
@@ -75,8 +95,16 @@ def main() -> None:
         type=Path,
         default=Path("data/processed/grid/galicia_grid_1km_egif.parquet"),
     )
+    parser.add_argument(
+        "--crs",
+        default=None,
+        help=(
+            "CRS del NetCDF si falta el atributo global (por defecto: "
+            f"{DEFAULT_CRS})."
+        ),
+    )
     args = parser.parse_args()
-    destination = prepare_operational_grid(args.cube, args.output)
+    destination = prepare_operational_grid(args.cube, args.output, crs=args.crs)
     print(f"Rejilla EGIF operativa guardada en {destination}")
 
 

@@ -15,7 +15,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# ``egif-2d-v1`` es el contrato histórico de 50 variables. Se mantiene
+# congelado porque los artefactos ya entrenados lo necesitan para rollback.
 CANONICAL_FEATURE_SCHEMA_VERSION = "egif-2d-v1"
+EGIF_48_FEATURE_CONTRACT_VERSION = "egif-2d-48-v1"
 TARGET_COLUMN = "target_ignicion"
 
 # Lista publicada por el metadata.json del datacubo EGIF recibido. Se conserva
@@ -78,6 +81,16 @@ DEFAULT_CANONICAL_FEATURES = (
 # La fuente normativa sigue siendo ``DEFAULT_CANONICAL_FEATURES`` y el
 # ``metadata.json`` del datacubo cuando está disponible.
 CANONICAL_FEATURES = DEFAULT_CANONICAL_FEATURES
+
+# Contrato operativo que se entrenará con el modelo 2D revisado. Las dos
+# variables retiradas son derivadas de la misma señal de precipitación y de la
+# racha seca; mantenerlas junto con las memorias de precipitación introducía
+# duplicación y hacía que el contrato documentado no coincidiera con el
+# artefacto operativo.
+EGIF_48_EXCLUDED_FEATURES = frozenset({"precipitation_sum", "consecutive_dry_days"})
+EGIF_48_FEATURES = tuple(
+    column for column in DEFAULT_CANONICAL_FEATURES if column not in EGIF_48_EXCLUDED_FEATURES
+)
 
 CANONICAL_WEATHER_FEATURES = (
     "temperature_mean",
@@ -163,6 +176,54 @@ def load_feature_columns(dataset_dir: str | Path | None = None) -> list[str]:
     return sorted(columns)
 
 
+def load_feature_columns_for_contract(
+    contract_version: str,
+    dataset_dir: str | Path | None = None,
+) -> list[str]:
+    """Devuelve la lista ordenada de predictores de una versión concreta.
+
+    El datacubo publica 50 columnas porque también conserva ``precipitation_sum``
+    y ``consecutive_dry_days`` para auditoría. La familia de 48 deriva su lista
+    de ese contrato, pero nunca modifica el metadata del cubo ni acepta una
+    lista arbitraria desde el entorno.
+    """
+
+    if contract_version == CANONICAL_FEATURE_SCHEMA_VERSION:
+        return load_feature_columns(dataset_dir)
+    if contract_version != EGIF_48_FEATURE_CONTRACT_VERSION:
+        raise ValueError(f"Contrato de features no soportado: {contract_version}")
+    canonical = load_feature_columns(dataset_dir)
+    result = [column for column in canonical if column not in EGIF_48_EXCLUDED_FEATURES]
+    if len(result) != 48:
+        raise ValueError(
+            "El contrato EGIF de 48 variables requiere exactamente 48 predictores; "
+            f"se obtuvieron {len(result)}."
+        )
+    return result
+
+
+def validate_feature_contract(
+    feature_columns: Iterable[str],
+    contract_version: str,
+) -> None:
+    """Comprueba número, conjunto y orden del contrato serializado."""
+
+    expected = load_feature_columns_for_contract(contract_version)
+    actual = list(feature_columns)
+    if actual != expected:
+        missing = sorted(set(expected) - set(actual))
+        extra = sorted(set(actual) - set(expected))
+        raise ValueError(
+            f"El artefacto no coincide con {contract_version}: "
+            f"n={len(actual)} (esperado {len(expected)}), faltan={missing}, extras={extra}."
+        )
+    forbidden = sorted(set(actual) & {"fire_weather_index", *EGIF_48_EXCLUDED_FEATURES})
+    if contract_version == EGIF_48_FEATURE_CONTRACT_VERSION and forbidden:
+        raise ValueError(
+            f"El contrato {contract_version} contiene predictores prohibidos: {forbidden}"
+        )
+
+
 def validate_feature_columns(
     frame: pd.DataFrame,
     feature_columns: Iterable[str] = DEFAULT_CANONICAL_FEATURES,
@@ -197,4 +258,20 @@ def ensure_canonical_matrix(
     validate_feature_columns(frame, columns)
     matrix = frame[columns].copy()
     matrix = matrix.apply(pd.to_numeric, errors="coerce")
+    return matrix.replace([np.inf, -np.inf], np.nan)
+
+
+def ensure_feature_matrix_for_contract(
+    frame: pd.DataFrame,
+    feature_columns: Iterable[str],
+    contract_version: str,
+) -> pd.DataFrame:
+    """Construye una matriz numérica únicamente para el contrato declarado."""
+
+    validate_feature_contract(feature_columns, contract_version)
+    expected = list(feature_columns)
+    missing = sorted(set(expected) - set(frame.columns))
+    if missing:
+        raise ValueError(f"Faltan features de {contract_version}: {missing}")
+    matrix = frame[expected].apply(pd.to_numeric, errors="coerce")
     return matrix.replace([np.inf, -np.inf], np.nan)

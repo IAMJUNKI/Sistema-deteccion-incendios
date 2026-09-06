@@ -26,6 +26,7 @@ import logging
 from typing import Optional
 
 import numpy as np
+from sklearn.linear_model import LogisticRegression
 from sklearn.isotonic import IsotonicRegression
 
 logger = logging.getLogger(__name__)
@@ -150,6 +151,77 @@ class ProbabilityCalibrator:
     def __repr__(self) -> str:
         estado = "ajustado" if self.isotonic is not None else "solo corrección de prior"
         return f"ProbabilityCalibrator(neg_sampling_rate={self.neg_sampling_rate:.6f}, {estado})"
+
+
+class PlattProbabilityCalibrator:
+    """Corrección de prior seguida de calibración logística (Platt scaling).
+
+    Se ajusta sobre un año separado y conserva la prevalencia real mediante
+    pesos cuando el año de calibración se reduce para controlar memoria. El
+    predictor de la regresión es el logit de la probabilidad corregida, que
+    permite que Platt aprenda simultáneamente escala y desplazamiento sin
+    perder la corrección de prevalencia introducida por el muestreo.
+    """
+
+    def __init__(self, neg_sampling_rate: float, max_fit_points: int = 2_000_000):
+        self.neg_sampling_rate = float(neg_sampling_rate)
+        self.max_fit_points = int(max_fit_points)
+        self.platt: LogisticRegression | None = None
+
+    @staticmethod
+    def _logit(values: np.ndarray) -> np.ndarray:
+        clipped = np.clip(np.asarray(values, dtype=float), 1e-12, 1.0 - 1e-12)
+        return np.log(clipped / (1.0 - clipped))
+
+    @staticmethod
+    def _sigmoid(values: np.ndarray) -> np.ndarray:
+        values = np.clip(np.asarray(values, dtype=float), -50.0, 50.0)
+        return 1.0 / (1.0 + np.exp(-values))
+
+    def fit(
+        self,
+        y_calibration: np.ndarray,
+        p_calibration: np.ndarray,
+        seed: int = 42,
+    ) -> "PlattProbabilityCalibrator":
+        y = np.asarray(y_calibration).astype(np.int8)
+        p = prior_correction(p_calibration, self.neg_sampling_rate)
+        positives = np.flatnonzero(y == 1)
+        negatives = np.flatnonzero(y == 0)
+        if len(positives) == 0 or len(negatives) == 0:
+            self.platt = None
+            return self
+
+        if len(y) > self.max_fit_points:
+            rng = np.random.default_rng(seed)
+            negative_count = min(self.max_fit_points - len(positives), len(negatives))
+            negative_count = max(negative_count, 1)
+            selected_negatives = rng.choice(negatives, size=negative_count, replace=False)
+            indices = np.concatenate([positives, selected_negatives])
+            weights = np.concatenate(
+                [np.ones(len(positives)), np.full(len(selected_negatives), len(negatives) / negative_count)]
+            )
+        else:
+            indices = np.arange(len(y))
+            weights = np.ones(len(y))
+
+        self.platt = LogisticRegression(
+            solver="lbfgs",
+            random_state=seed,
+            max_iter=200,
+        )
+        self.platt.fit(self._logit(p[indices]).reshape(-1, 1), y[indices], sample_weight=weights)
+        return self
+
+    def transform(self, y_prob: np.ndarray) -> np.ndarray:
+        p = prior_correction(y_prob, self.neg_sampling_rate)
+        if self.platt is None:
+            return p
+        return self.platt.predict_proba(self._logit(p).reshape(-1, 1))[:, 1]
+
+    def __repr__(self) -> str:
+        state = "ajustado" if self.platt is not None else "solo corrección de prior"
+        return f"PlattProbabilityCalibrator(neg_sampling_rate={self.neg_sampling_rate:.6f}, {state})"
 
 
 def risk_levels(

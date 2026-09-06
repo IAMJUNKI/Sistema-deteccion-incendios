@@ -22,16 +22,33 @@
 
 - `FORECAST_PROVIDER` en `.env`: `meteogalicia`, `aemet` o `auto`.
 - `METEOGALICIA_API_KEY` o `AEMET_API_KEY`, según el proveedor seleccionado.
-- Tres modelos serializados `forecast_risk_t1.joblib`, `forecast_risk_t2.joblib` y `forecast_risk_t3.joblib` en `data/models/`.
+- Tres modelos serializados por horizonte en `data/models/`. La familia
+  preferente es `forecast_risk_egif_48_t1/t2/t3.joblib`; los artefactos de 50
+  variables y legacy permanecen disponibles para rollback/shadow.
 - Estado meteorológico reciente con 30 días completos por celda en
   `data/processed/state/weather_daily_state.parquet`.
 
 ## Ejecución
 
-Entrenar los modelos offline:
+Antes de entrenar el modelo operativo, generar la exportación histórica alineada:
 
 ```bash
-PYTHONPATH=. python scripts/train_forecast_models.py
+PYTHONPATH=. python scripts/build_operational_benchmark.py \
+  --source-dir data/processed/tabular/egif \
+  --output-dir data/processed/tabular/egif_operational \
+  --years 2016-2023
+```
+
+Entrenar los modelos offline (después de construir la salida alineada):
+
+```bash
+PYTHONPATH=. python scripts/train_egif_operational.py \
+  --dataset-dir data/processed/tabular/egif_operational \
+  --output-dir data/models \
+  --feature-contract-version egif-2d-48-v1 \
+  --train-years 2019-2020 --calibration-year 2021 \
+  --validation-year 2022 --test-years 2023 \
+  --experiment-name comparable
 ```
 
 Generar el forecast operativo y los tres mapas:

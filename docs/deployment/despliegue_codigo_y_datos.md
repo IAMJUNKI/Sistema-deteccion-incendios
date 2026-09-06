@@ -235,6 +235,12 @@ El script:
 9. cambia app sólo después de superar las validaciones;
 10. escribe config/current_release.json.
 
+El repositorio puede contener un directorio `data` con `.gitkeep`, metadatos o
+ficheros pequeños versionados. Antes de activar la release, ese directorio se
+elimina únicamente dentro de la carpeta temporal recién descargada y se
+sustituye por un enlace a `/srv/fire-risk/data`. El almacenamiento persistente
+nunca se elimina ni se sobrescribe durante este paso.
+
 Si falla una validación, se conserva la release activa anterior y se elimina sólo
 la carpeta temporal de la operación fallida.
 
@@ -352,10 +358,27 @@ Por defecto sincroniza:
 | data/processed/grid/galicia_grid_1km_egif.parquet | processed/grid/ | rejilla canónica |
 
 Rsync es incremental: una segunda ejecución no vuelve a copiar archivos cuyo
-tamaño y fecha no han cambiado. --partial permite continuar una transferencia
-interrumpida. El script no propaga UID/GID del ordenador local; la propiedad
-queda controlada por el servidor. No se utiliza --delete por defecto; así, un
-error local no borra un artefacto válido del servidor.
+tamaño y fecha no han cambiado. La primera copia, sin embargo, está limitada por
+el ancho de banda disponible. `--partial` y `--partial-dir=.rsync-partial`
+permiten continuar una transferencia interrumpida; `--delay-updates` evita que
+un fichero incompleto aparezca con su nombre final mientras se está copiando.
+El script no propaga UID/GID del ordenador local; la propiedad queda controlada
+por el servidor. No se utiliza `--delete` por defecto; así, un error local no
+borra un artefacto válido del servidor.
+
+Para poner en marcha inferencia no es necesario transferir todo el datacubo
+histórico. La rejilla y los modelos son los artefactos operativos mínimos:
+
+~~~bash
+make deploy-runtime
+~~~
+
+El dataset EGIF completo puede transferirse después para entrenamiento o
+auditoría:
+
+~~~bash
+make deploy-dataset
+~~~
 
 Utilizar --checksum sólo para verificaciones periódicas o después de una copia
 de seguridad. En datasets de varios gigabytes obliga a leer todos los archivos

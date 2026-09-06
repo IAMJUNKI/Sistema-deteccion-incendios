@@ -20,6 +20,11 @@ CEMS/EFFIS.
 Consulta [las variables](docs/variables.md) y la guía para
 [ejecutar el pipeline](docs/ejecutar_pipeline.md).
 
+Para entrenamiento operativo se genera además una exportación alineada en
+`data/processed/tabular/egif_operational/`. Esta copia recalcula las memorias
+meteorológicas hasta el día anterior y no sustituye al datacubo histórico.
+Consulta la [documentación de alineación y modelos operativos](docs/explanations/implementacion_alineacion_operativa.md).
+
 Para desplegar el código por releases y transferir datasets/modelos pesados sin
 subirlos a GitHub, consulta
 [despliegue de código y datos](docs/deployment/despliegue_codigo_y_datos.md).
