@@ -69,6 +69,14 @@ Por tanto, una fila AEMET descargada posteriormente no sustituye una fila
 MeteoGalicia válida para la misma celda y fecha. El timestamp
 `state_as_of` solo decide entre filas de la misma prioridad.
 
+La ingesta también aplica dos protecciones de integridad. Si el Parquet de
+estado ya existe pero no se puede leer, la ejecución termina sin escribir un
+estado parcial. Si una combinación de filas produjese menos historia que la
+retenida actualmente, el upsert se cancela. Estas comprobaciones son
+importantes porque el estado es una entrada de seguridad para las memorias de
+30 días: ante un error de lectura o de fusión se debe fallar cerradamente, no
+publicar cinco días como si fueran un estado completo.
+
 ## Unidades versionadas
 
 Las plantillas se encuentran en `deploy/systemd/` y se instalan con:

@@ -56,6 +56,15 @@ METEOGALICIA_SOURCES = {"meteogalicia_ema_idw", "meteogalicia_ema"}
 def _read_optional_parquet(path: Path) -> pd.DataFrame | None:
     if not path.exists():
         return None
+    try:
+        return pd.read_parquet(path)
+    except (OSError, ValueError) as exc:
+        # Never continue with ``None`` when the state exists: doing so would
+        # allow a five-day MeteoGalicia download to overwrite a valid 30-day
+        # operational history.
+        raise MeteoGaliciaObservationError(
+            f"No se pudo leer el Parquet existente {path}; se cancela la ingesta para no perder estado."
+        ) from exc
 
 
 def _latest_meteogalicia_date(state: pd.DataFrame | None) -> object | None:
@@ -76,15 +85,6 @@ def _latest_meteogalicia_date(state: pd.DataFrame | None) -> object | None:
         return None
     dates = pd.to_datetime(meteogalicia["fecha"], errors="coerce").dropna()
     return dates.max().date() if not dates.empty else None
-    try:
-        return pd.read_parquet(path)
-    except (OSError, ValueError) as exc:
-        # Never continue with ``None`` when the state exists: doing so would
-        # allow a five-day MeteoGalicia download to overwrite a valid 30-day
-        # operational history.
-        raise MeteoGaliciaObservationError(
-            f"No se pudo leer el Parquet existente {path}; se cancela la ingesta para no perder estado."
-        ) from exc
 
 
 def parse_args() -> argparse.Namespace:

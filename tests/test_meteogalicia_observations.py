@@ -16,7 +16,10 @@ from src.ingestion.meteogalicia_observations import (
     normalise_meteogalicia_daily_payload,
     utm29n_to_wgs84,
 )
-from scripts.ingest_meteogalicia_observations import _latest_meteogalicia_date
+from scripts.ingest_meteogalicia_observations import (
+    _latest_meteogalicia_date,
+    _read_optional_parquet,
+)
 from src.ingestion.weather_state import merge_weather_state
 
 
@@ -312,6 +315,18 @@ def test_meteogalicia_backfill_ignores_newer_aemet_date():
     )
 
     assert _latest_meteogalicia_date(state) == pd.Timestamp("2026-09-04").date()
+
+
+def test_meteogalicia_reads_existing_state_instead_of_treating_it_as_empty(tmp_path):
+    """Un Parquet existente se carga; no se interpreta como estado ausente."""
+    path = tmp_path / "state.parquet"
+    expected = pd.DataFrame({"cell_id": [1], "fecha": [pd.Timestamp("2026-09-05")]})
+    expected.to_parquet(path, index=False)
+
+    loaded = _read_optional_parquet(path)
+
+    assert loaded is not None
+    pd.testing.assert_frame_equal(loaded, expected)
 
 
 def test_weather_state_merge_preserves_retained_history():
