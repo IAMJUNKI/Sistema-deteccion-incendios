@@ -1,0 +1,11 @@
+[Unit]
+Description=Reconciliación diaria del estado meteorológico AEMET
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+AccuracySec=1min
+Unit=fire-risk-state.service
+
+[Install]
+WantedBy=timers.target

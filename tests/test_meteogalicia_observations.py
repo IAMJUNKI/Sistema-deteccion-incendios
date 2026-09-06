@@ -16,6 +16,7 @@ from src.ingestion.meteogalicia_observations import (
     normalise_meteogalicia_daily_payload,
     utm29n_to_wgs84,
 )
+from scripts.ingest_meteogalicia_observations import _latest_meteogalicia_date
 from src.ingestion.weather_state import merge_weather_state
 
 
@@ -258,3 +259,56 @@ def test_integration_with_weather_state_merge():
     assert "source" in merged.columns
     assert (merged["source"] == "meteogalicia_ema_idw").all()
     assert (merged["coverage_hours"] == 24.0).all()
+
+
+def test_weather_state_source_priority_prevents_aemet_overwriting_meteogalicia():
+    """Una actualización posterior de AEMET no desplaza la fuente primaria EMA."""
+    base = {
+        "cell_id": ["c1"],
+        "fecha": [pd.Timestamp("2026-09-05")],
+        "tmax_vc": [20.0],
+        "rhmin_vc": [60.0],
+        "vmax_vc": [10.0],
+        "prec_dia": [1.0],
+        "vpd_vc": [0.8],
+        "coverage_hours": [24.0],
+    }
+    meteogalicia = pd.DataFrame(
+        {
+            **base,
+            "source": ["meteogalicia_ema_idw"],
+            "state_as_of": [pd.Timestamp("2026-09-05T08:00:00Z")],
+        }
+    )
+    aemet = pd.DataFrame(
+        {
+            **{**base, "tmax_vc": [32.0], "prec_dia": [0.0]},
+            "source": ["aemet_current_observation_idw"],
+            "state_as_of": [pd.Timestamp("2026-09-06T08:00:00Z")],
+        }
+    )
+
+    merged = merge_weather_state(
+        meteogalicia,
+        aemet,
+        as_of=pd.Timestamp("2026-09-06", tz="Europe/Madrid"),
+        retention_days=10,
+    )
+
+    assert len(merged) == 1
+    row = merged.iloc[0]
+    assert row["source"] == "meteogalicia_ema_idw"
+    assert row["tmax_vc"] == 20.0
+    assert row["prec_dia"] == 1.0
+
+
+def test_meteogalicia_backfill_ignores_newer_aemet_date():
+    """El backfill primario no se detiene por una fila AEMET de fecha posterior."""
+    state = pd.DataFrame(
+        {
+            "fecha": pd.to_datetime(["2026-09-04", "2026-09-05"]),
+            "source": ["meteogalicia_ema_idw", "aemet_current_observation_idw"],
+        }
+    )
+
+    assert _latest_meteogalicia_date(state) == pd.Timestamp("2026-09-04").date()

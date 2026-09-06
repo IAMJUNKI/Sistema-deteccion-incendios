@@ -1,0 +1,26 @@
+[Unit]
+Description=Colector horario de observaciones AEMET
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fire-risk
+Group=fire-risk
+WorkingDirectory=/srv/fire-risk/app
+EnvironmentFile=/srv/fire-risk/config/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/fire-risk/app
+ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/ingest_aemet_current_observations.py --loop --interval-hours 6 --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet --hourly /srv/fire-risk/data/processed/observations/aemet_hourly_observations.parquet --daily /srv/fire-risk/data/processed/observations/weather_daily_latest.parquet --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet --raw-dir /srv/fire-risk/data/raw/aemet/observations --lock /srv/fire-risk/data/processed/.weather_state_ingest.lock
+Restart=always
+RestartSec=60
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/srv/fire-risk/app
+ReadWritePaths=/srv/fire-risk/data
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

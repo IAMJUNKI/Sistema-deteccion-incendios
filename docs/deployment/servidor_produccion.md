@@ -68,6 +68,13 @@ docs/deployment/despliegue_codigo_y_datos.md. Esta guía de servidor describe la
 arquitectura y la operación de los servicios; el documento enlazado describe
 Deploy Keys, releases atómicas y rsync.
 
+La automatización meteorológica versionada se describe en
+`docs/deployment/automatizacion_meteorologica.md`. En una release actual se
+deben instalar las plantillas de `deploy/systemd/` con
+`scripts/install_systemd_units.sh --enable --start`; las secciones posteriores
+que muestran unidades creadas a mano se conservan como referencia para
+servidores antiguos y no deben duplicarse sobre una instalación nueva.
+
 ## 2. Estado actual y alcance
 
 | Capacidad | Estado |

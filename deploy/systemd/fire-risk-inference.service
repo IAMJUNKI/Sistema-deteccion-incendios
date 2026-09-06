@@ -11,6 +11,11 @@ WorkingDirectory=/srv/fire-risk/app
 EnvironmentFile=/srv/fire-risk/config/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/srv/fire-risk/app
+# Refresca las observaciones consolidadas hasta D-1 antes de construir las
+# memorias de precipitación/temperatura de la inferencia. El timer dedicado
+# aporta reintentos; este paso evita publicar una inferencia con estado viejo
+# si el timer de ingesta no se ejecutó tras un reinicio.
+ExecStartPre=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/ingest_meteogalicia_observations.py --auto-fill-gap --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet --observations /srv/fire-risk/data/processed/observations/weather_daily_meteogalicia.parquet --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet --raw-dir /srv/fire-risk/data/raw/meteogalicia/observations --lock /srv/fire-risk/data/processed/.weather_state_ingest.lock
 ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/run_daily_inference.py
 NoNewPrivileges=true
 PrivateTmp=true

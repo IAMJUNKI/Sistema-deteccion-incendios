@@ -50,11 +50,32 @@ DEFAULT_OBSERVATIONS = Path("data/processed/observations/weather_daily_meteogali
 DEFAULT_STATE = Path("data/processed/state/weather_daily_state.parquet")
 DEFAULT_RAW = Path("data/raw/meteogalicia/observations")
 DEFAULT_LOCK = Path("data/processed/.meteogalicia_ingest.lock")
+METEOGALICIA_SOURCES = {"meteogalicia_ema_idw", "meteogalicia_ema"}
 
 
 def _read_optional_parquet(path: Path) -> pd.DataFrame | None:
     if not path.exists():
         return None
+
+
+def _latest_meteogalicia_date(state: pd.DataFrame | None) -> object | None:
+    """Return the last date covered by MeteoGalicia in a mixed-source state.
+
+    The state can also contain AEMET rows.  Looking at the global maximum date
+    would incorrectly make the MeteoGalicia backfill stop when AEMET happened
+    to close D-1 first.
+    """
+
+    if state is None or state.empty or "fecha" not in state.columns:
+        return None
+    if "source" not in state.columns:
+        return None
+    source = state["source"].astype("string")
+    meteogalicia = state[source.isin(METEOGALICIA_SOURCES)]
+    if meteogalicia.empty:
+        return None
+    dates = pd.to_datetime(meteogalicia["fecha"], errors="coerce").dropna()
+    return dates.max().date() if not dates.empty else None
     try:
         return pd.read_parquet(path)
     except (OSError, ValueError) as exc:
@@ -125,7 +146,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--lock",
         type=Path,
-        default=Path(os.getenv("METEOGALICIA_INGEST_LOCK_PATH", str(DEFAULT_LOCK))),
+        default=Path(
+            os.getenv(
+                "WEATHER_STATE_INGEST_LOCK_PATH",
+                os.getenv("METEOGALICIA_INGEST_LOCK_PATH", str(DEFAULT_LOCK)),
+            )
+        ),
         help="Ruta al archivo lock para evitar ejecuciones concurrentes.",
     )
     parser.add_argument(
@@ -154,17 +180,23 @@ def run_ingest(args: argparse.Namespace) -> dict[str, Any]:
         start_date = pd.Timestamp(args.start_date).date()
         end_date = yesterday
     elif args.auto_fill_gap and existing_state is not None and not existing_state.empty:
-        last_state_date = pd.to_datetime(existing_state["fecha"]).max().date()
-        start_date = last_state_date + timedelta(days=1)
         end_date = pd.Timestamp(args.end_date).date() if args.end_date else yesterday
-        if start_date > end_date:
+        last_meteogalicia_date = _latest_meteogalicia_date(existing_state)
+        if last_meteogalicia_date is None:
+            # The state may have been bootstrapped from AEMET.  Fetch a recent
+            # window so MeteoGalicia can establish the primary source without
+            # forcing a full historical backfill.
+            start_date = end_date - timedelta(days=args.days - 1)
+        else:
+            start_date = last_meteogalicia_date + timedelta(days=1)
+        if last_meteogalicia_date is not None and start_date > end_date:
             LOGGER.info(
-                "El estado ya está al día hasta %s. No hay fechas que recuperar.",
-                last_state_date,
+                "MeteoGalicia ya está al día hasta %s. No hay fechas que recuperar.",
+                last_meteogalicia_date,
             )
             return {
                 "status": "already_up_to_date",
-                "last_state_date": str(last_state_date),
+                "last_state_date": str(last_meteogalicia_date),
                 "target_end_date": str(end_date),
                 "closed_days": 0,
             }

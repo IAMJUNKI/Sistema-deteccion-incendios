@@ -20,6 +20,18 @@ from src.features.operational_features import calculate_vpd
 from src.operational.artifacts import atomic_write_parquet
 
 GALICIA_TZ = ZoneInfo("Europe/Madrid")
+# The operational state is written by more than one collector.  A newer
+# record must not, by itself, replace a record from a higher-priority source:
+# MeteoGalicia EMA is the preferred observed source for Galicia, while AEMET
+# is used for reconciliation/continuity.  Keep this policy next to the
+# upsert so every producer gets the same behaviour.
+WEATHER_SOURCE_PRIORITY = {
+    "meteogalicia_ema_idw": 300,
+    "meteogalicia_ema": 300,
+    "aemet_daily_climatology_idw": 200,
+    "aemet_current_observation_idw": 100,
+    "forecast_proxy": 0,
+}
 STATE_COLUMNS = [
     "cell_id",
     "fecha",
@@ -179,8 +191,17 @@ def merge_weather_state(
     current = normalise_weather_state(existing, source="state") if existing is not None else pd.DataFrame(columns=STATE_COLUMNS)
     incoming = normalise_weather_state(updates)
     merged = pd.concat([current, incoming], ignore_index=True)
-    merged = merged.sort_values(["cell_id", "fecha", "state_as_of"])
+    # ``state_as_of`` is not enough to arbitrate between collectors: a later
+    # AEMET reconciliation must not silently overwrite a MeteoGalicia row
+    # just because it was downloaded a few seconds later.
+    merged["_source_priority"] = (
+        merged["source"].map(WEATHER_SOURCE_PRIORITY).fillna(-1).astype(int)
+    )
+    merged = merged.sort_values(
+        ["cell_id", "fecha", "_source_priority", "state_as_of"]
+    )
     merged = merged.drop_duplicates(["cell_id", "fecha"], keep="last")
+    merged = merged.drop(columns="_source_priority")
     first_date = as_of_date - pd.Timedelta(days=retention_days)
     merged = merged[merged["fecha"].between(first_date, as_of_date, inclusive="both")]
     return merged.sort_values(["cell_id", "fecha"]).reset_index(drop=True)

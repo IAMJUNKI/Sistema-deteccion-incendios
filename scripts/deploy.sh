@@ -142,7 +142,10 @@ if [[ "$DEPLOY_USE_SUDO" == "true" ]]; then
   # que el restart use una unidad inexistente o una plantilla de una release
   # anterior, y mantiene PYTHONPATH alineado con el código desplegado.
   REMOTE_UNITS="$DEPLOY_PATH/app/scripts/install_systemd_units.sh"
-  REMOTE_COMMAND="$REMOTE_COMMAND && sudo -n bash $REMOTE_UNITS"
+  # A release must also activate newly introduced timers/services (for
+  # example the MeteoGalicia observation timer). Existing units are safe to
+  # start again because systemctl start is idempotent for active units.
+  REMOTE_COMMAND="$REMOTE_COMMAND && sudo -n bash $REMOTE_UNITS --enable --start"
 fi
 if [[ "$DEPLOY_RESTART_DASHBOARD" == "true" ]]; then
   if [[ "$DEPLOY_USE_SUDO" == "true" ]]; then

@@ -75,7 +75,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--lock",
         type=Path,
-        default=Path(os.getenv("AEMET_INGEST_LOCK_PATH", str(DEFAULT_LOCK))),
+        default=Path(
+            os.getenv(
+                "WEATHER_STATE_INGEST_LOCK_PATH",
+                os.getenv("AEMET_INGEST_LOCK_PATH", str(DEFAULT_LOCK)),
+            )
+        ),
     )
     parser.add_argument("--no-state", action="store_true", help="Solo publica observaciones, no actualiza el estado")
     return parser.parse_args()

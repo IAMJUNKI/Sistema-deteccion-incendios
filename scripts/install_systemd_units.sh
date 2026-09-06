@@ -55,7 +55,12 @@ for unit in \
   fire-risk-inference.service \
   fire-risk-inference.timer \
   fire-risk-health.service \
-  fire-risk-health.timer
+  fire-risk-health.timer \
+  fire-risk-meteogalicia-observations.service \
+  fire-risk-meteogalicia-observations.timer \
+  fire-risk-state.service \
+  fire-risk-state.timer \
+  fire-risk-aemet-current.service
 do
   [[ -f "$PROJECT_ROOT/deploy/systemd/$unit" ]] ||
     die "Falta la plantilla $PROJECT_ROOT/deploy/systemd/$unit."
@@ -69,15 +74,20 @@ if [[ "$ENABLE_UNITS" -eq 1 ]]; then
   systemctl enable fire-risk-dashboard.service
   systemctl enable fire-risk-inference.timer
   systemctl enable fire-risk-health.timer
+  systemctl enable fire-risk-meteogalicia-observations.timer
+  systemctl enable fire-risk-state.timer
+  systemctl enable fire-risk-aemet-current.service
 fi
 
 if [[ "$START_UNITS" -eq 1 ]]; then
   systemctl start fire-risk-dashboard.service
   systemctl start fire-risk-inference.timer
   systemctl start fire-risk-health.timer
+  systemctl start fire-risk-meteogalicia-observations.timer
+  systemctl start fire-risk-state.timer
+  systemctl start fire-risk-aemet-current.service
 fi
 
 echo "Unidades instaladas. Verificar con:"
 echo "  systemctl status fire-risk-dashboard.service"
-echo "  systemctl list-timers fire-risk-inference.timer fire-risk-health.timer"
-
+echo "  systemctl list-timers --all fire-risk-meteogalicia-observations.timer fire-risk-state.timer fire-risk-inference.timer fire-risk-health.timer"

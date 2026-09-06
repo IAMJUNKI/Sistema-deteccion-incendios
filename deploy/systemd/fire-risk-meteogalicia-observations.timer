@@ -1,0 +1,13 @@
+[Unit]
+Description=Reintentos de observaciones diarias de MeteoGalicia
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+OnCalendar=*-*-* 04:30:00
+OnCalendar=*-*-* 05:00:00
+Persistent=true
+AccuracySec=1min
+Unit=fire-risk-meteogalicia-observations.service
+
+[Install]
+WantedBy=timers.target
