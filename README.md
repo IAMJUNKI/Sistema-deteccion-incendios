@@ -282,6 +282,24 @@ Editar `.env` y completar las claves de API necesarias:
 pip install -e .
 ```
 
+### 5. Descargar modelos y artefactos preentrenados (Hugging Face Hub)
+
+Para ejecutar el Centro de Mando / Dashboard interactivo o lanzar nuevas predicciones operativas **sin necesidad de descargar 20 GB de datos históricos ni reentrenar modelos**:
+
+```bash
+# Descarga completa (~170 MB: modelos calibrados + rejilla 1 km + estado meteorológico + predicción):
+python scripts/download_artifacts.py --repo-id tu-usuario/galicia-wildfire-risk
+
+# Modo ligero solo para explorar el Dashboard (~25 MB):
+python scripts/download_artifacts.py --repo-id tu-usuario/galicia-wildfire-risk --only-dashboard
+```
+
+### 6. Iniciar el Centro de Mando Táctico (Dashboard Streamlit)
+
+```bash
+python -m streamlit run app.py
+```
+
 ## Validación
 
 ```powershell

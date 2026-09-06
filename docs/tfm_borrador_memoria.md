@@ -28,6 +28,7 @@
 - [Capítulo 4: Diseño de la Infraestructura Geoespacial (Fase 1)](#capítulo-4-diseño-de-la-infraestructura-geoespacial-fase-1)
 - [Capítulo 5: Resultados y Evaluación Comparativa de Modelos Baseline](#capítulo-5-resultados-y-evaluación-comparativa-de-modelos-baseline)
 - [Capítulo 6: Diseño e Implementación del Centro de Mando Táctico y Dashboard Operativo (Fase 5)](#capítulo-6-diseño-e-implementación-del-centro-de-mando-táctico-y-dashboard-operativo-fase-5)
+- [Capítulo 7: Arquitectura de Despliegue, MLOps y Estrategia de Reproducibilidad](#capítulo-7-arquitectura-de-despliegue-mlops-y-estrategia-de-reproducibilidad)
 
 ---
 
@@ -268,5 +269,25 @@
 > 4. **Matriz de Medidas y Despacho PLADIGA (`operational_protocols`):** Se sustituyó el esquema obsoleto de 4 niveles por la escala institucional canónica de 5 niveles del PLADIGA (Nivel 1 Bajo $<1.0\%$, Nivel 2 Moderado $1.0\%-2.5\%$, Nivel 3 Alto $2.5\%-6.0\%$, Nivel 4 Muy Alto $6.0\%-12.0\%$, Nivel 5 Extremo $\ge 12.0\%$). Con ello, los protocolos de movilización de retenes, brigadas helitransportadas (BRIF) y suspensión de permisos de quema quedan perfectamente sincronizados con la severidad autonómica computada en el módulo de KPIs.
 > 5. **Ergonomía de Cabecera y Trazabilidad Técnica (`styles` y `system_audit`):** Se solventó el conflicto de solapamiento visual del título táctico respecto a la barra superior nativa de Streamlit mediante un ajuste de margen superior (`padding-top: 3.25rem !important;`), y se eliminaron los avisos técnicos de advertencia sobre proxies meteorológicos del panel operativo principal, recluyéndolos estrictamente en la pestaña de auditoría del sistema para preservar la concentración de los mandos en situaciones de crisis.
 
+
 ---
 
+## Capítulo 7: Arquitectura de Despliegue, MLOps y Estrategia de Reproducibilidad
+
+### 7.1 Desacoplamiento entre entrenamiento pesado y distribución operativa mediante Hugging Face Hub
+*(Estrategia de reproducibilidad "Zero-Retrain" y empaquetado de artefactos)*
+> Uno de los mayores retos en la transferencia de proyectos de Machine Learning geoespacial al ámbito operacional y evaluador es la barrera de entrada que suponen los datasets masivos. La reconstrucción retrospectiva del datacubo de Galicia (2016–2023) y el reentrenamiento supervisado de los modelos LightGBM calibrados requieren la descarga y procesamiento de más de 20 GB de ficheros raster NetCDF (ERA5-Land), capas vectoriales complejas (CORINE Land Cover y OpenStreetMap) y tabulares anuales particionados.
+>
+> Para garantizar la plena reproducibilidad del sistema ante el tribunal académico y facilitar su despliegue inmediato en nuevos entornos sin incurrir en horas de reentrenamiento, se ha adoptado una arquitectura desacoplada basada en **Hugging Face Hub**:
+> 1. **Artefactos Estáticos Inmutables (~11 MB):** Agrupan los modelos serializados calibrados por horizonte temporal (`forecast_risk_egif_48_t1/t2/t3.joblib`), sus contratos de metadatos (`.json`), el manifiesto de trazabilidad activa (`active_model_manifest.json`) y la rejilla canónica de 29.601 celdas (`galicia_grid_1km_egif.parquet`).
+> 2. **Artefactos Dinámicos Operativos (~160 MB):** Comprenden el pronóstico diario publicado (`predicciones_operativas.parquet`) y el estado meteorológico acumulado de 30 días (`weather_daily_state.parquet`).
+>
+> Mediante un cliente de aprovisionamiento desasistido (`scripts/download_artifacts.py`), cualquier usuario puede inicializar el Centro de Mando Táctico en local en menos de dos minutos con una descarga inferior a 25 MB (modo ligero) o 170 MB (modo completo), asegurando que el código clonado desde GitHub opere de manera idéntica al entorno de producción sin requerir credenciales complejas de nubes privadas.
+
+### 7.2 Resolución del "Cold Start" Meteorológico y Pipeline de Sincronización Continua
+*(Gobernanza del estado antecedente de 30 días y automatización diaria)*
+> En la modelización del riesgo de incendio, variables críticas como la racha de días secos consecutivos o la precipitación acumulada a 30 días exigen una memoria retrospectiva continua. Un despliegue estándar que intente calcular una predicción diaria se enfrenta al problema clásico de **Cold Start (arranque en frío)**: para predecir el riesgo del día $T$, el sistema necesitaría consultar de golpe las observaciones horarias de 30 días pasados a través de las APIs institucionales de MeteoGalicia o AEMET, lo que provocaría latencias inaceptables y bloqueos por saturación de cuotas.
+>
+> El pipeline operativo resuelve esta limitación mediante una **estrategia de estado deslizante (Warm Start)** sincronizada bidireccionalmente:
+> 1. **Actualización Incremental de Brecha (`auto-fill-gap`):** El script de ingesta de observaciones (`ingest_meteogalicia_observations.py`) examina la fecha máxima registrada en el parquet de estado local y descarga exclusivamente el intervalo temporal faltante hasta $D-1$ (típicamente 24 a 48 horas), interpolando las medidas de las estaciones de MeteoGalicia (EMA) y actualizando atómicamente la ventana móvil sin recalcular los 30 días previos.
+> 2. **Sincronización Automática Servidor $\rightarrow$ Hugging Face Hub:** Cada mañana, tras completarse la inferencia predictiva en el servidor de producción Linux (programada mediante `systemd timer` a las 05:15 CET), un proceso automatizado (`scripts/publish_to_huggingface.py`) sube el estado meteorológico recién consolidado y las predicciones resultantes al repositorio de Hugging Face. De este modo, la comunidad y los evaluadores disponen de forma transparente y permanente de la última foto operativa del territorio gallego sin intervención manual.

@@ -75,3 +75,4 @@ dependencies:
     - pyarrow>=13.0          # Soporte Parquet
     - streamlit-folium>=0.16  # Integración Folium en Streamlit
     - dem-stitcher>=2.5.0    # Descarga dinámica de Copernicus DEM GLO-30
+    - huggingface_hub>=0.20.0 # Gestión y distribución de artefactos operativos
