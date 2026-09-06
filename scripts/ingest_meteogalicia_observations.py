@@ -39,7 +39,7 @@ from src.ingestion.meteogalicia_observations import (
     interpolate_meteogalicia_daily_to_grid,
     normalise_meteogalicia_daily_payload,
 )
-from src.ingestion.weather_state import merge_weather_state, save_weather_state
+from src.ingestion.weather_state import WeatherStateError, merge_weather_state, save_weather_state
 from src.operational.artifacts import RunLockError, atomic_write_parquet, run_lock
 
 LOGGER = logging.getLogger("ingest_meteogalicia_observations")
@@ -79,8 +79,12 @@ def _latest_meteogalicia_date(state: pd.DataFrame | None) -> object | None:
     try:
         return pd.read_parquet(path)
     except (OSError, ValueError) as exc:
-        LOGGER.warning("No se pudo leer el Parquet existente %s: %s", path, exc)
-        return None
+        # Never continue with ``None`` when the state exists: doing so would
+        # allow a five-day MeteoGalicia download to overwrite a valid 30-day
+        # operational history.
+        raise MeteoGaliciaObservationError(
+            f"No se pudo leer el Parquet existente {path}; se cancela la ingesta para no perder estado."
+        ) from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -289,7 +293,7 @@ def main() -> None:
         print("✅ Ingesta de MeteoGalicia completada:")
         for k, v in summary.items():
             print(f"   • {k}: {v}")
-    except (MeteoGaliciaObservationError, FileNotFoundError, RunLockError) as exc:
+    except (MeteoGaliciaObservationError, FileNotFoundError, RunLockError, WeatherStateError) as exc:
         print(f"❌ Error en ingesta MeteoGalicia: {exc}")
         raise SystemExit(1) from exc
 

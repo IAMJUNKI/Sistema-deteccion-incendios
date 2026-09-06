@@ -312,3 +312,37 @@ def test_meteogalicia_backfill_ignores_newer_aemet_date():
     )
 
     assert _latest_meteogalicia_date(state) == pd.Timestamp("2026-09-04").date()
+
+
+def test_weather_state_merge_preserves_retained_history():
+    """Un upsert de MeteoGalicia conserva los días AEMET no solapados."""
+    existing = pd.DataFrame(
+        {
+            "cell_id": ["c1", "c1", "c1"],
+            "fecha": pd.to_datetime(["2026-09-03", "2026-09-04", "2026-09-05"]),
+            "tmax_vc": [20.0, 21.0, 22.0],
+            "rhmin_vc": [60.0, 59.0, 58.0],
+            "vmax_vc": [10.0, 11.0, 12.0],
+            "prec_dia": [1.0, 0.0, 0.0],
+            "vpd_vc": [0.8, 0.9, 1.0],
+            "coverage_hours": [24.0, 24.0, 24.0],
+            "source": ["aemet_daily_climatology_idw"] * 3,
+            "state_as_of": [pd.Timestamp("2026-09-06T08:00:00Z")] * 3,
+        }
+    )
+    incoming = existing.iloc[[2]].copy()
+    incoming["source"] = "meteogalicia_ema_idw"
+
+    merged = merge_weather_state(
+        existing,
+        incoming,
+        as_of=pd.Timestamp("2026-09-06", tz="Europe/Madrid"),
+        retention_days=10,
+    )
+
+    assert len(merged) == 3
+    assert merged["source"].tolist() == [
+        "aemet_daily_climatology_idw",
+        "aemet_daily_climatology_idw",
+        "meteogalicia_ema_idw",
+    ]

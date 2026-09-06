@@ -188,8 +188,10 @@ def merge_weather_state(
     """Upsert daily rows and retain only the recent operational window."""
 
     as_of_date = _issue_date(as_of)
+    first_date = as_of_date - pd.Timedelta(days=retention_days)
     current = normalise_weather_state(existing, source="state") if existing is not None else pd.DataFrame(columns=STATE_COLUMNS)
     incoming = normalise_weather_state(updates)
+    current_retained = current[current["fecha"].between(first_date, as_of_date, inclusive="both")]
     merged = pd.concat([current, incoming], ignore_index=True)
     # ``state_as_of`` is not enough to arbitrate between collectors: a later
     # AEMET reconciliation must not silently overwrite a MeteoGalicia row
@@ -202,8 +204,16 @@ def merge_weather_state(
     )
     merged = merged.drop_duplicates(["cell_id", "fecha"], keep="last")
     merged = merged.drop(columns="_source_priority")
-    first_date = as_of_date - pd.Timedelta(days=retention_days)
     merged = merged[merged["fecha"].between(first_date, as_of_date, inclusive="both")]
+    # A state update may replace rows, but it must never silently discard
+    # retained history. This protects production if a collector reads an
+    # unexpected/empty input or if a future merge change regresses.
+    if len(merged) < len(current_retained):
+        raise WeatherStateError(
+            "La actualización del estado meteorológico reduciría la cobertura "
+            f"de {len(current_retained):,} a {len(merged):,} filas. "
+            "Se cancela la escritura para evitar perder la memoria histórica."
+        )
     return merged.sort_values(["cell_id", "fecha"]).reset_index(drop=True)
 
 

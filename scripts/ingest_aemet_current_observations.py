@@ -32,7 +32,7 @@ from src.ingestion.aemet_observations import (
     build_aemet_client_from_env,
     interpolate_aemet_daily_to_grid,
 )
-from src.ingestion.weather_state import merge_weather_state, save_weather_state
+from src.ingestion.weather_state import WeatherStateError, merge_weather_state, save_weather_state
 from src.operational.artifacts import RunLockError, atomic_write_parquet, run_lock
 
 DEFAULT_GRID = Path("data/processed/grid/galicia_grid_1km_egif.parquet")
@@ -233,7 +233,14 @@ def main() -> None:
             with run_lock(args.lock):
                 summary = ingest_once(args)
             print("Captura AEMET completada: " + ", ".join(f"{key}={value}" for key, value in summary.items()))
-        except (AemetObservationError, FileNotFoundError, OSError, RunLockError, ValueError) as exc:
+        except (
+            AemetObservationError,
+            FileNotFoundError,
+            OSError,
+            RunLockError,
+            ValueError,
+            WeatherStateError,
+        ) as exc:
             print(f"Error de captura AEMET: {exc}")
             if not args.loop:
                 raise SystemExit(1) from exc

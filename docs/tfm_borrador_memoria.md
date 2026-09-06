@@ -218,6 +218,17 @@
 >
 > Esta solución dota al pipeline de una resiliencia operacional completa: permite que un despliegue en servidor o una máquina local se enciendan en cualquier momento del día, detecten automáticamente los días faltantes con `--auto-fill-gap` y cierren el estado meteorológico hasta la víspera sin vacíos temporales y con datos medidos en el terreno gallego.
 
+### 5.15 Especialización Multi-Horizonte ($T+1, T+2, T+3$), Parsimonia Operativa (48 vs. 50 Variables) y Validación en Test Ciego 2023
+*(Justificación de la arquitectura desacoplada de predictores y del diseño experimental pareado)*
+> La evaluación de modelos predictivos sobre series temporales impone dos requerimientos metodológicos esenciales para garantizar la aplicabilidad en operaciones de emergencia:
+>
+> 1. **Especialización y desacoplo por horizonte ($T+1, T+2, T+3$):** Predecir a 24h, 48h o 72h no constituye una mera reevaluación del mismo modelo con datos desplazados. La estructura física de la información difiere: mientras que para $T+1$ la memoria antecedente de precipitación y humedad proviene al 100% de observaciones físicas cerradas de la red EMA, en $T+2$ y $T+3$ las memorias recientes deben encadenar predicciones numéricas intermedias, acumulando incertidumbre. En el entrenamiento, cada horizonte se formula como un modelo LightGBM independiente con su propia etiqueta objetivo ($issue\_date + h$), su muestra determinista de negativos (`seed = 42 + h`) y su calibrador sigmoide específico (Platt scaling ajustado sobre 2021). Como resultado empírico, la importancia relativa del déficit de presión de vapor (`vpd_mean`) disminuye de $>16\%$ en $T+1$ a $\approx 13\%$ en $T+3$, cediendo peso a ventanas acumuladas para estabilizar la señal.
+> 2. **Principio de parsimonia y diseño experimental pareado (48 vs. 50 variables):** El contrato operativo `egif-2d-48-v1` suprime dos variables redundantes del prototipo canónico (`precipitation_sum` del día objetivo y `consecutive_dry_days`), cuya información queda capturada de forma continua y libre de fugas por las ventanas de 3 a 30 días y el VPD. Para contrastar esta compactación sin confundir el efecto de las variables con el volumen de entrenamiento, el benchmark del test ciego 2023 (10.804.365 celdas-día, 530 igniciones) evalúa un diseño pareado:
+>    - `EGIF 50 control alineado`: 50 variables bajo la nueva semántica temporal estricta (entrenado con 2019–2020).
+>    - `EGIF 48 comparable`: 48 variables bajo las mismas particiones (2019–2020), demostrando que la parsimonia preserva la capacidad discriminante.
+>    - `EGIF 48 ampliado`: 48 variables entrenado sobre el histórico completo (2016–2020), erigiéndose como el candidato ganador al alcanzar un ROC-AUC de $0{,}8713$ y un Recall del $9{,}62\%\text{--}11{,}32\%$ en el $1\%$ superior de celdas diarias prioritarias.
+>    - `FWI CEMS`: Baseline de referencia externo, superado ampliamente en todas las métricas operativas (Recall top 1% de $2{,}83\%$).
+
 ---
 
 ## Capítulo 6: Diseño e Implementación del Centro de Mando Táctico y Dashboard Operativo (Fase 5)

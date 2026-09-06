@@ -29,7 +29,7 @@ from src.ingestion.aemet_observations import (
     build_aemet_client_from_env,
     interpolate_aemet_daily_to_grid,
 )
-from src.ingestion.weather_state import merge_weather_state, save_weather_state
+from src.ingestion.weather_state import WeatherStateError, merge_weather_state, save_weather_state
 from src.operational.artifacts import RunLockError, atomic_write_parquet, run_lock
 
 GALICIA_TZ = "Europe/Madrid"
@@ -167,5 +167,5 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except (AemetObservationError, RunLockError) as exc:
+    except (AemetObservationError, RunLockError, WeatherStateError) as exc:
         raise SystemExit(f"Error de ingesta AEMET: {exc}") from exc
