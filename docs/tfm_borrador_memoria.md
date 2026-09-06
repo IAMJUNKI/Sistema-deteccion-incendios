@@ -81,6 +81,17 @@
 
 > La comparación de 48 y 50 variables se realiza con un control de 50 alineado temporalmente. Los artefactos de 50 variables entrenados con la semántica histórica anterior se conservan únicamente para rollback/shadow, porque no constituyen una comparación experimental perfectamente pareada.
 
+### 3.8 Resolución de la Latencia Observacional y Fusión Multi-Fuente (AEMET vs. MeteoGalicia EMA)
+*(Justificación metodológica del cierre de la brecha $D-4 \rightarrow D-1$ en producción)*
+> En la arquitectura operativa en tiempo real, el cálculo de las variables retrospectivas de memoria biometeorológica (`dias_sin_lluvia`, `prec_acum_3d`, `prec_acum_7d` y `tmax_media_7d`) impone un reto de ingeniería de datos crítico: la **latencia de publicación de las fuentes oficiales**. La climatología diaria validada de AEMET sufre un desfase estructural de 3 a 5 días debido a sus filtros centralizados de control de calidad institucional, lo que deja un vacío sistemático entre el día $D-4$ y la víspera de la predicción ($D-1$).
+>
+> Para resolver este desajuste sin recurrir a suposiciones sintéticas ni a la invención de ceros —lo que arruinaría las estimaciones de desecación del combustible fino—, el pipeline implementa una **estrategia de fusión multi-fuente escalonada**:
+> 1. **Base Climatológica Consolidada ($< D-4$):** Registros validados de la red climatológica de AEMET, idóneos para la serie temporal de 30 días de fondo.
+> 2. **Cierre de la Brecha Reciente ($D-4 \rightarrow D-1$, 72h–120h):** Ingesta automatizada de la Red de Estaciones Meteorológicas Automáticas (EMA) de MeteoGalicia a través de su servicio Open Data (`mgrss/observacion`). Con más de 140 estaciones distribuidas sobre el territorio gallego (una densidad de ~1 estación cada 175 km² frente a los ~857 km² por estación de AEMET), se recuperan las mediciones físicas reales de temperatura, humedad relativa mínima, precipitación diaria y rachas de viento, interpolándolas a la cuadrícula de 1 km² mediante IDW de 4 vecinos.
+> 3. **Degradación Elegante (Fallback de Contingencia):** Si por incidencia de conectividad o mantenimiento de MeteoGalicia no se pudieran obtener las observaciones de estación, el sistema rescata de forma controlada el pronóstico numérico archivado previamente emitido, marcando la calidad de la feature como `forecast_proxy` para que la inferencia diaria nunca se detenga.
+>
+> **Impacto Físico Real (Resumen Negocio / Tribunal):** En la física de incendios, la pérdida de humedad de los combustibles finos (hojarasca, pasto seco) responde a una escala temporal ultracorta de 24 a 72 horas. Un error de 5 mm de lluvia o de 3 °C en los últimos tres días altera drásticamente la probabilidad de ignición. Disponer de mediciones físicas directas de la red rural de MeteoGalicia para los días $D-3$, $D-2$ y $D-1$ garantiza que el modelo evalúa la sequedad real del sotobosque gallego y no una aproximación numérica abstracta, alineando este trabajo con las recomendaciones del nuevo Índice de Peligro de Incendios Forestales (IPIF de AEMET, 2026) y el marco de alta resolución de IberFire (Ercibengoa et al., 2025).
+
 ---
 
 ## Capítulo 4: Diseño de la Infraestructura Geoespacial (Fase 1)
@@ -197,6 +208,14 @@
 > El backfill no convierte una estación en una observación de cada celda. Es una reconstrucción espacial con una resolución y una calidad propias, por lo que se registran el proveedor, la distancia a estación, el número de estaciones y la estrategia IDW. Esta información se utilizará para distinguir un arranque `aemet_daily_climatology_idw` de un estado basado en una red observacional más densa.
 
 > La documentación de MeteoSIX v5 establece que su operación numérica está orientada al forecast desde el día actual y limita la consulta a un máximo de siete días. Aunque `precipitation_amount` representa la precipitación prevista durante la hora anterior, no es un archivo de observaciones pasadas. AEMET tampoco resuelve por sí sola el cierre operativo de D-1 mediante su climatología diaria validada, que se publica con un retraso aproximado de cuatro días. Por ello, el diseño separa el backfill AEMET del colector de observaciones actuales implementado en `scripts/ingest_aemet_current_observations.py`: este acumula la ventana móvil de AEMET y cierra solo los días con cobertura suficiente. No se utilizará el forecast como observación retrospectiva.
+
+### 5.14 Cierre de la Brecha Observacional Reciente con la Red de Estaciones de MeteoGalicia (EMA)
+
+> Para superar la dependencia de procesos en bucle permanente (como el colector de la ventana móvil de 12 horas de AEMET) y asegurar un arranque determinista en cualquier instante, se ha incorporado el cliente e interpolador `src.ingestion.meteogalicia_observations` y el script operativo `scripts/ingest_meteogalicia_observations.py`. 
+>
+> Este componente consulta el servicio Open Data de datos diarios de MeteoGalicia (`datosDiariosEstacionsMeteo.action`), recuperando automáticamente las observaciones físicas consolidadas para las más de 140 estaciones de la red gallega entre la última fecha registrada en el estado y el día $D-1$ (típicamente las últimas 72 a 120 horas). Las lecturas se proyectan de UTM 29N a WGS84, se normalizan sus magnitudes físicas (transformando el viento de m/s a km/h y derivando el VPD crítico), y se interpolan a la malla de 1 km mediante IDW de 4 vecinos más cercanos.
+>
+> Esta solución dota al pipeline de una resiliencia operacional completa: permite que un despliegue en servidor o una máquina local se enciendan en cualquier momento del día, detecten automáticamente los días faltantes con `--auto-fill-gap` y cierren el estado meteorológico hasta la víspera sin vacíos temporales y con datos medidos en el terreno gallego.
 
 ---
 
