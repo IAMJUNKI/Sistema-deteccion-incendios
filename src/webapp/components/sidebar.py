@@ -7,6 +7,15 @@ import streamlit as st
 
 from src.webapp.utils.data_loader import list_available_inference_datasets
 
+MAP_STYLES = [
+    "IGN España (Ortofoto Oficial)",
+    "Relieve Topográfico",
+    "Lienzo Claro",
+    "Lienzo Oscuro",
+    "Satélite",
+    "Callejero",
+]
+
 
 def render_sidebar(predictions: pd.DataFrame) -> dict:
     """Renderiza el panel lateral y devuelve los parámetros de configuración seleccionados."""
@@ -85,34 +94,11 @@ def render_sidebar(predictions: pd.DataFrame) -> dict:
 
     st.sidebar.markdown("---")
 
-    # 4. Configuración Avanzada y Cartografía (Colapsado para reducir carga cognitiva)
-    with st.sidebar.expander("⚙️ Opciones Avanzadas / Capas", expanded=False):
+    # 4. Configuración Avanzada y Dataset (Colapsado para reducir carga cognitiva)
+    with st.sidebar.expander("⚙️ Opciones Avanzadas / Dataset", expanded=False):
         st.markdown(
             """
-            <div style="display:flex; align-items:center; gap:0.35rem; margin-bottom:0.25rem;">
-                <span class="material-symbols-outlined" style="font-size:18px; color:#94a3b8;">layers</span>
-                <span style="font-weight:600; font-size:0.85rem; text-transform:uppercase; color:#94a3b8;">Capa Base Cartográfica</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        map_style = st.selectbox(
-            "Capa Base Cartográfica:",
-            [
-                "Esri Gris Claro (Lienzo Táctico)",
-                "Esri Gris Oscuro (Lienzo Táctico)",
-                "Esri Satellite (Satelital)",
-                "IGN España — PNOA Ortofoto (Oficial)",
-                "OpenTopoMap (Topográfico)",
-                "OpenStreetMap",
-            ],
-            index=0,
-            label_visibility="collapsed",
-        )
-
-        st.markdown(
-            """
-            <div style="display:flex; align-items:center; gap:0.35rem; margin-top:0.6rem; margin-bottom:0.25rem;">
+            <div style="display:flex; align-items:center; gap:0.35rem; margin-top:0.2rem; margin-bottom:0.25rem;">
                 <span class="material-symbols-outlined" style="font-size:18px; color:#94a3b8;">database</span>
                 <span style="font-weight:600; font-size:0.85rem; text-transform:uppercase; color:#94a3b8;">Dataset de Inferencia</span>
             </div>
@@ -136,7 +122,7 @@ def render_sidebar(predictions: pd.DataFrame) -> dict:
     return {
         "selected_dataset_file": selected_dataset_file,
         "selected_horizon": selected_horizon,
-        "map_style": map_style,
+        "map_style": MAP_STYLES[0],
         "color_mode": color_mode,
         "filter_risk": filter_risk,
     }

@@ -283,7 +283,9 @@ def test_admin_lookup_enrichment_exact_provinces():
 
 def test_explain_tree_prediction_contract():
     from unittest.mock import MagicMock
+
     import numpy as np
+
     from src.features.canonical_contract import (
         EGIF_48_FEATURE_CONTRACT_VERSION,
         load_feature_columns_for_contract,
@@ -292,21 +294,20 @@ def test_explain_tree_prediction_contract():
 
     try:
         import lightgbm as lgb
-        import shap
     except ImportError:
-        pytest.skip("shap o lightgbm no están instalados")
+        pytest.skip("lightgbm no está instalado")
 
     feature_cols = load_feature_columns_for_contract(EGIF_48_FEATURE_CONTRACT_VERSION)
     assert len(feature_cols) == 48
 
     # Entrenar un árbol mínimo en memoria para el test (sin depender de .joblib en disco ni Streamlit session)
     rng = np.random.RandomState(42)
-    X_toy = pd.DataFrame(rng.randn(6, 48), columns=feature_cols)
+    x_toy = pd.DataFrame(rng.randn(6, 48), columns=feature_cols)
     y_toy = np.array([0, 1, 0, 1, 0, 1])
     clf = lgb.LGBMClassifier(
         n_estimators=2, max_depth=2, min_child_samples=1, verbose=-1, random_state=42
     )
-    clf.fit(X_toy, y_toy)
+    clf.fit(x_toy, y_toy)
 
     mock_model = MagicMock()
     mock_model.base_model = clf
@@ -332,4 +333,81 @@ def test_explain_tree_prediction_contract():
     assert "feature" in df_shap.columns
     assert "contribution" in df_shap.columns
     assert "value" in df_shap.columns
+
+
+def test_build_concello_spotlight_mask():
+    from src.webapp.utils.geo_helpers import build_concello_spotlight_mask
+
+    mask = build_concello_spotlight_mask(42.2406, -8.7207, radius_km=9.0)
+    assert mask is not None
+    assert mask["type"] == "Polygon"
+    assert len(mask["coordinates"]) >= 1
+
+
+def test_load_operational_data_for_horizon():
+    from src.webapp.utils.data_loader import load_operational_data_for_horizon
+
+    df = load_operational_data_for_horizon(horizon=1)
+    if not df.empty:
+        assert "cell_id" in df.columns
+        assert "prob_riesgo" in df.columns
+        assert "lat_centroid" in df.columns
+        assert "lon_centroid" in df.columns
+
+
+def test_zoom_presets_bounds_and_sector_demarcation():
+    from src.webapp.utils.geo_helpers import ZOOM_PRESETS
+
+    for name, preset in ZOOM_PRESETS.items():
+        assert "center" in preset
+        assert "zoom" in preset
+        if name != "Galicia Completa":
+            assert "bounds" in preset, f"Preset {name} should contain bounds for demarcation"
+            bounds = preset["bounds"]
+            assert len(bounds) == 2
+            south_west, north_east = bounds
+            assert south_west[0] < north_east[0], "South lat must be less than North lat"
+            assert south_west[1] < north_east[1], "West lon must be less than East lon"
+
+
+def test_load_galicia_sectors_geojson():
+    from src.webapp.utils.geo_helpers import load_galicia_sectors_geojson
+
+    data = load_galicia_sectors_geojson()
+    if data is not None:
+        assert data.get("type") == "FeatureCollection"
+        assert len(data.get("features", [])) >= 7
+        sectors = [f.get("properties", {}).get("sector") for f in data.get("features", [])]
+        assert "Ourense Sur — Monterrei" in sectors
+        assert "Rías Baixas — Pontevedra" in sectors
+
+
+def test_sector_pladiga_distritos_alignment():
+    from src.webapp.utils.geo_helpers import SECTOR_PLADIGA_DISTRITOS, ZOOM_PRESETS
+
+    for name in ZOOM_PRESETS:
+        if name != "Galicia Completa":
+            assert name in SECTOR_PLADIGA_DISTRITOS, f"Sector {name} should have PLADIGA distritos defined"
+            distritos = SECTOR_PLADIGA_DISTRITOS[name]
+            assert len(distritos) >= 2, f"Sector {name} should have at least 2 distritos assigned"
+            for d in distritos:
+                assert d.startswith("Distrito "), f"Distrito name {d} should follow canonical naming"
+
+
+def test_map_base_styles_and_defaults():
+    from src.webapp.components.sidebar import MAP_STYLES
+
+    assert MAP_STYLES[0] == "IGN España (Ortofoto Oficial)"
+    assert "Relieve Topográfico" in MAP_STYLES
+    assert "Lienzo Claro" in MAP_STYLES
+    assert "Lienzo Oscuro" in MAP_STYLES
+    assert "Satélite" in MAP_STYLES
+    assert "Callejero" in MAP_STYLES
+    assert len(MAP_STYLES) == 6
+    assert "CartoDB Voyager" not in " ".join(MAP_STYLES)
+    assert "OpenTopoMap" not in " ".join(MAP_STYLES)
+
+
+
+
 

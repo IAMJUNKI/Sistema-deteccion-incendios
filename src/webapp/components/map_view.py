@@ -16,11 +16,13 @@ except ImportError:  # pragma: no cover - se prueba en instalaciones sin extras 
     plugins = None
     st_folium = None
 
+from src.webapp.components.sidebar import MAP_STYLES
 from src.webapp.utils.geo_helpers import (
-    CONCELLOS_GALICIA,
+    SECTOR_PLADIGA_DISTRITOS,
     ZOOM_PRESETS,
     build_complex_dissolved_shapes,
     load_galicia_focus_layers,
+    load_galicia_sectors_geojson,
 )
 
 
@@ -36,9 +38,7 @@ def get_color_gradient(prob: float, pct: float, mode: str) -> str:
             return "#E31A1C"  # Nivel 3 — Alto (2.5% - 6.0%)
         if val >= 1.0:
             return "#FD8D3C"  # Nivel 2 — Moderado (1.0% - 2.5%)
-        if val >= 0.3:
-            return "#FEB24C"  # Nivel 1 — Bajo (0.3% - 1.0%)
-        return "#FED976"      # Nivel 1 — Nominal (< 0.3%)
+        return "#FED976"      # Nivel 1 — Bajo / Nominal (< 1.0%)
     elif "Percentil" in mode or "Relativa" in mode:
         val = pct * 100
         if val >= 99.8:
@@ -63,7 +63,7 @@ def get_color_gradient(prob: float, pct: float, mode: str) -> str:
             return "#E31A1C"  # Nivel 3: Alto (Top 2.0%)
         if pct >= 0.950:
             return "#FD8D3C"  # Nivel 2: Moderado (Top 5.0%)
-        return "#FED976"      # Nivel 1: Bajo / Nominal
+        return "#FED976"      # Nivel 1: Bajo / Nominal (< 95.0%)
 
 
 def build_map_legend_html(color_mode: str) -> str:
@@ -75,8 +75,7 @@ def build_map_legend_html(color_mode: str) -> str:
             <span style="background:#BD0026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 4 — Muy Alto (6.0% &ndash; 12.0%)<br/>
             <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 3 — Alto (2.5% &ndash; 6.0%)<br/>
             <span style="background:#FD8D3C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 2 — Moderado (1.0% &ndash; 2.5%)<br/>
-            <span style="background:#FEB24C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1 — Bajo (0.3% &ndash; 1.0%)<br/>
-            <span style="background:#FED976;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1 — Nominal (&lt; 0.3%)
+            <span style="background:#FED976;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1 — Bajo / Nominal (&lt; 1.0%)
         """
         subtitle = "Severidad física calibrada (5 Niveles)"
     elif "Percentil" in color_mode or "Relativa" in color_mode:
@@ -97,7 +96,7 @@ def build_map_legend_html(color_mode: str) -> str:
             <span style="background:#BD0026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 4: Muy Alto (Top 0.5% / &ge; 99.5%)<br/>
             <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 3: Alto (Top 2.0% / &ge; 98.0%)<br/>
             <span style="background:#FD8D3C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 2: Moderado (Top 5.0% / &ge; 95.0%)<br/>
-            <span style="background:#FED976;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1: Nominal (&lt; 95.0%)
+            <span style="background:#FED976;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1: Bajo / Nominal (&lt; 95.0%)
         """
         subtitle = "Tramos discretos de intervención (5 Niveles)"
 
@@ -120,7 +119,7 @@ def build_map_legend_html(color_mode: str) -> str:
 def render_map_tab(
     df_data: pd.DataFrame,
     selected_horizon: int,
-    map_style: str = "Esri Gris Claro (Lienzo Táctico)",
+    map_style: str = "IGN España (Ortofoto Oficial)",
     color_mode: str = "Riesgo Absoluto Calibrado P(Y=1)",
     filter_risk: str = "Top 5.0% Celdas en Riesgo Elevado",
 ) -> None:
@@ -161,26 +160,33 @@ def render_map_tab(
             pass
 
     # Barra de Controles Rápidos del Mapa
-    col_preset, col_concello, col_search = st.columns([1.2, 1.2, 1.0])
+    col_preset, col_map_style, col_search = st.columns([1.3, 1.4, 0.9])
 
     with col_preset:
         preset_name = st.selectbox(
             "Sector Territorial:",
             list(ZOOM_PRESETS.keys()),
             index=0,
+            help="Enfoca una comarca o provincia con demarcación oficial PLADIGA.",
         )
         selected_preset = ZOOM_PRESETS[preset_name]
 
-    with col_concello:
-        concello_options = ["-- Vista General --"] + sorted(CONCELLOS_GALICIA.keys())
-        selected_concello = st.selectbox(
-            "Centrar en Concello:",
-            concello_options,
-            index=0,
+    with col_map_style:
+        default_style_idx = MAP_STYLES.index(map_style) if map_style in MAP_STYLES else 0
+        active_map_style = st.selectbox(
+            "Capa Base Cartográfica:",
+            MAP_STYLES,
+            index=default_style_idx,
+            help="Selecciona el estilo de mapa base (relieve físico, satélite, lienzo claro/oscuro o topográfico).",
         )
 
     with col_search:
-        search_cell = st.text_input("Localizar Celda ID:", value="", placeholder="Ej. 6818")
+        search_cell = st.text_input(
+            "Localizar Celda ID:",
+            value="",
+            placeholder="Ej. 6818",
+            help="Introduce el ID de una cuadrícula para marcarla en el mapa.",
+        )
 
     # Orientación táctica contextual si se combina filtro estrecho con modo percentil
     if ("Top 0.5%" in filter_risk or "Top 1.0%" in filter_risk) and ("Percentil" in color_mode or "Relativa" in color_mode):
@@ -191,47 +197,41 @@ def render_map_tab(
             icon="ℹ️",
         )
 
-    # Determinar centro y zoom según preset o concello seleccionado
+    # Determinar centro y zoom según preset seleccionado
     center_lat, center_lon = selected_preset["center"]
     initial_zoom = selected_preset["zoom"]
 
-    if selected_concello != "-- Vista General --":
-        c_info = CONCELLOS_GALICIA[selected_concello]
-        center_lat = c_info["lat"]
-        center_lon = c_info["lon"]
-        initial_zoom = 12
-
     # Mapas base 100% libres y sin marcas de agua ni API keys requeridas
     tiles_configs = {
-        "Esri Gris Claro (Lienzo Táctico)": {
-            "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-            "attr": "Esri, HERE, Garmin, © OpenStreetMap contributors",
-        },
-        "Esri Gris Oscuro (Lienzo Táctico)": {
-            "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-            "attr": "Esri, HERE, Garmin, © OpenStreetMap contributors",
-        },
-        "Esri Satellite (Satelital)": {
-            "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            "attr": "Esri, Maxar, Earthstar Geographics",
-        },
-        "IGN España — PNOA Ortofoto (Oficial)": {
+        "IGN España (Ortofoto Oficial)": {
             "url": "https://www.ign.es/wmts/pnoa-ma?request=GetTile&service=WMTS&version=1.0.0&layer=OI.OrthoimageCoverage&style=default&format=image/jpeg&tilematrixset=GoogleMapsCompatible&tilematrix={z}&tilerow={y}&tilecol={x}",
             "attr": "© Instituto Geográfico Nacional de España / PNOA",
         },
-        "OpenTopoMap (Topográfico)": {
-            "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-            "attr": "Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap",
+        "Relieve Topográfico": {
+            "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+            "attr": "Esri, DeLorme, NAVTEQ, TomTom, Intermap, IPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, METI",
         },
-        "OpenStreetMap": {
+        "Lienzo Claro": {
+            "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+            "attr": "Esri, HERE, Garmin, © OpenStreetMap contributors",
+        },
+        "Lienzo Oscuro": {
+            "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+            "attr": "Esri, HERE, Garmin, © OpenStreetMap contributors",
+        },
+        "Satélite": {
+            "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            "attr": "Esri, Maxar, Earthstar Geographics",
+        },
+        "Callejero": {
             "url": "OpenStreetMap",
             "attr": "© OpenStreetMap contributors",
         },
     }
 
     selected_config = tiles_configs.get(
-        map_style,
-        tiles_configs["Esri Gris Claro (Lienzo Táctico)"],
+        active_map_style,
+        tiles_configs["IGN España (Ortofoto Oficial)"],
     )
 
     # Crear mapa base Folium centrado y acotado al territorio gallego
@@ -245,56 +245,117 @@ def render_map_tab(
         prefer_canvas=True,
     )
 
-    # Cargar y aplicar máscara de atenuación territorial para oscurecer el exterior de Galicia
+    # Cargar y aplicar máscara de atenuación territorial para oscurecer el exterior de Galicia (sin contorno azul)
     mask_geojson, _ = load_galicia_focus_layers()
 
+    # Determinar opacidad exterior según si la capa base es fotográfica/oscura o clara
+    is_dark_or_photo = any(k in active_map_style for k in ["Oscuro", "Satélite", "Ortofoto", "IGN"])
+
     if mask_geojson:
-        mask_opacity = 0.65 if "Oscuro" in map_style or "Satellite" in map_style else 0.48
+        # Atenuación exterior para que fuera de Galicia sea menos visible
+        mask_opacity = 0.80 if is_dark_or_photo else 0.65
         folium.GeoJson(
             mask_geojson,
-            name="Atenuación Exterior",
+            name="Atenuación Exterior (Fuera de Galicia)",
             style_function=lambda _, op=mask_opacity: {
-                "fillColor": "#0b0f19",
+                "fillColor": "#060913",
                 "fillOpacity": op,
-                "color": "#0b0f19",
+                "color": "#060913",
                 "weight": 0,
                 "opacity": 0,
                 "interactive": False,
             },
         ).add_to(m)
 
+    # Demarcación de sector territorial si se ha seleccionado uno específico (overlay sutil sin bordes)
+    if preset_name != "Galicia Completa":
+        sector_bounds = selected_preset.get("bounds")
+        sectors_data = load_galicia_sectors_geojson()
+        sector_feature = None
+        if sectors_data and "features" in sectors_data:
+            for feat in sectors_data["features"]:
+                if feat.get("properties", {}).get("sector") == preset_name:
+                    sector_feature = feat
+                    break
+
+        sector_color = "#0284c7" if is_dark_or_photo else "#0369a1"
+
+        if sector_feature:
+            folium.GeoJson(
+                sector_feature,
+                name=f"Sector Operativo: {preset_name}",
+                style_function=lambda _, c=sector_color: {
+                    "fillColor": c,
+                    "fillOpacity": 0.08,
+                    "color": "transparent",
+                    "weight": 0,
+                    "opacity": 0,
+                    "interactive": False,
+                },
+            ).add_to(m)
+        elif sector_bounds:
+            folium.Rectangle(
+                bounds=sector_bounds,
+                color="transparent",
+                weight=0,
+                opacity=0,
+                fill=True,
+                fill_color=sector_color,
+                fill_opacity=0.06,
+                interactive=False,
+            ).add_to(m)
+
     # Plugins Folium para emergencias
     plugins.Fullscreen(position="topright", title="Pantalla Completa", title_cancel="Salir").add_to(m)
     plugins.MiniMap(toggle_display=True, position="bottomright").add_to(m)
 
-    # Filtrado de celdas para renderizar de forma segura
+    # Filtrado y presupuesto de celdas para renderizar con máxima fluidez y relevancia táctica
     if "lat_centroid" in df_ready.columns and "lon_centroid" in df_ready.columns:
         df_map = df_ready.dropna(subset=["lat_centroid", "lon_centroid"]).copy()
     else:
         df_map = df_ready.copy()
 
-    # Presupuesto de celdas optimizado para carga instantánea y fluidez GIS
-    if "0.5%" in filter_risk:
-        n_cutoff = max(80, int(len(df_map) * 0.005))
-        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
-    elif "1.0%" in filter_risk or "1%" in filter_risk:
-        n_cutoff = max(80, int(len(df_map) * 0.01))
-        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
-    elif "2.0%" in filter_risk or "2%" in filter_risk:
-        n_cutoff = max(180, int(len(df_map) * 0.02))
-        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
-    elif "5.0%" in filter_risk or "5%" in filter_risk:
-        n_cutoff = max(350, int(len(df_map) * 0.05))
-        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
-    elif "10" in filter_risk:
-        n_cutoff = max(600, int(len(df_map) * 0.10))
-        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
-    elif "20" in filter_risk:
-        n_cutoff = max(900, int(len(df_map) * 0.20))
-        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+    if preset_name != "Galicia Completa":
+        # Filtrado estrictamente alineado con los distritos oficiales del sector (0 celdas fuera del límite)
+        target_distritos = SECTOR_PLADIGA_DISTRITOS.get(preset_name, [])
+        if "distrito_forestal" in df_map.columns and target_distritos:
+            df_sector = df_map[df_map["distrito_forestal"].isin(target_distritos)].copy()
+        else:
+            b = selected_preset.get("bounds", [[41.8, -9.0], [43.8, -6.8]])
+            df_sector = df_map[
+                (df_map["lat_centroid"] >= b[0][0])
+                & (df_map["lat_centroid"] <= b[1][0])
+                & (df_map["lon_centroid"] >= b[0][1])
+                & (df_map["lon_centroid"] <= b[1][1])
+            ].copy()
+
+        if not df_sector.empty:
+            df_render = df_sector.nlargest(max(150, int(len(df_sector) * 0.15)), "prob_riesgo").copy()
+        else:
+            df_render = df_map.nlargest(200, "prob_riesgo").copy()
     else:
-        n_cutoff = max(350, int(len(df_map) * 0.05))
-        df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+        # Presupuesto de celdas general optimizado para vista autonómica completa
+        if "0.5%" in filter_risk:
+            n_cutoff = max(80, int(len(df_map) * 0.005))
+            df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+        elif "1.0%" in filter_risk or "1%" in filter_risk:
+            n_cutoff = max(80, int(len(df_map) * 0.01))
+            df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+        elif "2.0%" in filter_risk or "2%" in filter_risk:
+            n_cutoff = max(180, int(len(df_map) * 0.02))
+            df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+        elif "5.0%" in filter_risk or "5%" in filter_risk:
+            n_cutoff = max(350, int(len(df_map) * 0.05))
+            df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+        elif "10" in filter_risk:
+            n_cutoff = max(600, int(len(df_map) * 0.10))
+            df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+        elif "20" in filter_risk:
+            n_cutoff = max(900, int(len(df_map) * 0.20))
+            df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
+        else:
+            n_cutoff = max(350, int(len(df_map) * 0.05))
+            df_render = df_map.nlargest(n_cutoff, "prob_riesgo").copy()
 
     # Si hay celdas para renderizar
     if not df_render.empty and "lat_centroid" in df_render.columns and "lon_centroid" in df_render.columns:
@@ -436,4 +497,10 @@ def render_map_tab(
     leyenda_html = build_map_legend_html(color_mode)
     m.get_root().html.add_child(folium.Element(leyenda_html))
 
-    st_folium(m, use_container_width=True, height=620, returned_objects=[])
+    st_folium(
+        m,
+        use_container_width=True,
+        height=620,
+        returned_objects=[],
+        key=f"tactical_map_{preset_name}_{active_map_style}",
+    )

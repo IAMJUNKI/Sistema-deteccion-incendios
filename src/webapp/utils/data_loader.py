@@ -352,3 +352,29 @@ def load_grid_geometries() -> pd.DataFrame:
         return pd.DataFrame(grid[ret_cols])
     except Exception:
         return pd.DataFrame(columns=["cell_id", "geometry", "lat_centroid", "lon_centroid"])
+
+
+@st.cache_data(ttl=300)
+def load_operational_data_for_horizon(
+    selected_file: str | None = None,
+    horizon: int = 1,
+) -> pd.DataFrame:
+    """Carga y fusiona las predicciones con geometrías de celda para un horizonte concreto con caché."""
+    predictions = load_operational_predictions(selected_file)
+    if predictions.empty:
+        return predictions
+
+    if "horizon_days" in predictions.columns:
+        df_data = predictions[predictions["horizon_days"] == horizon].copy()
+        if df_data.empty:
+            df_data = predictions.copy()
+    else:
+        df_data = predictions.copy()
+
+    geometries = load_grid_geometries()
+    if not geometries.empty and "cell_id" in df_data.columns:
+        cols_to_merge = [c for c in geometries.columns if c not in df_data.columns or c == "cell_id"]
+        if len(cols_to_merge) > 1:
+            df_data = df_data.merge(geometries[cols_to_merge], on="cell_id", how="left")
+
+    return df_data

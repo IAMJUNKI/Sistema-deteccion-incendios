@@ -9,19 +9,87 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 import streamlit as st
+from shapely.affinity import scale
 from shapely.geometry import Point, box
 from shapely.ops import unary_union
 
 # Presets de navegación territorial en Galicia
 ZOOM_PRESETS = {
-    "Galicia Completa": {"center": [42.60, -7.85], "zoom": 8},
-    "Ourense Sur — Monterrei": {"center": [41.95, -7.50], "zoom": 10},
-    "Macizo Central — Trevinca": {"center": [42.25, -7.15], "zoom": 10},
-    "O Ribeiro — Carballiño": {"center": [42.35, -8.15], "zoom": 10},
-    "Rías Baixas — Pontevedra": {"center": [42.40, -8.60], "zoom": 9},
-    "Costa da Morte — Barbanza": {"center": [42.80, -9.00], "zoom": 9},
-    "Lugo Interior — Terra Chá": {"center": [43.15, -7.60], "zoom": 9},
-    "Mariña Lucense": {"center": [43.55, -7.45], "zoom": 9},
+    "Galicia Completa": {
+        "center": [42.60, -7.85],
+        "zoom": 8,
+    },
+    "Ourense Sur — Monterrei": {
+        "center": [41.95, -7.50],
+        "zoom": 10,
+        "bounds": [[41.78, -7.95], [42.18, -7.05]],
+    },
+    "Macizo Central — Trevinca": {
+        "center": [42.25, -7.15],
+        "zoom": 10,
+        "bounds": [[42.02, -7.55], [42.50, -6.75]],
+    },
+    "O Ribeiro — Carballiño": {
+        "center": [42.35, -8.15],
+        "zoom": 10,
+        "bounds": [[42.15, -8.45], [42.58, -7.85]],
+    },
+    "Rías Baixas — Pontevedra": {
+        "center": [42.40, -8.60],
+        "zoom": 9,
+        "bounds": [[42.00, -8.95], [42.70, -8.30]],
+    },
+    "Costa da Morte — Barbanza": {
+        "center": [42.80, -9.00],
+        "zoom": 9,
+        "bounds": [[42.45, -9.35], [43.15, -8.60]],
+    },
+    "Lugo Interior — Terra Chá": {
+        "center": [43.15, -7.60],
+        "zoom": 9,
+        "bounds": [[42.80, -7.95], [43.45, -7.25]],
+    },
+    "Mariña Lucense": {
+        "center": [43.55, -7.45],
+        "zoom": 9,
+        "bounds": [[43.35, -7.80], [43.78, -7.00]],
+    },
+}
+
+# Asignación de distritos forestales canónicos del PLADIGA por sector territorial
+SECTOR_PLADIGA_DISTRITOS = {
+    "Ourense Sur — Monterrei": [
+        "Distrito XIV — Verín - Viana",
+        "Distrito XV — A Limia",
+        "Distrito X — Terra de Celanova - Baixa Limia",
+    ],
+    "Macizo Central — Trevinca": [
+        "Distrito XIII — Valdeorras - Trives",
+        "Distrito VIII — Terra de Lemos",
+    ],
+    "O Ribeiro — Carballiño": [
+        "Distrito XI — O Ribeiro - Arenteiro",
+        "Distrito XII — Miño - Arnoia",
+    ],
+    "Rías Baixas — Pontevedra": [
+        "Distrito XVIII — Vigo - Baixo Miño",
+        "Distrito XVII — O Condado - Paradanta",
+        "Distrito XIX — Caldas - O Salnés",
+    ],
+    "Costa da Morte — Barbanza": [
+        "Distrito IV — Barbanza",
+        "Distrito V — Fisterra",
+        "Distrito II — Bergantiños - As Mariñas",
+    ],
+    "Lugo Interior — Terra Chá": [
+        "Distrito IX — Lugo - Sarria",
+        "Distrito VII — A Fonsagrada - Os Ancares",
+        "Distrito XVI — Deza - Tabeirós",
+    ],
+    "Mariña Lucense": [
+        "Distrito VI — A Mariña - Terra Chá",
+        "Distrito I — Ferrol",
+    ],
 }
 
 # Municipios de referencia de Galicia (Cabeceras comarcales y concellos de alta relevancia operativa)
@@ -116,6 +184,42 @@ def load_galicia_focus_layers() -> tuple[dict | None, dict | None]:
         return mask_geom.__geo_interface__, galicia_geom_simplified.__geo_interface__
     except Exception:
         return None, None
+
+
+@st.cache_data(ttl=3600)
+def load_galicia_sectors_geojson() -> dict | None:
+    """Carga las geometrías orgánicas oficiales de los sectores territoriales de Galicia (PLADIGA)."""
+    candidates = [
+        Path("data/external/galicia_sectors.geojson"),
+        Path("data/processed/galicia_sectors.geojson"),
+    ]
+    path = next((p for p in candidates if p.exists()), None)
+    if path is None:
+        return None
+    try:
+        import json
+
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+
+def build_concello_spotlight_mask(lat: float, lon: float, radius_km: float = 9.0) -> dict | None:
+    """Construye una máscara que atenúa el entorno exterior dejando el concello en foco luminoso."""
+    try:
+        deg_lat = radius_km / 111.0
+        deg_lon = radius_km / 81.7
+
+        circle = Point(lon, lat).buffer(deg_lat)
+        scaled_circle = scale(circle, xfact=deg_lat / deg_lon, yfact=1.0, origin=(lon, lat))
+        outer_box = box(-22.0, 30.0, 8.0, 49.0)
+        spotlight = outer_box.difference(scaled_circle)
+        return spotlight.__geo_interface__
+    except Exception:
+        return None
 
 
 def build_complex_dissolved_shapes(df_subset: pd.DataFrame) -> gpd.GeoDataFrame:

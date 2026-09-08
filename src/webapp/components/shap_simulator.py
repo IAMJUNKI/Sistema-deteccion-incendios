@@ -22,6 +22,51 @@ def render_html_safely(html_str: str) -> None:
         st.markdown(clean_html, unsafe_allow_html=True)
 
 
+FEATURE_LABELS: dict[str, str] = {
+    "vpd_mean": "Déficit Presión Vapor Medio (kPa)",
+    "vpd_max_12_18h": "Déficit Presión Vapor Máx 12-18h (kPa)",
+    "vpd_vc": "Déficit Presión Vapor (kPa)",
+    "relative_humidity_mean": "Humedad Relativa Media (%)",
+    "relative_humidity_mean_7d": "Humedad Relativa Media 7d (%)",
+    "relative_humidity_mean_14d": "Humedad Relativa Media 14d (%)",
+    "relative_humidity_min": "Humedad Relativa Mínima (%)",
+    "relative_humidity_min_12_18h": "Humedad Relativa Mín 12-18h (%)",
+    "rhmin_vc": "Humedad Relativa Mínima (%)",
+    "temperature_mean": "Temperatura Media (°C)",
+    "temperature_mean_7d": "Temperatura Media 7d (°C)",
+    "temperature_max": "Temperatura Máxima (°C)",
+    "temperature_max_12_18h": "Temperatura Máx 12-18h (°C)",
+    "tmax_vc": "Temperatura Máxima (°C)",
+    "temperature_min": "Temperatura Mínima (°C)",
+    "wind_speed_mean": "Velocidad Viento Media (km/h)",
+    "wind_speed_mean_7d": "Velocidad Viento Media 7d (km/h)",
+    "wind_speed_max": "Velocidad Viento Máxima (km/h)",
+    "wind_speed_max_12_18h": "Velocidad Viento Máx 12-18h (km/h)",
+    "vmax_vc": "Velocidad Viento Máxima (km/h)",
+    "precipitation_sum_3d": "Lluvia Acumulada 3 Días (mm)",
+    "precipitation_sum_7d": "Lluvia Acumulada 7 Días (mm)",
+    "precipitation_sum_14d": "Lluvia Acumulada 14 Días (mm)",
+    "precipitation_sum_30d": "Lluvia Acumulada 30 Días (mm)",
+    "prec_acum_30d": "Lluvia Acumulada 30 Días (mm)",
+    "prec_dia": "Lluvia del Día (mm)",
+    "dias_sin_lluvia": "Días Consecutivos sin Lluvia",
+    "consecutive_dry_days": "Días Consecutivos sin Lluvia",
+    "elevation_mean": "Altitud Media (m)",
+    "altitud_media": "Altitud Media (m)",
+    "slope_mean": "Pendiente Media (°)",
+    "pendiente_media": "Pendiente Media (°)",
+    "broadleaf_forest": "Fracción Frondosas Caducifolias",
+    "coniferous_forest": "Fracción Pinar / Coníferas",
+    "mixed_forest": "Fracción Bosque Mixto",
+    "scrub": "Fracción Matorral / Brezal",
+    "agriculture": "Fracción Agrícola / Mosaico",
+    "road_length_km": "Longitud Total Carreteras (km)",
+    "road_length_local_km": "Longitud Pistas / Vías Locales (km)",
+    "road_length_track_km": "Longitud Pistas Forestales (km)",
+    "road_length_main_km": "Longitud Vías Principales (km)",
+}
+
+
 def render_shap_and_simulator_tab(
     df_data: pd.DataFrame,
     dashboard_model: object | None,
@@ -160,51 +205,6 @@ def render_shap_and_simulator_tab(
         narrative_text = "Las condiciones meteorológicas y de terreno se encuentran en rangos moderados o habituales para la estación."
 
     st.info(narrative_text)
-
-    # Vista técnica expandible con etiquetas descriptivas
-    FEATURE_LABELS = {
-        "vpd_mean": "Déficit Presión Vapor Medio (kPa)",
-        "vpd_max_12_18h": "Déficit Presión Vapor Máx 12-18h (kPa)",
-        "vpd_vc": "Déficit Presión Vapor (kPa)",
-        "relative_humidity_mean": "Humedad Relativa Media (%)",
-        "relative_humidity_mean_7d": "Humedad Relativa Media 7d (%)",
-        "relative_humidity_mean_14d": "Humedad Relativa Media 14d (%)",
-        "relative_humidity_min": "Humedad Relativa Mínima (%)",
-        "relative_humidity_min_12_18h": "Humedad Relativa Mín 12-18h (%)",
-        "rhmin_vc": "Humedad Relativa Mínima (%)",
-        "temperature_mean": "Temperatura Media (°C)",
-        "temperature_mean_7d": "Temperatura Media 7d (°C)",
-        "temperature_max": "Temperatura Máxima (°C)",
-        "temperature_max_12_18h": "Temperatura Máx 12-18h (°C)",
-        "tmax_vc": "Temperatura Máxima (°C)",
-        "temperature_min": "Temperatura Mínima (°C)",
-        "wind_speed_mean": "Velocidad Viento Media (km/h)",
-        "wind_speed_mean_7d": "Velocidad Viento Media 7d (km/h)",
-        "wind_speed_max": "Velocidad Viento Máxima (km/h)",
-        "wind_speed_max_12_18h": "Velocidad Viento Máx 12-18h (km/h)",
-        "vmax_vc": "Velocidad Viento Máxima (km/h)",
-        "precipitation_sum_3d": "Lluvia Acumulada 3 Días (mm)",
-        "precipitation_sum_7d": "Lluvia Acumulada 7 Días (mm)",
-        "precipitation_sum_14d": "Lluvia Acumulada 14 Días (mm)",
-        "precipitation_sum_30d": "Lluvia Acumulada 30 Días (mm)",
-        "prec_acum_30d": "Lluvia Acumulada 30 Días (mm)",
-        "prec_dia": "Lluvia del Día (mm)",
-        "dias_sin_lluvia": "Días Consecutivos sin Lluvia",
-        "consecutive_dry_days": "Días Consecutivos sin Lluvia",
-        "elevation_mean": "Altitud Media (m)",
-        "altitud_media": "Altitud Media (m)",
-        "slope_mean": "Pendiente Media (°)",
-        "pendiente_media": "Pendiente Media (°)",
-        "broadleaf_forest": "Fracción Frondosas Caducifolias",
-        "coniferous_forest": "Fracción Pinar / Coníferas",
-        "mixed_forest": "Fracción Bosque Mixto",
-        "scrub": "Fracción Matorral / Brezal",
-        "agriculture": "Fracción Agrícola / Mosaico",
-        "road_length_km": "Longitud Total Carreteras (km)",
-        "road_length_local_km": "Longitud Pistas / Vías Locales (km)",
-        "road_length_track_km": "Longitud Pistas Forestales (km)",
-        "road_length_main_km": "Longitud Vías Principales (km)",
-    }
 
     if explanation_df is not None and not explanation_df.empty:
         with st.expander("Ver Desglose de Contribuciones Técnicas (TreeSHAP)", expanded=False):

@@ -22,7 +22,7 @@ from src.webapp.components.territorial_analytics import render_territorial_analy
 from src.webapp.styles import apply_custom_styles
 from src.webapp.utils.data_loader import (
     load_dashboard_model,
-    load_grid_geometries,
+    load_operational_data_for_horizon,
     load_operational_manifest,
     load_operational_predictions,
 )
@@ -52,9 +52,10 @@ def main() -> None:
     color_mode = sidebar_params["color_mode"]
     filter_risk = sidebar_params["filter_risk"]
 
-    # 5. Cargar dataset efectivo según selección
+    # 5. Cargar dataset efectivo para el horizonte con caché de geometrías (carga instantánea)
     predictions = load_operational_predictions(selected_file)
-    if predictions.empty:
+    df_data = load_operational_data_for_horizon(selected_file, selected_horizon)
+    if df_data.empty:
         st.error(
             "No se encontraron predicciones disponibles en data/processed/. Ejecuta "
             "`scripts/run_daily_inference.py` para generar el pronóstico operativo."
@@ -62,7 +63,6 @@ def main() -> None:
         st.stop()
 
     manifest = load_operational_manifest()
-    geometries = load_grid_geometries()
 
     forecast_quality = manifest.get("forecast_quality", "unknown")
     if forecast_quality in {"incomplete", "invalid", "unavailable"}:
@@ -75,20 +75,6 @@ def main() -> None:
             f"Calidad meteorológica: {forecast_quality}. Consulta la pestaña de auditoría "
             "antes de interpretar el mapa como escenario WRF 1 km."
         )
-
-    # Filtrar por horizonte seleccionado
-    if "horizon_days" in predictions.columns:
-        df_data = predictions[predictions["horizon_days"] == selected_horizon].copy()
-        if df_data.empty:
-            df_data = predictions.copy()
-    else:
-        df_data = predictions.copy()
-
-    # Fusionar geometrías y centroides reales de celda si están disponibles
-    if not geometries.empty and "cell_id" in df_data.columns:
-        cols_to_merge = [c for c in geometries.columns if c not in df_data.columns or c == "cell_id"]
-        if len(cols_to_merge) > 1:
-            df_data = df_data.merge(geometries[cols_to_merge], on="cell_id", how="left")
 
     target_date = str(pd.to_datetime(df_data.get("fecha", pd.Series(["hoy"]))).dt.strftime("%Y-%m-%d").iloc[0])
 
