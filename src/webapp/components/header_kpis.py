@@ -89,7 +89,18 @@ def render_header_and_kpis(
     forecast_grid = str(df_data.get("forecast_grid", pd.Series(["1km"])).iloc[0])
 
     # Determinar badge de calidad del forecast
-    if forecast_quality in {"stale"}:
+    is_historical = False
+    try:
+        if pd.to_datetime(target_date).year < 2026:
+            is_historical = True
+    except Exception:
+        pass
+
+    if is_historical or forecast_quality == "historical":
+        badge_class = "badge-fresh"
+        badge_icon = "history"
+        badge_text = f"Benchmark Histórico ({target_date})"
+    elif forecast_quality in {"stale"}:
         badge_class = "badge-stale"
         badge_icon = "warning"
         badge_text = f"Forecast Reutilizado ({forecast_age:.1f}h)"
@@ -121,9 +132,11 @@ def render_header_and_kpis(
 
     num_top05 = int((df_data["percentil_riesgo"] >= 0.995).sum()) if "percentil_riesgo" in df_data.columns else 0
 
-    # Indicador de Regla 30-30-30
+    # Indicador de Regla 30-30-30 y Alerta Termo-Higrométrica 30-30
     num_r30 = int(df_data["regla_30_30_activa"].sum()) if "regla_30_30_activa" in df_data.columns else 0
     pct_r30 = (num_r30 / total_cells * 100) if total_cells > 0 else 0.0
+    num_3030 = int(df_data["alerta_30_30_activa"].sum()) if "alerta_30_30_activa" in df_data.columns else 0
+    pct_3030 = (num_3030 / total_cells * 100) if total_cells > 0 else 0.0
 
     # Distrito con mayor riesgo
     distrito_top = "Galicia Sur"
@@ -241,17 +254,39 @@ def render_header_and_kpis(
         render_html_safely(card2_html)
 
     with c3:
-        r30_style = "alert-warning" if num_r30 > 0 else "alert-info"
-        card3_html = f"""
-        <div class="kpi-card {r30_style}">
-            <div class="kpi-label">
-                <span class="material-symbols-outlined">thermostat</span>
-                Condición Crítica 30-30-30
+        if num_r30 > 0:
+            card3_html = f"""
+            <div class="kpi-card alert-critical">
+                <div class="kpi-label">
+                    <span class="material-symbols-outlined">thermostat</span>
+                    Condición Crítica 30-30-30
+                </div>
+                <div class="kpi-value">{num_r30:,} <span style="font-size:0.9rem;color:#94a3b8;">({pct_r30:.1f}%)</span></div>
+                <div class="kpi-sub">T &ge; 30°C · HR &le; 30% · V &ge; 30 km/h</div>
             </div>
-            <div class="kpi-value">{num_r30:,} <span style="font-size:0.9rem;color:#94a3b8;">({pct_r30:.1f}%)</span></div>
-            <div class="kpi-sub">T &gt; 30°C · HR &lt; 30% · V &gt; 30 km/h</div>
-        </div>
-        """
+            """
+        elif num_3030 > 0:
+            card3_html = f"""
+            <div class="kpi-card alert-warning">
+                <div class="kpi-label">
+                    <span class="material-symbols-outlined">thermostat</span>
+                    Alerta Termo-Higrométrica 30-30
+                </div>
+                <div class="kpi-value">{num_3030:,} <span style="font-size:0.9rem;color:#94a3b8;">({pct_3030:.1f}%)</span></div>
+                <div class="kpi-sub">T &ge; 30°C · HR &le; 30% (Desecación crítica)</div>
+            </div>
+            """
+        else:
+            card3_html = """
+            <div class="kpi-card alert-info">
+                <div class="kpi-label">
+                    <span class="material-symbols-outlined">thermostat</span>
+                    Condición Crítica 30-30-30
+                </div>
+                <div class="kpi-value">0 <span style="font-size:0.9rem;color:#94a3b8;">(0.0%)</span></div>
+                <div class="kpi-sub">T &ge; 30°C · HR &le; 30% · V &ge; 30 km/h</div>
+            </div>
+            """
         render_html_safely(card3_html)
 
     with c4:

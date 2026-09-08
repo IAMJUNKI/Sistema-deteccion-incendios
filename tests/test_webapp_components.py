@@ -222,7 +222,8 @@ def test_build_map_legend_html_modes():
 
     legend_tac = build_map_legend_html("Niveles Tácticos Discretos (Top %)")
     assert "Niveles Tácticos" in legend_tac
-    assert "Nivel 4: Crítico" in legend_tac
+    assert "Nivel 5: Crítico" in legend_tac
+    assert "Nivel 4: Muy Alto" in legend_tac
 
 
 def test_get_day_severity_info():
@@ -247,3 +248,61 @@ def test_get_day_severity_info():
     extremo = get_day_severity_info(15.0)
     assert "Nivel 5" in extremo["level"]
     assert extremo["card_class"] == "alert-critical"
+
+
+def test_pladiga_19_distritos_structure():
+    from src.webapp.utils.geo_helpers import DISTRITOS_PLADIGA_CENTROIDES
+
+    # Verificar que los 19 distritos oficiales del PLADIGA están presentes
+    assert len(DISTRITOS_PLADIGA_CENTROIDES) == 19
+    for name, (lat, lon) in DISTRITOS_PLADIGA_CENTROIDES.items():
+        assert 41.5 <= lat <= 44.0
+        assert -9.5 <= lon <= -6.5
+        assert len(name) > 0
+
+
+def test_admin_lookup_enrichment_exact_provinces():
+    raw_df = pd.DataFrame(
+        {
+            "cell_id": [325, 45197],
+            "temperature_max_12_18h": [31.0, 24.0],
+            "relative_humidity_min_12_18h": [25.0, 50.0],
+            "wind_speed_max_12_18h": [15.0, 10.0],
+            "prob_riesgo": [0.03, 0.005],
+        }
+    )
+    enriched = enrich_dataset_metadata(raw_df)
+    assert "provincia" in enriched.columns
+    assert "distrito_forestal" in enriched.columns
+    assert "alerta_30_30_activa" in enriched.columns
+    # Celda 0 tiene T=31, RH=25, V=15 -> Alerta 30-30 activa pero regla 30-30-30 inactiva
+    assert bool(enriched.loc[0, "alerta_30_30_activa"]) is True
+    assert bool(enriched.loc[0, "regla_30_30_activa"]) is False
+    assert bool(enriched.loc[1, "alerta_30_30_activa"]) is False
+
+
+def test_explain_tree_prediction_contract():
+    from src.models.explainability import explain_tree_prediction
+    from src.webapp.utils.data_loader import load_dashboard_model
+
+    model = load_dashboard_model(1)
+    # Crear una fila representativa
+    raw_row = pd.DataFrame(
+        {
+            "temperature_mean": [26.0],
+            "temperature_max_12_18h": [32.5],
+            "relative_humidity_mean": [40.0],
+            "relative_humidity_min_12_18h": [22.0],
+            "wind_speed_mean": [14.0],
+            "wind_speed_max_12_18h": [28.0],
+            "precipitation_sum_30d": [0.5],
+            "slope_mean": [18.0],
+        }
+    )
+    df_shap = explain_tree_prediction(model, raw_row)
+    assert isinstance(df_shap, pd.DataFrame)
+    assert len(df_shap) == 48
+    assert "feature" in df_shap.columns
+    assert "contribution" in df_shap.columns
+    assert "value" in df_shap.columns
+

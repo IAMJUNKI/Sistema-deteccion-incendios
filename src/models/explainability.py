@@ -72,9 +72,14 @@ def explain_tree_prediction(model: object, features: pd.DataFrame) -> pd.DataFra
         CANONICAL_FEATURE_SCHEMA_VERSION,
         EGIF_48_FEATURE_CONTRACT_VERSION,
     } and feature_columns:
+        features_prepared = features.copy()
+        for col in feature_columns:
+            if col not in features_prepared.columns:
+                features_prepared[col] = 0.0
         matrix = ensure_feature_matrix_for_contract(
-            features, feature_columns, schema_version
+            features_prepared, feature_columns, schema_version
         )
+        matrix = matrix.apply(pd.to_numeric, errors="coerce").fillna(0.0)
     else:
         matrix = ensure_feature_matrix(features, feature_columns)
         matrix = matrix.apply(pd.to_numeric, errors="coerce").fillna(0.0)
