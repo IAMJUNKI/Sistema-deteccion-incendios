@@ -56,7 +56,29 @@ def explain_tree_prediction(model: object, features: pd.DataFrame) -> pd.DataFra
             "La dependencia opcional 'shap' no está instalada."
         ) from exc
 
-    matrix = ensure_feature_matrix(features)
+    feature_columns = getattr(model, "feature_columns", None)
+    schema_version = getattr(
+        model,
+        "feature_schema_version",
+        getattr(model, "metadata", {}).get("feature_schema_version", None) if hasattr(model, "metadata") else None,
+    )
+    from src.features.canonical_contract import (
+        CANONICAL_FEATURE_SCHEMA_VERSION,
+        EGIF_48_FEATURE_CONTRACT_VERSION,
+        ensure_feature_matrix_for_contract,
+    )
+
+    if schema_version in {
+        CANONICAL_FEATURE_SCHEMA_VERSION,
+        EGIF_48_FEATURE_CONTRACT_VERSION,
+    } and feature_columns:
+        matrix = ensure_feature_matrix_for_contract(
+            features, feature_columns, schema_version
+        )
+    else:
+        matrix = ensure_feature_matrix(features, feature_columns)
+        matrix = matrix.apply(pd.to_numeric, errors="coerce").fillna(0.0)
+
     if matrix.empty:
         raise ExplainabilityUnavailable("No hay filas para explicar.")
     try:

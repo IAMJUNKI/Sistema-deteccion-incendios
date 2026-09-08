@@ -126,22 +126,56 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
     if "percentil_riesgo" not in df.columns:
         df["percentil_riesgo"] = df["prob_riesgo"].rank(pct=True)
 
-    # Asignar provincia y distrito comarcal si no existen
-    if "provincia" not in df.columns and "lat_centroid" in df.columns and "lon_centroid" in df.columns:
-        df["provincia"] = [
-            assign_approx_province(lat, lon) if pd.notna(lat) and pd.notna(lon) else "Ourense"
-            for lat, lon in zip(df["lat_centroid"], df["lon_centroid"])
-        ]
-    elif "provincia" not in df.columns:
-        df["provincia"] = "Ourense"
+    # Asignar provincia y distrito forestal oficial PLADIGA (I a XIX)
+    if "provincia" not in df.columns or "distrito_forestal" not in df.columns:
+        egif_admin_path = Path("data/processed/grid/galicia_grid_1km_egif_admin.parquet")
+        legacy_admin_path = Path("data/processed/grid_galicia_centroids_admin.parquet")
+        admin_df = None
+        if "cell_id" in df.columns:
+            max_cid = df["cell_id"].max()
+            if max_cid > 30696 and egif_admin_path.exists():
+                try:
+                    admin_df = pd.read_parquet(egif_admin_path)
+                except Exception:
+                    pass
+            elif legacy_admin_path.exists():
+                try:
+                    admin_df = pd.read_parquet(legacy_admin_path)
+                except Exception:
+                    pass
+            elif egif_admin_path.exists():
+                try:
+                    admin_df = pd.read_parquet(egif_admin_path)
+                except Exception:
+                    pass
 
-    if "distrito_forestal" not in df.columns and "lat_centroid" in df.columns and "lon_centroid" in df.columns:
-        df["distrito_forestal"] = [
-            assign_comarca_or_distrito(lat, lon) if pd.notna(lat) and pd.notna(lon) else "Galicia Sur"
-            for lat, lon in zip(df["lat_centroid"], df["lon_centroid"])
-        ]
-    elif "distrito_forestal" not in df.columns:
-        df["distrito_forestal"] = "Galicia Sur"
+        if admin_df is not None and "cell_id" in df.columns:
+            admin_map = admin_df.drop_duplicates(subset=["cell_id"]).set_index("cell_id")
+            if "provincia" not in df.columns and "provincia" in admin_df.columns:
+                df["provincia"] = df["cell_id"].map(admin_map["provincia"])
+            if "distrito_forestal" not in df.columns and "distrito_forestal" in admin_df.columns:
+                df["distrito_forestal"] = df["cell_id"].map(admin_map["distrito_forestal"])
+
+        # Fallback exacto con polígonos oficiales de Galicia
+        if "provincia" not in df.columns or df["provincia"].isna().any():
+            missing_mask = df["provincia"].isna() if "provincia" in df.columns else pd.Series([True] * len(df))
+            if "lat_centroid" in df.columns and "lon_centroid" in df.columns:
+                df.loc[missing_mask, "provincia"] = [
+                    assign_approx_province(lat, lon) if pd.notna(lat) and pd.notna(lon) else "Ourense"
+                    for lat, lon in zip(df.loc[missing_mask, "lat_centroid"], df.loc[missing_mask, "lon_centroid"])
+                ]
+            else:
+                df["provincia"] = "Ourense"
+
+        if "distrito_forestal" not in df.columns or df["distrito_forestal"].isna().any():
+            missing_mask = df["distrito_forestal"].isna() if "distrito_forestal" in df.columns else pd.Series([True] * len(df))
+            if "lat_centroid" in df.columns and "lon_centroid" in df.columns:
+                df.loc[missing_mask, "distrito_forestal"] = [
+                    assign_comarca_or_distrito(lat, lon) if pd.notna(lat) and pd.notna(lon) else "Distrito XII — Miño - Arnoia"
+                    for lat, lon in zip(df.loc[missing_mask, "lat_centroid"], df.loc[missing_mask, "lon_centroid"])
+                ]
+            else:
+                df["distrito_forestal"] = "Distrito XII — Miño - Arnoia"
 
     # Normalizar variables meteorológicas y topográficas (canónicas EGIF <-> legacy)
     if "temperature_max_12_18h" in df.columns and "tmax_vc" not in df.columns:
@@ -170,12 +204,24 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
         df["slope_mean"] = df["pendiente_media"]
 
     # Sintetizar cobertura de combustible/vegetación a partir de fracciones CORINE
-    if "combustible_pct_forestal" not in df.columns:
-        forest_cols = [c for c in ["broadleaf_forest", "coniferous_forest", "mixed_forest"] if c in df.columns]
-        if forest_cols:
-            df["combustible_pct_forestal"] = (df[forest_cols].sum(axis=1) * 100).clip(0, 100)
+    forest_cols = [c for c in ["broadleaf_forest", "coniferous_forest", "mixed_forest"] if c in df.columns]
+    if forest_cols:
+        computed_forest = (df[forest_cols].fillna(0.0).sum(axis=1) * 100).clip(0, 100)
+        if "combustible_pct_forestal" not in df.columns:
+            df["combustible_pct_forestal"] = computed_forest
         else:
+            # Si la columna existía pero con NaNs (rellenada como nula en el pipeline de features),
+            # reconstruir con la suma real de las fracciones de arbolado de CORINE
+            df["combustible_pct_forestal"] = (
+                pd.to_numeric(df["combustible_pct_forestal"], errors="coerce")
+                .fillna(computed_forest)
+                .fillna(0.0)
+            )
+    else:
+        if "combustible_pct_forestal" not in df.columns:
             df["combustible_pct_forestal"] = 0.0
+        else:
+            df["combustible_pct_forestal"] = pd.to_numeric(df["combustible_pct_forestal"], errors="coerce").fillna(0.0)
 
     if "combustible_clase" not in df.columns:
         def _infer_fuel_class(row: pd.Series) -> str:
@@ -225,6 +271,11 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
         errors="coerce",
     ).fillna(15.0)
     df["regla_30_30_activa"] = (tmax >= 30.0) & (rhmin <= 30.0) & (vmax >= 30.0)
+    # Alerta termo-higrométrica 30-30 (desecación crítica del combustible fino)
+    if "alerta_30_30" in df.columns:
+        df["alerta_30_30_activa"] = df["alerta_30_30"].astype(bool) | ((tmax >= 30.0) & (rhmin <= 30.0))
+    else:
+        df["alerta_30_30_activa"] = (tmax >= 30.0) & (rhmin <= 30.0)
 
     # Acción recomendada
     if "recommended_action" not in df.columns:

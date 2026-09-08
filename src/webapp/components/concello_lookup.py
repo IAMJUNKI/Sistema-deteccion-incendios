@@ -102,11 +102,13 @@ def render_concello_lookup_tab(df_data: pd.DataFrame, target_date: str) -> None:
 
     muni_coords = CONCELLOS_GALICIA.get(selected_muni, {"lat": 42.6, "lon": -7.8, "provincia": "Ourense"})
 
-    # Buscar la celda más cercana al municipio
+    # Buscar la celda más cercana al municipio con corrección por latitud esférica
     df_with_coords = df_data.dropna(subset=["lat_centroid", "lon_centroid"]).copy()
     if not df_with_coords.empty:
+        # A 42.6° N (centroide medio de Galicia), cos(lat) ≈ 0.7361
+        cos_lat = 0.7361
         dists = (df_with_coords["lat_centroid"] - muni_coords["lat"]) ** 2 + (
-            df_with_coords["lon_centroid"] - muni_coords["lon"]
+            (df_with_coords["lon_centroid"] - muni_coords["lon"]) * cos_lat
         ) ** 2
         nearest_row = df_with_coords.loc[dists.idxmin()]
     else:

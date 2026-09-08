@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 import streamlit as st
-from shapely.geometry import box
+from shapely.geometry import Point, box
 from shapely.ops import unary_union
 
 # Presets de navegación territorial en Galicia
@@ -23,8 +24,9 @@ ZOOM_PRESETS = {
     "Mariña Lucense": {"center": [43.55, -7.45], "zoom": 9},
 }
 
-# Municipios de referencia de Galicia
+# Municipios de referencia de Galicia (Cabeceras comarcales y concellos de alta relevancia operativa)
 CONCELLOS_GALICIA = {
+    # Ourense
     "Ourense": {"lat": 42.3358, "lon": -7.8639, "provincia": "Ourense"},
     "Verín": {"lat": 41.9408, "lon": -7.4378, "provincia": "Ourense"},
     "Xinzo de Limia": {"lat": 42.0633, "lon": -7.7236, "provincia": "Ourense"},
@@ -34,6 +36,11 @@ CONCELLOS_GALICIA = {
     "Ribadavia": {"lat": 42.2872, "lon": -8.1436, "provincia": "Ourense"},
     "Allariz": {"lat": 42.1906, "lon": -7.8028, "provincia": "Ourense"},
     "Celanova": {"lat": 42.1528, "lon": -7.9575, "provincia": "Ourense"},
+    "O Carballiño": {"lat": 42.4303, "lon": -8.0778, "provincia": "Ourense"},
+    "Bande": {"lat": 42.0306, "lon": -7.9753, "provincia": "Ourense"},
+    "Viana do Bolo": {"lat": 42.1806, "lon": -7.1147, "provincia": "Ourense"},
+    "A Rúa": {"lat": 42.3958, "lon": -7.1158, "provincia": "Ourense"},
+    # A Coruña
     "Santiago de Compostela": {"lat": 42.8782, "lon": -8.5448, "provincia": "A Coruña"},
     "A Coruña": {"lat": 43.3623, "lon": -8.4115, "provincia": "A Coruña"},
     "Ferrol": {"lat": 43.4832, "lon": -8.2369, "provincia": "A Coruña"},
@@ -41,12 +48,26 @@ CONCELLOS_GALICIA = {
     "Ribeira": {"lat": 42.5539, "lon": -8.9931, "provincia": "A Coruña"},
     "Noia": {"lat": 42.7847, "lon": -8.8872, "provincia": "A Coruña"},
     "Muros": {"lat": 42.7758, "lon": -9.0578, "provincia": "A Coruña"},
+    "Betanzos": {"lat": 43.2811, "lon": -8.2114, "provincia": "A Coruña"},
+    "Fisterra": {"lat": 42.9083, "lon": -9.2639, "provincia": "A Coruña"},
+    "Cee": {"lat": 42.9567, "lon": -9.1894, "provincia": "A Coruña"},
+    "As Pontes de García Rodríguez": {"lat": 43.4497, "lon": -7.8528, "provincia": "A Coruña"},
+    "Melide": {"lat": 42.9150, "lon": -8.0153, "provincia": "A Coruña"},
+    "Arzúa": {"lat": 42.9272, "lon": -8.1636, "provincia": "A Coruña"},
+    "Ordes": {"lat": 43.0767, "lon": -8.4078, "provincia": "A Coruña"},
+    # Lugo
     "Lugo": {"lat": 43.0097, "lon": -7.5568, "provincia": "Lugo"},
     "Monforte de Lemos": {"lat": 42.5217, "lon": -7.5142, "provincia": "Lugo"},
     "Sarria": {"lat": 42.7806, "lon": -7.4147, "provincia": "Lugo"},
     "Vilalba": {"lat": 43.2981, "lon": -7.6811, "provincia": "Lugo"},
     "Viveiro": {"lat": 43.6628, "lon": -7.5956, "provincia": "Lugo"},
     "Ribadeo": {"lat": 43.5361, "lon": -7.0408, "provincia": "Lugo"},
+    "Chantada": {"lat": 42.6089, "lon": -7.7686, "provincia": "Lugo"},
+    "Quiroga": {"lat": 42.4758, "lon": -7.2725, "provincia": "Lugo"},
+    "A Fonsagrada": {"lat": 43.1256, "lon": -7.0689, "provincia": "Lugo"},
+    "Becerreá": {"lat": 42.8542, "lon": -7.1611, "provincia": "Lugo"},
+    "Mondoñedo": {"lat": 43.4286, "lon": -7.3628, "provincia": "Lugo"},
+    # Pontevedra
     "Pontevedra": {"lat": 42.4310, "lon": -8.6444, "provincia": "Pontevedra"},
     "Vigo": {"lat": 42.2406, "lon": -8.7207, "provincia": "Pontevedra"},
     "Vilagarcía de Arousa": {"lat": 42.5969, "lon": -8.7636, "provincia": "Pontevedra"},
@@ -54,6 +75,13 @@ CONCELLOS_GALICIA = {
     "A Estrada": {"lat": 42.6889, "lon": -8.4897, "provincia": "Pontevedra"},
     "Ponteareas": {"lat": 42.1764, "lon": -8.5042, "provincia": "Pontevedra"},
     "Tui": {"lat": 42.0461, "lon": -8.6447, "provincia": "Pontevedra"},
+    "Redondela": {"lat": 42.2831, "lon": -8.6086, "provincia": "Pontevedra"},
+    "Cangas do Morrazo": {"lat": 42.2644, "lon": -8.7836, "provincia": "Pontevedra"},
+    "Sanxenxo": {"lat": 42.4003, "lon": -8.8078, "provincia": "Pontevedra"},
+    "Cambados": {"lat": 42.5147, "lon": -8.8147, "provincia": "Pontevedra"},
+    "Caldas de Reis": {"lat": 42.6042, "lon": -8.6417, "provincia": "Pontevedra"},
+    "Silleda": {"lat": 42.6975, "lon": -8.2483, "provincia": "Pontevedra"},
+    "A Guarda": {"lat": 41.9014, "lon": -8.8744, "provincia": "Pontevedra"},
 }
 
 
@@ -126,34 +154,79 @@ def build_complex_dissolved_shapes(df_subset: pd.DataFrame) -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(geometry=[unified_geom], crs="EPSG:4326")
 
 
+# Centros de referencia de los 19 Distritos Forestales del PLADIGA (Xunta de Galicia)
+DISTRITOS_PLADIGA_CENTROIDES = {
+    "Distrito I — Ferrol": (43.52, -8.05),
+    "Distrito II — Bergantiños - As Mariñas": (43.26, -8.45),
+    "Distrito III — Santiago - Meseta Interior": (42.92, -8.40),
+    "Distrito IV — Barbanza": (42.68, -8.90),
+    "Distrito V — Fisterra": (43.05, -9.05),
+    "Distrito VI — A Mariña - Terra Chá": (43.40, -7.45),
+    "Distrito VII — A Fonsagrada - Os Ancares": (43.05, -7.05),
+    "Distrito VIII — Terra de Lemos": (42.50, -7.45),
+    "Distrito IX — Lugo - Sarria": (42.90, -7.55),
+    "Distrito X — Terra de Celanova - Baixa Limia": (42.05, -8.05),
+    "Distrito XI — O Ribeiro - Arenteiro": (42.35, -8.20),
+    "Distrito XII — Miño - Arnoia": (42.30, -7.75),
+    "Distrito XIII — Valdeorras - Trives": (42.38, -7.10),
+    "Distrito XIV — Verín - Viana": (41.98, -7.35),
+    "Distrito XV — A Limia": (42.08, -7.65),
+    "Distrito XVI — Deza - Tabeirós": (42.66, -8.30),
+    "Distrito XVII — O Condado - Paradanta": (42.18, -8.45),
+    "Distrito XVIII — Vigo - Baixo Miño": (42.15, -8.70),
+    "Distrito XIX — Caldas - O Salnés": (42.54, -8.70),
+}
+
+
+@st.cache_data(ttl=3600)
+def _load_province_polygons():
+    """Carga los polígonos oficiales de las 4 provincias gallegas."""
+    candidates = [
+        Path("data/external/galicia_provinces.geojson"),
+        Path("data/raw/igm/galicia_provinces.geojson"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            try:
+                gdf = gpd.read_file(candidate)
+                return [(str(row["provincia"]), row["geometry"]) for _, row in gdf.iterrows()]
+            except Exception:
+                pass
+    return None
+
+
 def assign_approx_province(lat: float, lon: float) -> str:
-    """Asigna la provincia gallega correspondiente por coordenadas aproximadas."""
+    """Asigna la provincia gallega correspondiente con exactitud geométrica oficial."""
+    provinces = _load_province_polygons()
+    if provinces:
+        p = Point(lon, lat)
+        for name, geom in provinces:
+            if geom.contains(p):
+                return name
+        # Si cae en aguas costeras o justo en la frontera, asignar al polígono más cercano
+        return min(provinces, key=lambda item: item[1].distance(p))[0]
+
+    # Fallback con cortes ajustados a la morfología real gallega
     if lat < 42.45:
-        if lon > -8.25:
+        if lon > -8.15:
             return "Ourense"
         return "Pontevedra"
     else:
         if lon > -7.95:
             return "Lugo"
+        if lat < 42.75 and lon < -8.0 and lon > -8.5:
+            return "Pontevedra"
         return "A Coruña"
 
 
 def assign_comarca_or_distrito(lat: float, lon: float) -> str:
-    """Asigna un distrito forestal / comarca representativa según coordenadas."""
-    if lat < 42.15 and lon > -7.65:
-        return "Distrito XIV — Verín - Viana"
-    elif lat < 42.45 and lon > -7.50:
-        return "Distrito XV — A Limia / Valdeorras"
-    elif lat < 42.45 and lon > -8.20:
-        return "Distrito XI — O Ribeiro - Arenteiro"
-    elif lat < 42.50 and lon <= -8.20:
-        return "Distrito XIX — Caldas - O Salnés"
-    elif lat >= 42.45 and lat < 42.90 and lon <= -8.30:
-        return "Distrito IV — Barbanza"
-    elif lat >= 42.90 and lon <= -8.30:
-        return "Distrito V — Bergantiños - Mariñas"
-    elif lat >= 42.45 and lat < 43.10 and lon > -7.90:
-        return "Distrito VIII — Terra de Lemos"
-    elif lat >= 43.10 and lon > -7.90:
-        return "Distrito VII — A Fonsagrada - Os Ancares"
-    return "Galicia Central / Deza"
+    """Asigna el distrito forestal oficial PLADIGA (I a XIX) más cercano."""
+    cos_lat = math.cos(math.radians(42.6))
+    best_dist = float("inf")
+    best_name = "Distrito XII — Miño - Arnoia"
+    for name, (d_lat, d_lon) in DISTRITOS_PLADIGA_CENTROIDES.items():
+        dist = (lat - d_lat) ** 2 + ((lon - d_lon) * cos_lat) ** 2
+        if dist < best_dist:
+            best_dist = dist
+            best_name = name
+    return best_name

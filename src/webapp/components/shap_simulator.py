@@ -94,8 +94,10 @@ def render_shap_and_simulator_tab(
             if pd.notna(raw_fuel) and str(raw_fuel).strip().lower() not in ["", "nan", "none"]
             else "Matorral / Monte Bajo"
         )
-        forest_pct = float(c_info.get("combustible_pct_forestal", 0.0))
-        slope = float(c_info.get("slope_mean", c_info.get("pendiente_media", 12.0)))
+        raw_forest = c_info.get("combustible_pct_forestal")
+        forest_pct = float(raw_forest) if pd.notna(raw_forest) else 0.0
+        raw_slope = c_info.get("slope_mean", c_info.get("pendiente_media", 12.0))
+        slope = float(raw_slope) if pd.notna(raw_slope) else 12.0
 
         st.markdown("#### Factores Clave Observados en el Terreno")
 
@@ -137,7 +139,8 @@ def render_shap_and_simulator_tab(
     explanation_df = None
     if dashboard_model is not None:
         try:
-            explanation_df = explain_tree_prediction(dashboard_model, c_info.to_frame().T)
+            c_row = df_data[df_data["cell_id"] == selected_cid].iloc[[0]]
+            explanation_df = explain_tree_prediction(dashboard_model, c_row)
         except Exception:
             pass
 
@@ -158,11 +161,56 @@ def render_shap_and_simulator_tab(
 
     st.info(narrative_text)
 
-    # Vista técnica expandible
+    # Vista técnica expandible con etiquetas descriptivas
+    FEATURE_LABELS = {
+        "vpd_mean": "Déficit Presión Vapor Medio (kPa)",
+        "vpd_max_12_18h": "Déficit Presión Vapor Máx 12-18h (kPa)",
+        "vpd_vc": "Déficit Presión Vapor (kPa)",
+        "relative_humidity_mean": "Humedad Relativa Media (%)",
+        "relative_humidity_mean_7d": "Humedad Relativa Media 7d (%)",
+        "relative_humidity_mean_14d": "Humedad Relativa Media 14d (%)",
+        "relative_humidity_min": "Humedad Relativa Mínima (%)",
+        "relative_humidity_min_12_18h": "Humedad Relativa Mín 12-18h (%)",
+        "rhmin_vc": "Humedad Relativa Mínima (%)",
+        "temperature_mean": "Temperatura Media (°C)",
+        "temperature_mean_7d": "Temperatura Media 7d (°C)",
+        "temperature_max": "Temperatura Máxima (°C)",
+        "temperature_max_12_18h": "Temperatura Máx 12-18h (°C)",
+        "tmax_vc": "Temperatura Máxima (°C)",
+        "temperature_min": "Temperatura Mínima (°C)",
+        "wind_speed_mean": "Velocidad Viento Media (km/h)",
+        "wind_speed_mean_7d": "Velocidad Viento Media 7d (km/h)",
+        "wind_speed_max": "Velocidad Viento Máxima (km/h)",
+        "wind_speed_max_12_18h": "Velocidad Viento Máx 12-18h (km/h)",
+        "vmax_vc": "Velocidad Viento Máxima (km/h)",
+        "precipitation_sum_3d": "Lluvia Acumulada 3 Días (mm)",
+        "precipitation_sum_7d": "Lluvia Acumulada 7 Días (mm)",
+        "precipitation_sum_14d": "Lluvia Acumulada 14 Días (mm)",
+        "precipitation_sum_30d": "Lluvia Acumulada 30 Días (mm)",
+        "prec_acum_30d": "Lluvia Acumulada 30 Días (mm)",
+        "prec_dia": "Lluvia del Día (mm)",
+        "dias_sin_lluvia": "Días Consecutivos sin Lluvia",
+        "consecutive_dry_days": "Días Consecutivos sin Lluvia",
+        "elevation_mean": "Altitud Media (m)",
+        "altitud_media": "Altitud Media (m)",
+        "slope_mean": "Pendiente Media (°)",
+        "pendiente_media": "Pendiente Media (°)",
+        "broadleaf_forest": "Fracción Frondosas Caducifolias",
+        "coniferous_forest": "Fracción Pinar / Coníferas",
+        "mixed_forest": "Fracción Bosque Mixto",
+        "scrub": "Fracción Matorral / Brezal",
+        "agriculture": "Fracción Agrícola / Mosaico",
+        "road_length_km": "Longitud Total Carreteras (km)",
+        "road_length_local_km": "Longitud Pistas / Vías Locales (km)",
+        "road_length_track_km": "Longitud Pistas Forestales (km)",
+        "road_length_main_km": "Longitud Vías Principales (km)",
+    }
+
     if explanation_df is not None and not explanation_df.empty:
         with st.expander("Ver Desglose de Contribuciones Técnicas (TreeSHAP)", expanded=False):
             top_exp = explanation_df.head(8).copy()
-            chart_series = top_exp.set_index("feature")["contribution"]
+            top_exp["etiqueta"] = top_exp["feature"].map(lambda f: FEATURE_LABELS.get(f, f))
+            chart_series = top_exp.set_index("etiqueta")["contribution"]
             st.bar_chart(chart_series, color="#dc2626")
 
     st.markdown("---")
@@ -206,10 +254,14 @@ def render_shap_and_simulator_tab(
     sim_row["rhmin_vc"] = new_rhmin
     sim_row["relative_humidity_min_12_18h"] = new_rhmin
     sim_row["relative_humidity_min"] = new_rhmin
+    if "relative_humidity_mean" in sim_row:
+        sim_row["relative_humidity_mean"] = float(np.clip(c_info.get("relative_humidity_mean", 60.0) + delta_rh * 0.7, 5.0, 100.0))
 
     sim_row["vmax_vc"] = new_vmax
     sim_row["wind_speed_max_12_18h"] = new_vmax
     sim_row["wind_speed_max"] = new_vmax
+    if "wind_speed_mean" in sim_row:
+        sim_row["wind_speed_mean"] = float(np.clip(c_info.get("wind_speed_mean", 10.0) + delta_wind * 0.6, 0.0, 70.0))
 
     sim_row["vpd_vc"] = new_vpd
     sim_row["vpd_max_12_18h"] = new_vpd

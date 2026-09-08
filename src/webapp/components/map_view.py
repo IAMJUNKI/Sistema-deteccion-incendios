@@ -29,18 +29,16 @@ def get_color_gradient(prob: float, pct: float, mode: str) -> str:
     if "Probabilidad" in mode or "Absoluto" in mode:
         val = prob * 100
         if val >= 12.0:
-            return "#800026"  # Púrpura / Granate Extremo
+            return "#800026"  # Nivel 5 — Extremo (P >= 12.0%)
         if val >= 6.0:
-            return "#BD0026"  # Rojo Oscuro
-        if val >= 3.0:
-            return "#E31A1C"  # Rojo Vivo
-        if val >= 1.5:
-            return "#FC4E2A"  # Naranja Intenso
-        if val >= 0.8:
-            return "#FD8D3C"  # Naranja Claro
+            return "#BD0026"  # Nivel 4 — Muy Alto (6.0% - 12.0%)
+        if val >= 2.5:
+            return "#E31A1C"  # Nivel 3 — Alto (2.5% - 6.0%)
+        if val >= 1.0:
+            return "#FD8D3C"  # Nivel 2 — Moderado (1.0% - 2.5%)
         if val >= 0.3:
-            return "#FEB24C"  # Amarillo Dorado
-        return "#FED976"      # Amarillo Suave
+            return "#FEB24C"  # Nivel 1 — Bajo (0.3% - 1.0%)
+        return "#FED976"      # Nivel 1 — Nominal (< 0.3%)
     elif "Percentil" in mode or "Relativa" in mode:
         val = pct * 100
         if val >= 99.8:
@@ -57,13 +55,15 @@ def get_color_gradient(prob: float, pct: float, mode: str) -> str:
             return "#FEB24C"  # Top 20.0%
         return "#FED976"
     else:
+        if pct >= 0.998:
+            return "#800026"  # Nivel 5: Crítico (Top 0.2%)
         if pct >= 0.995:
-            return "#800026"
-        if pct >= 0.985:
-            return "#E31A1C"
+            return "#BD0026"  # Nivel 4: Muy Alto (Top 0.5%)
+        if pct >= 0.980:
+            return "#E31A1C"  # Nivel 3: Alto (Top 2.0%)
         if pct >= 0.950:
-            return "#FD8D3C"
-        return "#FED976"
+            return "#FD8D3C"  # Nivel 2: Moderado (Top 5.0%)
+        return "#FED976"      # Nivel 1: Bajo / Nominal
 
 
 def build_map_legend_html(color_mode: str) -> str:
@@ -71,14 +71,14 @@ def build_map_legend_html(color_mode: str) -> str:
     if "Probabilidad" in color_mode or "Absoluto" in color_mode:
         title = "Escala: Probabilidad P(Y=1)"
         items = """
-            <span style="background:#800026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Extremo (&ge; 12.0%)<br/>
-            <span style="background:#BD0026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Muy Alto (6.0% &ndash; 12.0%)<br/>
-            <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Alto (3.0% &ndash; 6.0%)<br/>
-            <span style="background:#FC4E2A;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Moderado-Alto (1.5% &ndash; 3.0%)<br/>
-            <span style="background:#FD8D3C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Moderado (0.8% &ndash; 1.5%)<br/>
-            <span style="background:#FEB24C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Bajo / Nominal (&lt; 0.8%)
+            <span style="background:#800026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 5 — Extremo (&ge; 12.0%)<br/>
+            <span style="background:#BD0026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 4 — Muy Alto (6.0% &ndash; 12.0%)<br/>
+            <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 3 — Alto (2.5% &ndash; 6.0%)<br/>
+            <span style="background:#FD8D3C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 2 — Moderado (1.0% &ndash; 2.5%)<br/>
+            <span style="background:#FEB24C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1 — Bajo (0.3% &ndash; 1.0%)<br/>
+            <span style="background:#FED976;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1 — Nominal (&lt; 0.3%)
         """
-        subtitle = "Severidad física calibrada"
+        subtitle = "Severidad física calibrada (5 Niveles)"
     elif "Percentil" in color_mode or "Relativa" in color_mode:
         title = "Escala: Priorización Relativa"
         items = """
@@ -91,14 +91,15 @@ def build_map_legend_html(color_mode: str) -> str:
         """
         subtitle = "Ranking relativo para despacho"
     else:
-        title = "Escala: Niveles Tácticos"
+        title = "Escala: Niveles Tácticos (Top %)"
         items = """
-            <span style="background:#800026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 4: Crítico (&ge; 99.5%)<br/>
-            <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 3: Muy Alto (&ge; 98.5%)<br/>
-            <span style="background:#FD8D3C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 2: Alto (&ge; 95.0%)<br/>
-            <span style="background:#FED976;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1: Moderado / Bajo
+            <span style="background:#800026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 5: Crítico (Top 0.2% / &ge; 99.8%)<br/>
+            <span style="background:#BD0026;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 4: Muy Alto (Top 0.5% / &ge; 99.5%)<br/>
+            <span style="background:#E31A1C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 3: Alto (Top 2.0% / &ge; 98.0%)<br/>
+            <span style="background:#FD8D3C;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 2: Moderado (Top 5.0% / &ge; 95.0%)<br/>
+            <span style="background:#FED976;width:12px;height:12px;display:inline-block;border-radius:2px;margin-right:6px;vertical-align:middle;"></span>Nivel 1: Nominal (&lt; 95.0%)
         """
-        subtitle = "Tramos discretos de intervención"
+        subtitle = "Tramos discretos de intervención (5 Niveles)"
 
     return f"""
     <div style="position: fixed; bottom: 25px; left: 25px; z-index: 9999;

@@ -302,3 +302,54 @@
 > El pipeline operativo resuelve esta limitación mediante una **estrategia de estado deslizante (Warm Start)** sincronizada bidireccionalmente:
 > 1. **Actualización Incremental de Brecha (`auto-fill-gap`):** El script de ingesta de observaciones (`ingest_meteogalicia_observations.py`) examina la fecha máxima registrada en el parquet de estado local y descarga exclusivamente el intervalo temporal faltante hasta $D-1$ (típicamente 24 a 48 horas), interpolando las medidas de las estaciones de MeteoGalicia (EMA) y actualizando atómicamente la ventana móvil sin recalcular los 30 días previos.
 > 2. **Sincronización Automática Servidor $\rightarrow$ Hugging Face Hub:** Cada mañana, tras completarse la inferencia predictiva en el servidor de producción Linux (programada mediante `systemd timer` a las 05:15 CET), un proceso automatizado (`scripts/publish_to_huggingface.py`) sube el estado meteorológico recién consolidado y las predicciones resultantes al repositorio de Hugging Face. De este modo, la comunidad y los evaluadores disponen de forma transparente y permanente de la última foto operativa del territorio gallego sin intervención manual.
+
+### 7.3 Arquitectura y Flujo de Ejecución del Pipeline Operativo Diario en Producción
+*(Descripción integral del ciclo diario de inferencia: desde la captura de datos hasta la alerta táctica)*
+> Para materializar la transferencia tecnológica del modelo de investigación a un entorno de misión crítica, se ha diseñado un pipeline operativo de ejecución desasistida (*batch processing*) concebido bajo tres pilares fundamentales: **robustez ante fallos externos, ausencia estricta de fugas de datos (*data leakage*) e interpretabilidad física inmediata**.
+>
+> El pipeline se ejecuta de forma totalmente automatizada cada madrugada mediante un temporizador de sistema (`systemd timer`) programado a las **05:15 CET**, transformando las previsiones meteorológicas y el estado antecedente del territorio en **tres mapas predictivos diarios independientes ($T+1, T+2, T+3$)** para las 29.601 cuadrículas de $1\text{ km} \times 1\text{ km}$ que componen la Comunidad Autónoma de Galicia.
+>
+> ```mermaid
+> flowchart TD
+>     A[05:15 CET: Scheduler systemd timer] --> B[Adquisición del Lock de Concurrencia]
+>     B --> C[Actualización de Memoria Antecedente D-30 a D-1\nRed EMA MeteoGalicia + Climatología AEMET]
+>     C --> D[Ingesta y Validación de Previsión Futura a 72h\nCadena: WRF 1km -> WRF 4km -> AEMET]
+>     D --> E[Proyección a Rejilla Canónica 1km²\n29.601 celdas de Galicia]
+>     E --> F[Ingeniería de Variables en Ventana Crítica 12h-18h\nContrato egif-2d-48-v1 sin Data Leakage]
+>     F --> G1[Inferencia T+1 LightGBM + Platt]
+>     F --> G2[Inferencia T+2 LightGBM + Platt]
+>     F --> G3[Inferencia T+3 LightGBM + Platt]
+>     G1 --> H[Estratificación Táctica:\nSeveridad PLADIGA 1-5 + Percentiles Top 1%]
+>     G2 --> H
+>     G3 --> H
+>     H --> I[Publicación Atómica y Criptográfica:\nParquet + Manifiesto SHA-256]
+>     I --> J[Centro de Mando Táctico EOC\nDashboard Streamlit desacoplado]
+>     I --> K[Sincronización Hugging Face Hub]
+> ```
+>
+> A continuación se detalla la lógica de ejecución estructurada en siete fases consecutivas:
+>
+> 1. **Fase 1 — Control de Concurrencia y Bloqueo Atómico:** Al activarse el proceso, el orquestador (`scripts/run_daily_inference.py`) genera un archivo de exclusión mutua (`data/processed/.daily_inference.lock`) registrando el PID, host y timestamp de la instancia. Este mecanismo garantiza que ejecuciones solapadas o reintentos manuales nunca colisionen ni sobreescriban ficheros en disco durante una corrida activa.
+> 2. **Fase 2 — Consolidación de la Memoria Ambiental Antecedente ($D-30 \rightarrow D-1$):** Ningún modelo de incendios puede predecir el peligro analizando únicamente el día presente; la susceptibilidad a la ignición depende de cuántos días consecutivos lleva el bosque sin llover y de la evaporación acumulada. El pipeline actualiza el archivo de estado móvil (`weather_daily_state.parquet`), cerrando el intervalo reciente ($D-4 \rightarrow D-1$) mediante las lecturas físicas de las más de 140 estaciones automáticas de MeteoGalicia (EMA) interpoladas por IDW de 4 vecinos, sobre la base consolidada de AEMET ($< D-4$). Siguiendo un estricto principio *anti-data-leakage*, la jornada de emisión ($D$) se excluye de la memoria antecedente al considerarse un día abierto e incompleto a las 05:00.
+> 3. **Fase 3 — Ingesta Resiliente del Pronóstico Numérico Futuro (72 horas):** El pipeline consulta la previsión meteorológica para los días $T+1, T+2$ y $T+3$ a través de una cadena adaptativa de degradación controlada (*graceful degradation*):
+>    - *Fuente Primaria (WRF 1 km):* Modelo numérico de alta resolución de MeteoGalicia (`1km`), consultado en lotes óptimos de 20 localizaciones cada 4 km para minimizar la latencia de red.
+>    - *Fallback 1 (WRF 4 km):* Si la salida de 1 km aún no ha finalizado su corrida de cálculo numérico, el sistema conmuta automáticamente a la malla WRF de 4 km, registrando en los metadatos `fresh_fallback`.
+>    - *Fallback 2 (AEMET Municipal) / Fallback 3 (Stale):* En caso de caída de la red regional, el pipeline puede recurrir a las predicciones municipales de AEMET o, como última contingencia, al último pronóstico archivado que cubra el horizonte, marcándolo con transparencia como `stale`.
+>    - *Validación de Integridad Física:* Se verifica exhaustivamente que no existan valores nulos, horas ausentes o anomalías de formato (ej. humedades relativas fuera de $[0, 100]\%$ o valores centinela `-9999`). Si la integridad no es perfecta, el pipeline aborta la corrida antes de propagar datos corruptos.
+> 4. **Fase 4 — Ingeniería de Características en la Ventana Crítica (Contrato `egif-2d-48-v1`):** Una vez proyectado el pronóstico sobre la cuadrícula territorial de 29.601 celdas, se extraen las variables correspondientes a la **ventana crítica de peligro (12:00 a 18:00 h local peninsular)**:
+>    - *Extremos atmosféricos:* Temperatura máxima ($T_{\text{max, vc}}$), humedad relativa mínima ($RH_{\text{min, vc}}$), racha máxima de viento ($V_{\text{max, vc}}$) y déficit de presión de vapor ($VPD_{\text{vc}}$).
+>    - *Acumulaciones hídricas y sequedad:* Precipitación total en 24h, días secos consecutivos y acumulados móviles a 3, 7, 14 y 30 días. Para $T+1$ la memoria proviene al 100% de observaciones pasadas; para $T+2$ y $T+3$ se encadenan coherentemente los días futuros precedentes, preservando el aislamiento causal.
+>    - *Capas fisiográficas y antrópicas:* Elevación, pendiente e índice de radiación solana (DEM de Copernicus), fracciones de combustible vegetal por clases (CORINE Land Cover 2024 para producción) y distancias a redes viarias e interfaces urbanas.
+> 5. **Fase 5 — Inferencia Multi-Horizonte y Calibración de Probabilidades:** Las matrices de 48 variables se alimentan de forma independiente a tres modelos LightGBM serializados (`forecast_risk_egif_48_t1/t2/t3.joblib`), especializados por horizonte temporal. Los *log-odds* generados por los árboles se transforman en probabilidades físicas reales de ignición $P(Y=1)$ mediante calibración sigmoide de Platt (ajustada sobre datos independientes con prevalencia natural), garantizando que las probabilidades reflejen la frecuencia estadística real de fuegos en el territorio gallego.
+> 6. **Fase 6 — Estratificación Táctica y Despacho Operativo:** Para evitar que las probabilidades matemáticas abstractas confundan a los equipos de emergencia, el sistema traduce la salida a dos escalas complementarias:
+>    - *Severidad Física Absoluta (PLADIGA 1–5):* Categorización objetiva del peligro basada en umbrales de probabilidad calibrada (Nivel 1 Bajo $<1.0\%$ hasta Nivel 5 Extremo $\ge 12.0\%$), vinculada directamente a los protocolos de movilización de medios y suspensión de quemas del Plan gallego.
+>    - *Priorización Relativa de Despacho (Percentiles):* Identificación monotónica del Top 0.5%, Top 1% y Top 5% de cuadrículas relativamente más amenazadas del día, permitiendo a los directores de extinción optimizar la distribución de patrullas y retenes terrestres bajo presupuestos de recursos limitados.
+> 7. **Fase 7 — Publicación Atómica, Trazabilidad y Visualización Desacoplada:** La salida definitiva se escribe en un archivo temporal y se publica de forma atómica mediante `os.replace` (`predicciones_operativas.parquet`), acompañada de un archivo de manifiesto criptográfico (`predicciones_operativas.manifest.json`). El manifiesto registra los identificadores de ejecución, tiempos de cálculo, procedencia de datos, versiones de contrato y firmas hash SHA-256 tanto de los modelos empleados como del fichero de salida. El Centro de Mando Táctico (Streamlit) opera como un consumidor pasivo que lee el artefacto ya generado en disco, asegurando que ningún usuario que acceda a la web sobrecargue la máquina recalculando predicciones. Paralelamente, los resultados se sincronizan automáticamente con Hugging Face Hub para su consulta pública y auditoría evaluadora.
+>
+> ---
+>
+> **Impacto Físico y Relevancia Operativa (Resumen Negocio / Tribunal):**
+> Frente a las alertas meteorológicas continentales tradicionales (como el FWI europeo de EFFIS o AEMET a escala de $10\text{--}25\text{ km}$), que durante una ola de calor declaran en "alerta roja" a tres provincias enteras sin discriminar dónde se ubican los recursos, este pipeline operativo aporta una ventaja decisiva: **resolución hiperlocal a $1\text{ km} \times 1\text{ km}$ con una tasa de falsas alarmas controlada ($FPR \le 5\%$)**.
+>
+> Al evaluar no solo si hace calor o viento, sino la desecación física real de los combustibles finos (mediante el VPD y la lluvia acumulada de la red rural de MeteoGalicia), el tipo de masa forestal (coníferas y eucaliptales de alta combustibilidad frente a frondosas caducifolias) y la orientación de las laderas (solanas precalentadas frente a umbrías húmedas), el sistema entrega a las 06:00 de la mañana un mapa de intervención quirúrgico. Esto permite a los mandos de extinción preposicionar helicópteros y brigadas (BRIF) en el 1% del territorio con verdadero riesgo crítico antes de que se inicie la jornada laboral y las horas de máxima insolación vespertina, transformando la gestión del fuego de una respuesta reactiva a una prevención predictiva auditable.
+

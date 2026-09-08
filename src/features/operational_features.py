@@ -432,6 +432,10 @@ def build_operational_features(
     features["consecutive_dry_days"] = features["dias_sin_lluvia"]
     features = features.sort_values(["horizon_days", "cell_id"]).reset_index(drop=True)
     features = _add_static_and_calendar(features, grid_df)
+    if "combustible_pct_forestal" not in features.columns:
+        forest_cols = [c for c in ["broadleaf_forest", "coniferous_forest", "mixed_forest"] if c in features.columns]
+        if forest_cols:
+            features["combustible_pct_forestal"] = (features[forest_cols].fillna(0.0).sum(axis=1) * 100.0).clip(0.0, 100.0).astype("float32")
     for column in OPERATIONAL_FEATURES + list(CANONICAL_FEATURES):
         if column not in features.columns:
             features[column] = np.nan
