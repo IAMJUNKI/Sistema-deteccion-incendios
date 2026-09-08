@@ -282,11 +282,38 @@ def test_admin_lookup_enrichment_exact_provinces():
 
 
 def test_explain_tree_prediction_contract():
+    from unittest.mock import MagicMock
+    import numpy as np
+    from src.features.canonical_contract import (
+        EGIF_48_FEATURE_CONTRACT_VERSION,
+        load_feature_columns_for_contract,
+    )
     from src.models.explainability import explain_tree_prediction
-    from src.webapp.utils.data_loader import load_dashboard_model
 
-    model = load_dashboard_model(1)
-    # Crear una fila representativa
+    try:
+        import lightgbm as lgb
+        import shap
+    except ImportError:
+        pytest.skip("shap o lightgbm no están instalados")
+
+    feature_cols = load_feature_columns_for_contract(EGIF_48_FEATURE_CONTRACT_VERSION)
+    assert len(feature_cols) == 48
+
+    # Entrenar un árbol mínimo en memoria para el test (sin depender de .joblib en disco ni Streamlit session)
+    rng = np.random.RandomState(42)
+    X_toy = pd.DataFrame(rng.randn(6, 48), columns=feature_cols)
+    y_toy = np.array([0, 1, 0, 1, 0, 1])
+    clf = lgb.LGBMClassifier(
+        n_estimators=2, max_depth=2, min_child_samples=1, verbose=-1, random_state=42
+    )
+    clf.fit(X_toy, y_toy)
+
+    mock_model = MagicMock()
+    mock_model.base_model = clf
+    mock_model.feature_columns = feature_cols
+    mock_model.feature_schema_version = EGIF_48_FEATURE_CONTRACT_VERSION
+
+    # Crear una fila representativa (incluso incompleta para verificar relleno automático)
     raw_row = pd.DataFrame(
         {
             "temperature_mean": [26.0],
@@ -299,7 +326,7 @@ def test_explain_tree_prediction_contract():
             "slope_mean": [18.0],
         }
     )
-    df_shap = explain_tree_prediction(model, raw_row)
+    df_shap = explain_tree_prediction(mock_model, raw_row)
     assert isinstance(df_shap, pd.DataFrame)
     assert len(df_shap) == 48
     assert "feature" in df_shap.columns
