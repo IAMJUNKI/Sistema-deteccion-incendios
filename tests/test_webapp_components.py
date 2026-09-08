@@ -408,6 +408,31 @@ def test_map_base_styles_and_defaults():
     assert "OpenTopoMap" not in " ".join(MAP_STYLES)
 
 
+def test_webapp_assets_exist_and_load_without_external_data():
+    from src.webapp.utils.geo_helpers import (
+        ASSETS_DIR,
+        _load_province_polygons,
+        load_galicia_focus_layers,
+        load_galicia_sectors_geojson,
+    )
+
+    # Verificar que los assets estáticos viajan integrados en src/webapp/assets
+    assert (ASSETS_DIR / "galicia_boundary.geojson").exists()
+    assert (ASSETS_DIR / "galicia_sectors.geojson").exists()
+    assert (ASSETS_DIR / "galicia_provinces.geojson").exists()
+
+    mask, boundary = load_galicia_focus_layers()
+    assert mask is not None, "La máscara exterior debe cargarse desde assets"
+    assert boundary is not None, "El contorno de Galicia debe cargarse desde assets"
+
+    sectors = load_galicia_sectors_geojson()
+    assert sectors is not None and "features" in sectors
+    assert len(sectors["features"]) >= 7
+
+    provinces = _load_province_polygons()
+    assert provinces is not None and len(provinces) == 4
+
+
 
 
 

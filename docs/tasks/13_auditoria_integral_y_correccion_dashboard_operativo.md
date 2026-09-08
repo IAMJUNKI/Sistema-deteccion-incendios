@@ -23,7 +23,9 @@
   5. **Satélite**
   6. **Callejero**
 - **Selector de Capa Base Cartográfica en la barra de herramientas del mapa:** En el espacio liberado por la retirada del centrado en concello, se integró un **selector de mapa base directo en la cabecera del mapa** (`Sector Territorial | Estilo de Mapa Base | Localizar Celda ID`). De esta forma, cualquier usuario puede alternar instantáneamente entre la ortofoto oficial del IGN, relieve topográfico, lienzo neutro o callejero en un solo clic, sin menús colapsados en la barra lateral.
-- **Verificación completa mediante tests automatizados:** Se actualizaron e implementaron nuevas pruebas en `tests/test_webapp_components.py`, logrando la superación de 22/22 tests de webapp y 329/329 tests del conjunto global del repositorio.
+- **Resolución de la pérdida de capas vectoriales en producción (empaquetado en `src/webapp/assets/`):**
+  Al desplegar en producción mediante `scripts/deploy_code_server.sh`, el script sustituía la carpeta `data/` de la release por un enlace simbólico al almacenamiento persistente `/srv/fire-risk/data`. Como dicho almacenamiento persistente no contenía los ficheros GeoJSON versionados en Git, `load_galicia_focus_layers()` y `load_galicia_sectors_geojson()` devolvían `None`, impidiendo la visualización de la máscara exterior y los sectores en producción. Se solucionó integrando los recursos vectoriales directamente en el código de la aplicación (`src/webapp/assets/galicia_*.geojson`), adaptando `geo_helpers.py` para priorizar esta ruta, y actualizando `deploy_code_server.sh` y `sync_server_artifacts.sh` para garantizar la persistencia de las geometrías en el servidor.
+- **Verificación completa mediante tests automatizados:** Se actualizaron e implementaron nuevas pruebas en `tests/test_webapp_components.py`, logrando la superación de 23/23 tests de webapp y 330/330 tests del conjunto global del repositorio.
 
 ---
 

@@ -266,6 +266,13 @@ sync_file() {
 [[ "$SYNC_GRID" -eq 0 ]] || \
   sync_file "$GRID_PATH" "$REMOTE_BASE/processed/grid"
 
+if ls data/external/*.geojson >/dev/null 2>&1; then
+  echo "Sincronizando capas vectoriales data/external/*.geojson -> $TARGET:$REMOTE_BASE/external/"
+  rsync "${RSYNC_ARGS[@]}" -e "$RSYNC_RSH" \
+    --rsync-path="$REMOTE_RSYNC_PATH" \
+    data/external/*.geojson "$TARGET:$REMOTE_BASE/external/"
+fi
+
 echo "Sincronización finalizada."
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "Modo dry-run: no se modificó el servidor."

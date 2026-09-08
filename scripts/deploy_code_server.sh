@@ -164,6 +164,11 @@ fi
 if [[ -e "$RELEASE_TMP/data" || -L "$RELEASE_TMP/data" ]]; then
   [[ "$RELEASE_TMP" == "$RELEASES_DIR"/.release-* ]] ||
     die "Ruta temporal de release inesperada; se conserva data por seguridad."
+  # Preservar capas vectoriales y metadatos versionados en git copiándolos a DATA_DIR
+  if [[ -d "$RELEASE_TMP/data/external" ]]; then
+    mkdir -p "$DATA_DIR/external"
+    cp -n -r "$RELEASE_TMP/data/external/"* "$DATA_DIR/external/" 2>/dev/null || true
+  fi
   rm -rf -- "$RELEASE_TMP/data"
 fi
 ln -s "$DATA_DIR" "$RELEASE_TMP/data"

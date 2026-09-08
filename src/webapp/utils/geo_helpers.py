@@ -13,6 +13,9 @@ from shapely.affinity import scale
 from shapely.geometry import Point, box
 from shapely.ops import unary_union
 
+# Directorio de recursos vectoriales integrados en el paquete webapp
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+
 # Presets de navegación territorial en Galicia
 ZOOM_PRESETS = {
     "Galicia Completa": {
@@ -159,6 +162,7 @@ def load_galicia_focus_layers() -> tuple[dict | None, dict | None]:
     configured_path = os.getenv("GALICIA_BOUNDARY_PATH", "").strip()
     candidates = [
         Path(configured_path) if configured_path else None,
+        ASSETS_DIR / "galicia_boundary.geojson",
         Path("data/external/galicia_boundary.geojson"),
         Path("data/raw/igm/galicia_boundary.geojson"),
     ]
@@ -190,6 +194,7 @@ def load_galicia_focus_layers() -> tuple[dict | None, dict | None]:
 def load_galicia_sectors_geojson() -> dict | None:
     """Carga las geometrías orgánicas oficiales de los sectores territoriales de Galicia (PLADIGA)."""
     candidates = [
+        ASSETS_DIR / "galicia_sectors.geojson",
         Path("data/external/galicia_sectors.geojson"),
         Path("data/processed/galicia_sectors.geojson"),
     ]
@@ -286,6 +291,7 @@ DISTRITOS_PLADIGA_CENTROIDES = {
 def _load_province_polygons():
     """Carga los polígonos oficiales de las 4 provincias gallegas."""
     candidates = [
+        ASSETS_DIR / "galicia_provinces.geojson",
         Path("data/external/galicia_provinces.geojson"),
         Path("data/raw/igm/galicia_provinces.geojson"),
     ]
