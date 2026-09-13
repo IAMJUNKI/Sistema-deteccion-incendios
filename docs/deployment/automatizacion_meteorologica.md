@@ -233,7 +233,7 @@ En el servidor se ejecuta así:
 sudo -u fire-risk bash -lc '
 set -Eeuo pipefail
 cd /srv/fire-risk/app
-PYTHONPATH=/srv/fire-risk \
+PYTHONPATH=/srv/fire-risk/app \
 /opt/miniconda3/envs/incendios-forestales/bin/python \
 scripts/evaluate_meteogalicia_forecasts.py \
   --forecast-dir /srv/fire-risk/data/raw/meteogalicia \
