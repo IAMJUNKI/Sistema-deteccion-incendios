@@ -158,6 +158,11 @@
 > [`informe_evaluacion_meteogalicia.md`](explanations/informe_evaluacion_meteogalicia.md), en las
 > figuras [`meteogalicia_case_coverage.png`](technical/meteogalicia_case_coverage.png) y
 > [`meteogalicia_forecast_errors.png`](technical/meteogalicia_forecast_errors.png).
+> La comparación directa por celda se genera a partir del Parquet de pares
+> `meteogalicia_forecast_observation_pairs.parquet`: en ella el eje horizontal representa el
+> valor pronosticado y el vertical la observación posterior, con una línea 1:1 como referencia.
+> Esta figura se incorpora cuando se exporta la siguiente evaluación de producción, ya que el
+> snapshot inicial solo conservaba métricas agregadas.
 
 ### 3.5 Gestión del desbalanceo extremo y calibración de probabilidades
 *(Justificación técnica para el entrenamiento en escenarios de baja prevalencia)*

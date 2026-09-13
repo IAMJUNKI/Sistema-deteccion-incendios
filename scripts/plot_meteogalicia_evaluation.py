@@ -21,6 +21,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.colors import ListedColormap
 
 
@@ -31,6 +32,13 @@ VARIABLES = (
     ("prec_dia", "Precipitación diaria", "mm"),
     ("vmax_vc", "Viento máximo (diagnóstico)", "km/h"),
 )
+DIRECT_VARIABLES = (
+    ("tmax_vc", "Temperatura máxima", "°C"),
+    ("rhmin_vc", "Humedad relativa mínima", "puntos porcentuales"),
+    ("prec_dia", "Precipitación diaria", "mm"),
+    ("vmax_vc", "Viento máximo (diagnóstico)", "km/h"),
+)
+PAIR_FILENAME = "meteogalicia_forecast_observation_pairs.parquet"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -48,6 +56,27 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("docs/technical"),
         help="Directorio donde se guardarán las figuras PNG.",
+    )
+    parser.add_argument(
+        "--pairs",
+        type=Path,
+        default=None,
+        help=(
+            "Parquet con pares por celda generado por el evaluador. Por defecto "
+            "se busca junto al JSON de entrada."
+        ),
+    )
+    parser.add_argument(
+        "--issue-date",
+        default=None,
+        help="Fecha de emisión a representar (YYYY-MM-DD); por defecto, la última cerrada.",
+    )
+    parser.add_argument(
+        "--horizon",
+        type=int,
+        choices=(1, 2, 3),
+        default=None,
+        help="Horizonte a representar; por defecto, el mayor cerrado en la emisión elegida.",
     )
     return parser.parse_args()
 
@@ -231,6 +260,164 @@ def plot_errors(report: dict[str, Any], output: Path) -> None:
     plt.close(figure)
 
 
+def _load_pairs(path: Path) -> pd.DataFrame:
+    required = {
+        "forecast_file",
+        "issue_date",
+        "target_date",
+        "horizon_days",
+        "cell_id",
+        *[
+            f"{variable}_{suffix}"
+            for variable, _, _ in DIRECT_VARIABLES
+            for suffix in ("forecast", "observed")
+        ],
+    }
+    pairs = pd.read_parquet(path)
+    missing = required.difference(pairs.columns)
+    if missing:
+        raise ValueError(f"Faltan columnas en el Parquet de pares: {sorted(missing)}")
+    pairs["issue_date"] = pairs["issue_date"].astype(str)
+    pairs["target_date"] = pairs["target_date"].astype(str)
+    pairs["horizon_days"] = pd.to_numeric(pairs["horizon_days"], errors="coerce")
+    return pairs
+
+
+def _select_case(
+    pairs: pd.DataFrame,
+    issue_date: str | None,
+    horizon: int | None,
+) -> tuple[pd.DataFrame, str, str, int]:
+    available = pairs.dropna(subset=["horizon_days"]).copy()
+    if issue_date is not None:
+        available = available[available["issue_date"] == issue_date]
+    if available.empty:
+        raise ValueError("No hay pares para la fecha de emisión solicitada.")
+
+    available["horizon_days"] = available["horizon_days"].astype(int)
+    if horizon is not None:
+        available = available[available["horizon_days"] == horizon]
+        if available.empty:
+            raise ValueError("No hay pares para el horizonte solicitado.")
+
+    case = (
+        available[["issue_date", "target_date", "horizon_days"]]
+        .drop_duplicates()
+        .sort_values(["issue_date", "horizon_days"])
+        .iloc[-1]
+    )
+    selected = available[
+        (available["issue_date"] == case["issue_date"])
+        & (available["target_date"] == case["target_date"])
+        & (available["horizon_days"] == int(case["horizon_days"]))
+    ].copy()
+    return (
+        selected,
+        str(case["issue_date"]),
+        str(case["target_date"]),
+        int(case["horizon_days"]),
+    )
+
+
+def plot_direct_case(
+    pairs: pd.DataFrame,
+    output: Path,
+    *,
+    issue_date: str | None = None,
+    horizon: int | None = None,
+) -> tuple[str, str, int]:
+    """Genera scatter forecast-real para todas las celdas de un caso cerrado."""
+
+    case, selected_issue_date, target_date, selected_horizon = _select_case(
+        pairs, issue_date, horizon
+    )
+    figure, axes = plt.subplots(2, 2, figsize=(11.2, 8.8))
+    figure.suptitle(
+        "Comparación directa: forecast MeteoGalicia frente a observación real\n"
+        f"Emisión {selected_issue_date} → objetivo {target_date} (T+{selected_horizon})",
+        fontsize=14,
+        fontweight="bold",
+        y=0.985,
+    )
+
+    for axis, (variable, title, unit) in zip(axes.flat, DIRECT_VARIABLES):
+        forecast = pd.to_numeric(case[f"{variable}_forecast"], errors="coerce")
+        observed = pd.to_numeric(case[f"{variable}_observed"], errors="coerce")
+        valid = np.isfinite(forecast.to_numpy(dtype=float)) & np.isfinite(
+            observed.to_numpy(dtype=float)
+        )
+        x = forecast.to_numpy(dtype=float)[valid]
+        y = observed.to_numpy(dtype=float)[valid]
+        if x.size == 0:
+            axis.text(0.5, 0.5, "Sin datos", ha="center", va="center")
+            continue
+
+        low = float(np.nanmin(np.concatenate([x, y])))
+        high = float(np.nanmax(np.concatenate([x, y])))
+        span = max(high - low, 1.0)
+        low -= 0.05 * span
+        high += 0.05 * span
+        axis.scatter(
+            x,
+            y,
+            s=7,
+            alpha=0.18,
+            color="#2563a6",
+            edgecolors="none",
+            rasterized=True,
+        )
+        axis.plot([low, high], [low, high], "--", color="#d26a2e", linewidth=1.3)
+        errors = x - y
+        axis.text(
+            0.04,
+            0.95,
+            f"n = {x.size:,}".replace(",", ".")
+            + f"\nMAE = {np.abs(errors).mean():.2f} {unit}"
+            + f"\nSesgo = {errors.mean():+.2f} {unit}",
+            transform=axis.transAxes,
+            ha="left",
+            va="top",
+            fontsize=8.5,
+            bbox={"facecolor": "white", "edgecolor": "#d7e0e6", "alpha": 0.88},
+        )
+        axis.set_xlim(low, high)
+        axis.set_ylim(low, high)
+        axis.set_aspect("equal", adjustable="box")
+        axis.set_title(title, fontsize=11, fontweight="bold")
+        axis.set_xlabel(f"Forecast ({unit})")
+        axis.set_ylabel(f"Observación real ({unit})")
+        axis.grid(color="#d7e0e6", linewidth=0.8, alpha=0.8)
+        axis.set_axisbelow(True)
+        axis.spines[["top", "right"]].set_visible(False)
+        axis.tick_params(labelsize=8.5)
+        if variable == "vmax_vc":
+            axis.set_facecolor("#f4f6f7")
+            axis.text(
+                0.04,
+                0.05,
+                "Máximo forecast 12–18 h\nvs máximo observado 24 h",
+                transform=axis.transAxes,
+                ha="left",
+                va="bottom",
+                fontsize=8,
+                color="#536878",
+            )
+
+    figure.text(
+        0.5,
+        0.015,
+        "Cada punto representa una celda de la rejilla; la línea discontinua indica igualdad perfecta. El viento es diagnóstico.",
+        ha="center",
+        fontsize=9,
+        color="#536878",
+    )
+    figure.tight_layout(rect=(0, 0.05, 1, 0.93))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output, dpi=200, bbox_inches="tight")
+    plt.close(figure)
+    return selected_issue_date, target_date, selected_horizon
+
+
 def main() -> int:
     args = _parse_args()
     report = _load_report(args.input)
@@ -240,6 +427,30 @@ def main() -> int:
     plot_errors(report, errors_path)
     print(f"Figura guardada en {coverage_path}")
     print(f"Figura guardada en {errors_path}")
+    if args.pairs is not None:
+        pairs_path = args.pairs
+    elif report.get("pairs_path"):
+        pairs_path = Path(report["pairs_path"])
+    else:
+        pairs_path = args.input.parent / PAIR_FILENAME
+    if pairs_path.exists():
+        direct_path = args.output_dir / "meteogalicia_case_direct_comparison.png"
+        selected_issue_date, target_date, selected_horizon = plot_direct_case(
+            _load_pairs(pairs_path),
+            direct_path,
+            issue_date=args.issue_date,
+            horizon=args.horizon,
+        )
+        print(f"Figura guardada en {direct_path}")
+        print(
+            "Caso directo: "
+            f"emisión {selected_issue_date} → {target_date} (T+{selected_horizon})"
+        )
+    else:
+        print(
+            "Figura directa omitida: no existe el Parquet de pares. "
+            "Ejecuta primero el evaluador en producción."
+        )
     return 0
 
 

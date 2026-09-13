@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.evaluate_meteogalicia_forecasts import evaluate_forecasts, main
+from scripts.plot_meteogalicia_evaluation import plot_direct_case
 
 
 def _hourly_forecast() -> pd.DataFrame:
@@ -96,3 +97,15 @@ def test_cli_writes_json_and_csv(tmp_path, monkeypatch):
     )
     assert payload["comparison_cases"] == 3
     assert (output_dir / "meteogalicia_forecast_metrics.csv").exists()
+    pairs_path = output_dir / "meteogalicia_forecast_observation_pairs.parquet"
+    assert payload["pair_rows"] == 3
+    assert pairs_path.exists()
+    pairs = pd.read_parquet(pairs_path)
+    assert len(pairs) == 3
+    assert pairs["tmax_vc_forecast"].tolist() == [20.0, 20.0, 20.0]
+    assert pairs["tmax_vc_observed"].tolist() == [19.0, 19.0, 19.0]
+
+    direct_path = output_dir / "direct.png"
+    selected = plot_direct_case(pairs, direct_path)
+    assert selected == ("2026-08-31", "2026-09-03", 3)
+    assert direct_path.exists()

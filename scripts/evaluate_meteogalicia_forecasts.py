@@ -33,6 +33,16 @@ HORIZONS = (1, 2, 3)
 WEATHER_VARIABLES = ("tmax_vc", "rhmin_vc", "vmax_vc", "prec_dia")
 OBSERVATION_EXCLUDED_SOURCES = {"forecast_proxy"}
 RAIN_THRESHOLD_MM = 1.0
+PAIR_COLUMNS = [
+    "forecast_file",
+    "issue_date",
+    "target_date",
+    "horizon_days",
+    "cell_id",
+    "observation_source",
+    *[f"{variable}_forecast" for variable in WEATHER_VARIABLES],
+    *[f"{variable}_observed" for variable in WEATHER_VARIABLES],
+]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -65,6 +75,15 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=1,
         help="Mínimo de celdas emparejadas para contar un caso.",
+    )
+    parser.add_argument(
+        "--pairs-output",
+        type=Path,
+        default=None,
+        help=(
+            "Parquet con los pares por celda. Por defecto se guarda junto al informe "
+            "como meteogalicia_forecast_observation_pairs.parquet."
+        ),
     )
     return parser.parse_args()
 
@@ -145,7 +164,9 @@ def evaluate_forecasts(
         min_cells: Celdas mínimas para considerar una comparación válida.
 
     Returns:
-        Informe serializable con casos comparables, métricas y advertencias.
+        Informe con casos comparables, métricas y advertencias. Durante la
+        ejecución incluye internamente ``_pairs`` para poder archivarlo en
+        Parquet desde ``main``; esa clave no se serializa en el JSON.
     """
     forecast_root = Path(forecast_dir)
     state_file = Path(state_path)
@@ -161,6 +182,7 @@ def evaluate_forecasts(
     errors: defaultdict[tuple[int, str], list[np.ndarray]] = defaultdict(list)
     rain_hits: defaultdict[int, list[np.ndarray]] = defaultdict(list)
     cases: list[dict[str, Any]] = []
+    pair_frames: list[pd.DataFrame] = []
     forecast_inventory: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     issue_sources: defaultdict[str, int] = defaultdict(int)
@@ -223,6 +245,18 @@ def evaluate_forecasts(
                     }
                 )
 
+                pair_frame = joined[["cell_id"]].copy()
+                pair_frame["forecast_file"] = path.name
+                pair_frame["issue_date"] = issue_date.date().isoformat()
+                pair_frame["target_date"] = target_date.date().isoformat()
+                pair_frame["horizon_days"] = horizon
+                if "source_observed" in joined.columns:
+                    pair_frame["observation_source"] = joined["source_observed"]
+                elif "source" in joined.columns:
+                    pair_frame["observation_source"] = joined["source"]
+                else:
+                    pair_frame["observation_source"] = pd.NA
+
                 for variable in WEATHER_VARIABLES:
                     forecast_values = pd.to_numeric(
                         joined[f"{variable}_forecast"], errors="coerce"
@@ -235,6 +269,10 @@ def evaluate_forecasts(
                         errors[(horizon, variable)].append(
                             forecast_values[valid] - observed_values[valid]
                         )
+                    pair_frame[f"{variable}_forecast"] = forecast_values
+                    pair_frame[f"{variable}_observed"] = observed_values
+
+                pair_frames.append(pair_frame[PAIR_COLUMNS])
 
                 forecast_rain = pd.to_numeric(
                     joined["prec_dia_forecast"], errors="coerce"
@@ -287,6 +325,13 @@ def evaluate_forecasts(
         )
 
     state_dates = observations["fecha"].dropna()
+    if pair_frames:
+        pairs = pd.concat(pair_frames, ignore_index=True)
+        pairs = pairs.sort_values(
+            ["issue_date", "horizon_days", "cell_id"], kind="stable"
+        ).reset_index(drop=True)
+    else:
+        pairs = pd.DataFrame(columns=PAIR_COLUMNS)
     return {
         "generated_at": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
         "evaluation_type": "preliminary_forecast_observation_case_study",
@@ -303,6 +348,7 @@ def evaluate_forecasts(
         ),
         "issue_date_sources": dict(issue_sources),
         "forecast_inventory": forecast_inventory,
+        "pair_rows": int(len(pairs)),
         "excluded_observation_sources": sorted(OBSERVATION_EXCLUDED_SOURCES),
         "weather_variables": list(WEATHER_VARIABLES),
         "metrics": metrics,
@@ -312,6 +358,7 @@ def evaluate_forecasts(
             "Caso de estudio preliminar; no representa todavía una validación estadística "
             "de toda la temporada ni la precisión del modelo de riesgo."
         ),
+        "_pairs": pairs,
     }
 
 
@@ -326,6 +373,18 @@ def _write_csv(report: dict[str, Any], destination: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _write_pairs(pairs: pd.DataFrame, destination: Path) -> None:
+    """Guarda de forma atómica los pares por celda para figuras y auditoría."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.tmp")
+    try:
+        pairs.reindex(columns=PAIR_COLUMNS).to_parquet(temporary, index=False)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def main() -> int:
     args = _parse_args()
     report = evaluate_forecasts(
@@ -335,6 +394,12 @@ def main() -> int:
         min_cells=args.min_cells,
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    pairs_output = args.pairs_output or (
+        args.output_dir / "meteogalicia_forecast_observation_pairs.parquet"
+    )
+    pairs = report.pop("_pairs")
+    _write_pairs(pairs, pairs_output)
+    report["pairs_path"] = str(pairs_output)
     json_path = args.output_dir / "meteogalicia_forecast_metrics.json"
     csv_path = args.output_dir / "meteogalicia_forecast_metrics.csv"
     atomic_write_json(report, json_path)
@@ -344,6 +409,8 @@ def main() -> int:
         "csv": str(csv_path),
         "forecast_files_found": report["forecast_files_found"],
         "comparison_cases": report["comparison_cases"],
+        "pair_rows": report["pair_rows"],
+        "pairs": str(pairs_output),
     }, indent=2, ensure_ascii=False))
     return 0
 

@@ -102,8 +102,11 @@ variables.
 
 La evaluación del forecast meteorológico se documenta de forma independiente
 en el [informe de evaluación MeteoGalicia](informe_evaluacion_meteogalicia.md).
-Incluye la matriz de emisiones cerradas y los errores por horizonte, con la
-advertencia metodológica específica para el viento.
+Incluye la matriz de emisiones cerradas, la comparación directa por celda y
+los errores por horizonte, con la advertencia metodológica específica para el
+viento. La comparación directa es la figura adecuada para enseñar el caso
+práctico forecast–observación: el forecast aparece en el eje X, la medición
+real en el eje Y y la línea 1:1 representa la predicción perfecta.
 
 ### 5.1 Recall frente al presupuesto espacial
 
