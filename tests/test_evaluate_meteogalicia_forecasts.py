@@ -48,6 +48,8 @@ def test_evaluate_forecast_against_later_observations(tmp_path):
 
     assert report["forecast_files_found"] == 1
     assert report["comparison_cases"] == 3
+    assert report["forecast_inventory"][0]["closed_horizons"] == [1, 2, 3]
+    assert report["forecast_inventory"][0]["closed_cells"] == {"1": 1, "2": 1, "3": 1}
     t1_temperature = next(
         row for row in report["metrics"]
         if row["horizon_days"] == 1 and row["variable"] == "tmax_vc"

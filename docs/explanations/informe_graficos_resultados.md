@@ -100,6 +100,11 @@ variables.
 
 ## 5. Figuras adicionales recomendadas para el TFM
 
+La evaluación del forecast meteorológico se documenta de forma independiente
+en el [informe de evaluación MeteoGalicia](informe_evaluacion_meteogalicia.md).
+Incluye la matriz de emisiones cerradas y los errores por horizonte, con la
+advertencia metodológica específica para el viento.
+
 ### 5.1 Recall frente al presupuesto espacial
 
 Es la figura más importante desde el punto de vista operativo. Debe mostrar

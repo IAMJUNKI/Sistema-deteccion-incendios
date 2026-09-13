@@ -137,6 +137,28 @@
 > solo se emitirán cuando exista un número suficiente de emisiones archivadas y observaciones
 > posteriores.
 
+#### Primer caso de estudio MeteoGalicia (13/09/2026)
+
+> La primera campaña de evaluación operativa ha encontrado seis forecasts WRF 1 km archivados
+> y ha cerrado diez comparaciones completas sobre las 29.601 celdas de la rejilla. Se han podido
+> evaluar cuatro emisiones para T+1, tres para T+2 y tres para T+3. El error absoluto medio de la
+> temperatura máxima fue de 2,05, 2,05 y 2,29 °C, respectivamente; el de la humedad relativa
+> mínima fue de 6,82, 7,62 y 7,53 puntos porcentuales. En precipitación, el MAE fue de 0,063,
+> 1,913 y 0,051 mm. Estos valores son un caso de estudio preliminar y no una estimación
+> generalizable del rendimiento estacional.
+
+> El viento se mantiene fuera de la conclusión principal: el forecast se agregó como máximo de
+> 12:00–18:00, mientras que `vmax_vc` observado representa el máximo diario de 24 horas. La
+> comparación máxima–máxima produjo un sesgo de aproximadamente −13 km/h, mientras que la
+> comparación preliminar con la media observada tuvo un MAE de 3,58 km/h. Antes de interpretar
+> este resultado como un error de WRF se deben armonizar las ventanas mediante observaciones
+> horarias.
+
+> La matriz de casos cerrados y los errores agregados se muestran en el informe ilustrado
+> [`informe_evaluacion_meteogalicia.md`](explanations/informe_evaluacion_meteogalicia.md), en las
+> figuras [`meteogalicia_case_coverage.png`](technical/meteogalicia_case_coverage.png) y
+> [`meteogalicia_forecast_errors.png`](technical/meteogalicia_forecast_errors.png).
+
 ### 3.5 Gestión del desbalanceo extremo y calibración de probabilidades
 *(Justificación técnica para el entrenamiento en escenarios de baja prevalencia)*
 > La probabilidad a priori de ignición diaria en la rejilla de Galicia es extremadamente baja ($\approx 0.0026\%$). Para abordar este desbalanceo sin distorsionar la física del problema, se implementa una estrategia en dos etapas: primero, se conservan todas las igniciones y se submuestrean negativos de forma determinista; segundo, se corrige el prior de las probabilidades y se calibra sobre un año separado con la prevalencia real. En la familia operativa de 48 variables se utiliza Platt por horizonte, mientras que la familia histórica de 50 mantiene su calibrador isotónico para rollback. Adicionalmente, la evaluación rechaza el área bajo la curva ROC (ROC-AUC) como métrica única debido a su insensibilidad a falsos positivos en grandes volúmenes de ceros, adoptando la curva Precision-Recall (PR-AUC), Brier score y recall con presupuesto espacial.

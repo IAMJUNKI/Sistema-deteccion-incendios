@@ -1,0 +1,43 @@
+{
+  "generated_at": "2026-09-13T10:23:50.341929+00:00",
+  "evaluation_type": "preliminary_forecast_observation_case_study",
+  "forecast_files_found": 6,
+  "comparison_cases": 10,
+  "observation_rows_used": 1154439,
+  "observation_date_range": ["2026-08-05", "2026-09-12"],
+  "issue_date_sources": {"downloaded_at": 6},
+  "excluded_observation_sources": ["forecast_proxy"],
+  "weather_variables": ["tmax_vc", "rhmin_vc", "vmax_vc", "prec_dia"],
+  "metrics": [
+    {"horizon_days": 1, "variable": "tmax_vc", "n_pairs": 118404, "forecast_files": 4, "mae": 2.049426998666346, "rmse": 2.5588728568650327, "bias": -1.7463222679618742},
+    {"horizon_days": 1, "variable": "rhmin_vc", "n_pairs": 118404, "forecast_files": 4, "mae": 6.815580208422277, "rmse": 8.674818082547509, "bias": -2.0555058262358855},
+    {"horizon_days": 1, "variable": "vmax_vc", "n_pairs": 118404, "forecast_files": 4, "mae": 12.52821296482802, "rmse": 13.750462310495413, "bias": -12.483199826235998},
+    {"horizon_days": 1, "variable": "prec_dia", "n_pairs": 118404, "forecast_files": 4, "mae": 0.06309949070001326, "rmse": 0.22505855297279798, "bias": -0.04036807445838112},
+    {"horizon_days": 1, "variable": "rain_event_accuracy", "n_pairs": 118404, "forecast_files": 4, "accuracy": 0.9823823519475693, "threshold_mm": 1.0},
+    {"horizon_days": 2, "variable": "tmax_vc", "n_pairs": 88803, "forecast_files": 3, "mae": 2.054215109681347, "rmse": 2.5992417960828473, "bias": -1.4340331291597457},
+    {"horizon_days": 2, "variable": "rhmin_vc", "n_pairs": 88803, "forecast_files": 3, "mae": 7.62010160974329, "rmse": 9.596837213464, "bias": -3.3748810168761234},
+    {"horizon_days": 2, "variable": "vmax_vc", "n_pairs": 88803, "forecast_files": 3, "mae": 13.970536159501613, "rmse": 15.663014162307453, "bias": -13.934209375437742},
+    {"horizon_days": 2, "variable": "prec_dia", "n_pairs": 88803, "forecast_files": 3, "mae": 1.912725941914108, "rmse": 3.9112030261082835, "bias": -1.7786784205476003},
+    {"horizon_days": 2, "variable": "rain_event_accuracy", "n_pairs": 88803, "forecast_files": 3, "accuracy": 0.9917007308311656, "threshold_mm": 1.0},
+    {"horizon_days": 3, "variable": "tmax_vc", "n_pairs": 88803, "forecast_files": 3, "mae": 2.2883091040235257, "rmse": 2.8773358388974866, "bias": -1.9676895461952282},
+    {"horizon_days": 3, "variable": "rhmin_vc", "n_pairs": 88803, "forecast_files": 3, "mae": 7.52723143174329, "rmse": 9.438510803055, "bias": 1.5430118112794013},
+    {"horizon_days": 3, "variable": "vmax_vc", "n_pairs": 88803, "forecast_files": 3, "mae": 14.594803936050756, "rmse": 16.001330803429283, "bias": -14.521965405995967},
+    {"horizon_days": 3, "variable": "prec_dia", "n_pairs": 88803, "forecast_files": 3, "mae": 0.05099638790277487, "rmse": 0.19151677353756236, "bias": -0.008466818741434456},
+    {"horizon_days": 3, "variable": "rain_event_accuracy", "n_pairs": 88803, "forecast_files": 3, "accuracy": 0.9881648142517708, "threshold_mm": 1.0}
+  ],
+  "cases": [
+    {"forecast_file": "forecast_20260906T000000Z_1km.parquet", "issue_date": "2026-09-06", "target_date": "2026-09-07", "horizon_days": 1, "cells": 29601},
+    {"forecast_file": "forecast_20260906T000000Z_1km.parquet", "issue_date": "2026-09-06", "target_date": "2026-09-08", "horizon_days": 2, "cells": 29601},
+    {"forecast_file": "forecast_20260906T000000Z_1km.parquet", "issue_date": "2026-09-06", "target_date": "2026-09-09", "horizon_days": 3, "cells": 29601},
+    {"forecast_file": "forecast_20260908T000000Z_1km.parquet", "issue_date": "2026-09-08", "target_date": "2026-09-09", "horizon_days": 1, "cells": 29601},
+    {"forecast_file": "forecast_20260908T000000Z_1km.parquet", "issue_date": "2026-09-08", "target_date": "2026-09-10", "horizon_days": 2, "cells": 29601},
+    {"forecast_file": "forecast_20260908T000000Z_1km.parquet", "issue_date": "2026-09-08", "target_date": "2026-09-11", "horizon_days": 3, "cells": 29601},
+    {"forecast_file": "forecast_20260909T000000Z_1km.parquet", "issue_date": "2026-09-09", "target_date": "2026-09-10", "horizon_days": 1, "cells": 29601},
+    {"forecast_file": "forecast_20260909T000000Z_1km.parquet", "issue_date": "2026-09-09", "target_date": "2026-09-11", "horizon_days": 2, "cells": 29601},
+    {"forecast_file": "forecast_20260909T000000Z_1km.parquet", "issue_date": "2026-09-09", "target_date": "2026-09-12", "horizon_days": 3, "cells": 29601},
+    {"forecast_file": "forecast_20260911T000000Z_1km.parquet", "issue_date": "2026-09-11", "target_date": "2026-09-12", "horizon_days": 1, "cells": 29601}
+  ],
+  "skipped": [],
+  "interpretation": "Caso de estudio preliminar; no representa todavía una validación estadística de toda la temporada ni la precisión del modelo de riesgo.",
+  "snapshot_note": "Instantánea transcrita del informe generado en producción el 13/09/2026; el informe de producción completo sigue siendo la fuente operativa."
+}

@@ -161,6 +161,7 @@ def evaluate_forecasts(
     errors: defaultdict[tuple[int, str], list[np.ndarray]] = defaultdict(list)
     rain_hits: defaultdict[int, list[np.ndarray]] = defaultdict(list)
     cases: list[dict[str, Any]] = []
+    forecast_inventory: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     issue_sources: defaultdict[str, int] = defaultdict(int)
 
@@ -171,12 +172,31 @@ def evaluate_forecasts(
             issue_sources[issue_source] += 1
             daily = aggregate_hourly_forecast(forecast)
             if daily.empty:
+                forecast_inventory.append(
+                    {
+                        "forecast_file": path.name,
+                        "issue_date": issue_date.date().isoformat(),
+                        "issue_date_source": issue_source,
+                        "forecast_horizons": [],
+                        "closed_horizons": [],
+                    }
+                )
                 skipped.append({"file": path.name, "reason": "forecast_daily_empty"})
                 continue
 
+            inventory = {
+                "forecast_file": path.name,
+                "issue_date": issue_date.date().isoformat(),
+                "issue_date_source": issue_source,
+                "forecast_horizons": [],
+                "closed_horizons": [],
+                "closed_cells": {},
+            }
             for horizon in HORIZONS:
                 target_date = issue_date + pd.Timedelta(days=horizon)
                 forecast_day = daily[daily["fecha"] == target_date].copy()
+                if not forecast_day.empty:
+                    inventory["forecast_horizons"].append(horizon)
                 observed_day = observations[observations["fecha"] == target_date].copy()
                 if forecast_day.empty or observed_day.empty:
                     continue
@@ -188,6 +208,9 @@ def evaluate_forecasts(
                 )
                 if len(joined) < min_cells:
                     continue
+
+                inventory["closed_horizons"].append(horizon)
+                inventory["closed_cells"][str(horizon)] = int(joined["cell_id"].nunique())
 
                 cases.append(
                     {
@@ -226,7 +249,8 @@ def evaluate_forecasts(
                             (forecast_rain[valid_rain] >= RAIN_THRESHOLD_MM)
                             == (observed_rain[valid_rain] >= RAIN_THRESHOLD_MM)
                         )
-                    )
+                        )
+            forecast_inventory.append(inventory)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             skipped.append({"file": path.name, "reason": str(exc)})
 
@@ -278,6 +302,7 @@ def evaluate_forecasts(
             else []
         ),
         "issue_date_sources": dict(issue_sources),
+        "forecast_inventory": forecast_inventory,
         "excluded_observation_sources": sorted(OBSERVATION_EXCLUDED_SOURCES),
         "weather_variables": list(WEATHER_VARIABLES),
         "metrics": metrics,
