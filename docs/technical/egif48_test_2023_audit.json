@@ -1,0 +1,2131 @@
+{
+  "evaluation_protocol": "frozen_artifact_pipeline_checks",
+  "test_years": [
+    2023
+  ],
+  "dataset": "data/processed/tabular/egif_operational",
+  "model_dir": "data/models",
+  "model_prefix": "forecast_risk_egif_48",
+  "feature_contract_version": "egif-2d-48-v1",
+  "dataset_alignment_version": "egif-operational-tminus1-v1",
+  "dataset_temporal_semantics": "target-day weather + historical/forecast memory through target_date - 1 day",
+  "coverage": {
+    "rows_seen": 10804365,
+    "rows_evaluated": 10804365,
+    "rows_dropped_incomplete_or_invalid": 0,
+    "expected_rows_from_metadata": 10804365,
+    "unique_days": 365,
+    "first_date": "2023-01-01",
+    "last_date": "2023-12-31",
+    "cells_per_day_min": 29601,
+    "cells_per_day_max": 29601,
+    "unique_cells": 29601,
+    "full_population": true
+  },
+  "artifact_checks": [
+    {
+      "horizon_days": 1,
+      "artifact": "data/models/forecast_risk_egif_48_t1.joblib",
+      "artifact_sha256": "066e8f46ba31b9f954c65317d4de95c09c0e4ef6b15d1085151e5b25ca4bdd39",
+      "sidecar": "data/models/forecast_risk_egif_48_t1.json",
+      "model_family": "egif-2d-48",
+      "model_version": "egif-lightgbm-egif-2d-48-v1-t1-v1",
+      "checks": {
+        "horizon": true,
+        "contract": true,
+        "feature_count": true,
+        "train_excludes_test": true,
+        "calibration_excludes_test": true,
+        "validation_excludes_test": true,
+        "test_declares_year": true,
+        "operational_dataset_semantics": true,
+        "platt_calibration": true,
+        "no_fwi_predictor": true,
+        "sidecar_present": true,
+        "sidecar_contract": true
+      },
+      "status": "ok",
+      "metadata_test_comparison": {
+        "status": "ok",
+        "metrics": {
+          "n_rows": {
+            "declared": 10804365,
+            "observed": 10804365,
+            "absolute_difference": 0.0
+          },
+          "n_positives": {
+            "declared": 530,
+            "observed": 530,
+            "absolute_difference": 0.0
+          },
+          "prevalence": {
+            "declared": 4.905424798218127e-05,
+            "observed": 4.905424798218127e-05,
+            "absolute_difference": 0.0
+          },
+          "pr_auc": {
+            "declared": 0.0007070328718973117,
+            "observed": 0.0007070328718973117,
+            "absolute_difference": 0.0
+          },
+          "lift_vs_azar": {
+            "declared": 14.41328531127698,
+            "observed": 14.41328531127698,
+            "absolute_difference": 0.0
+          },
+          "roc_auc": {
+            "declared": 0.8713196181534104,
+            "observed": 0.8713196181534104,
+            "absolute_difference": 0.0
+          },
+          "recall_at_fpr5": {
+            "declared": 0.44150943396226416,
+            "observed": 0.44150943396226416,
+            "absolute_difference": 0.0
+          },
+          "threshold_at_fpr": {
+            "declared": 0.0624678897435751,
+            "observed": 0.0624678897435751,
+            "absolute_difference": 0.0
+          },
+          "fpr_achieved": {
+            "declared": 0.04999993058020601,
+            "observed": 0.04999993058020601,
+            "absolute_difference": 0.0
+          },
+          "recall_at_top1%_daily": {
+            "declared": 0.09622641509433963,
+            "observed": 0.09622641509433963,
+            "absolute_difference": 0.0
+          },
+          "brier_score": {
+            "declared": 4.915511436881799e-05,
+            "observed": 4.915511436881799e-05,
+            "absolute_difference": 0.0
+          }
+        }
+      }
+    },
+    {
+      "horizon_days": 2,
+      "artifact": "data/models/forecast_risk_egif_48_t2.joblib",
+      "artifact_sha256": "e0b53587a3f9718d9fa7204efd402aa9a0ebdffeaef8f2ff67b4172886ab7626",
+      "sidecar": "data/models/forecast_risk_egif_48_t2.json",
+      "model_family": "egif-2d-48",
+      "model_version": "egif-lightgbm-egif-2d-48-v1-t2-v1",
+      "checks": {
+        "horizon": true,
+        "contract": true,
+        "feature_count": true,
+        "train_excludes_test": true,
+        "calibration_excludes_test": true,
+        "validation_excludes_test": true,
+        "test_declares_year": true,
+        "operational_dataset_semantics": true,
+        "platt_calibration": true,
+        "no_fwi_predictor": true,
+        "sidecar_present": true,
+        "sidecar_contract": true
+      },
+      "status": "ok",
+      "metadata_test_comparison": {
+        "status": "ok",
+        "metrics": {
+          "n_rows": {
+            "declared": 10804365,
+            "observed": 10804365,
+            "absolute_difference": 0.0
+          },
+          "n_positives": {
+            "declared": 530,
+            "observed": 530,
+            "absolute_difference": 0.0
+          },
+          "prevalence": {
+            "declared": 4.905424798218127e-05,
+            "observed": 4.905424798218127e-05,
+            "absolute_difference": 0.0
+          },
+          "pr_auc": {
+            "declared": 0.0005551949830675505,
+            "observed": 0.0005551949830675505,
+            "absolute_difference": 0.0
+          },
+          "lift_vs_azar": {
+            "declared": 11.317979704208746,
+            "observed": 11.317979704208746,
+            "absolute_difference": 0.0
+          },
+          "roc_auc": {
+            "declared": 0.8694589161914561,
+            "observed": 0.8694589161914561,
+            "absolute_difference": 0.0
+          },
+          "recall_at_fpr5": {
+            "declared": 0.41132075471698115,
+            "observed": 0.41132075471698115,
+            "absolute_difference": 0.0
+          },
+          "threshold_at_fpr": {
+            "declared": 0.06254928527317212,
+            "observed": 0.06254928527317212,
+            "absolute_difference": 0.0
+          },
+          "fpr_achieved": {
+            "declared": 0.04999993058020601,
+            "observed": 0.04999993058020601,
+            "absolute_difference": 0.0
+          },
+          "recall_at_top1%_daily": {
+            "declared": 0.11320754716981132,
+            "observed": 0.11320754716981132,
+            "absolute_difference": 0.0
+          },
+          "brier_score": {
+            "declared": 4.9290731276759915e-05,
+            "observed": 4.9290731276759915e-05,
+            "absolute_difference": 0.0
+          }
+        }
+      }
+    },
+    {
+      "horizon_days": 3,
+      "artifact": "data/models/forecast_risk_egif_48_t3.joblib",
+      "artifact_sha256": "fa711898a08e3093a0508dcec94a4741b7970c611b70cb040141e6562df86823",
+      "sidecar": "data/models/forecast_risk_egif_48_t3.json",
+      "model_family": "egif-2d-48",
+      "model_version": "egif-lightgbm-egif-2d-48-v1-t3-v1",
+      "checks": {
+        "horizon": true,
+        "contract": true,
+        "feature_count": true,
+        "train_excludes_test": true,
+        "calibration_excludes_test": true,
+        "validation_excludes_test": true,
+        "test_declares_year": true,
+        "operational_dataset_semantics": true,
+        "platt_calibration": true,
+        "no_fwi_predictor": true,
+        "sidecar_present": true,
+        "sidecar_contract": true
+      },
+      "status": "ok",
+      "metadata_test_comparison": {
+        "status": "ok",
+        "metrics": {
+          "n_rows": {
+            "declared": 10804365,
+            "observed": 10804365,
+            "absolute_difference": 0.0
+          },
+          "n_positives": {
+            "declared": 530,
+            "observed": 530,
+            "absolute_difference": 0.0
+          },
+          "prevalence": {
+            "declared": 4.905424798218127e-05,
+            "observed": 4.905424798218127e-05,
+            "absolute_difference": 0.0
+          },
+          "pr_auc": {
+            "declared": 0.000663696986899776,
+            "observed": 0.000663696986899776,
+            "absolute_difference": 0.0
+          },
+          "lift_vs_azar": {
+            "declared": 13.529857539368676,
+            "observed": 13.529857539368676,
+            "absolute_difference": 0.0
+          },
+          "roc_auc": {
+            "declared": 0.8720166346242653,
+            "observed": 0.8720166346242653,
+            "absolute_difference": 0.0
+          },
+          "recall_at_fpr5": {
+            "declared": 0.4207547169811321,
+            "observed": 0.4207547169811321,
+            "absolute_difference": 0.0
+          },
+          "threshold_at_fpr": {
+            "declared": 0.06344009467229525,
+            "observed": 0.06344009467229525,
+            "absolute_difference": 0.0
+          },
+          "fpr_achieved": {
+            "declared": 0.04999993058020601,
+            "observed": 0.04999993058020601,
+            "absolute_difference": 0.0
+          },
+          "recall_at_top1%_daily": {
+            "declared": 0.09811320754716982,
+            "observed": 0.09811320754716982,
+            "absolute_difference": 0.0
+          },
+          "brier_score": {
+            "declared": 4.925637738909541e-05,
+            "observed": 4.925637738909541e-05,
+            "absolute_difference": 0.0
+          }
+        }
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "n_rows": 10804365,
+      "n_positives": 530,
+      "prevalence": 4.905424798218127e-05,
+      "pr_auc": 0.0007070328718973117,
+      "lift_vs_azar": 14.41328531127698,
+      "roc_auc": 0.8713196181534104,
+      "recall_at_fpr5": 0.44150943396226416,
+      "recall_ci90_low": 0.4036792452830189,
+      "recall_ci90_high": 0.47358490566037736,
+      "threshold_at_fpr": 0.0624678897435751,
+      "fpr_achieved": 0.04999993058020601,
+      "recall_at_top1%_daily": 0.09622641509433963,
+      "recall_at_top1%_daily_ci90_low": 0.07735849056603773,
+      "recall_at_top1%_daily_ci90_high": 0.1169811320754717,
+      "brier_score": 4.915511436881799e-05,
+      "roc_auc_temporada": 0.8176883027188212,
+      "roc_auc_dentro_del_dia": 0.7760825262235296,
+      "horizon_days": 1,
+      "model_version": "egif-lightgbm-egif-2d-48-v1-t1-v1"
+    },
+    {
+      "n_rows": 10804365,
+      "n_positives": 530,
+      "prevalence": 4.905424798218127e-05,
+      "pr_auc": 0.0005551949830675505,
+      "lift_vs_azar": 11.317979704208746,
+      "roc_auc": 0.8694589161914561,
+      "recall_at_fpr5": 0.41132075471698115,
+      "recall_ci90_low": 0.37915094339622646,
+      "recall_ci90_high": 0.4490566037735849,
+      "threshold_at_fpr": 0.06254928527317212,
+      "fpr_achieved": 0.04999993058020601,
+      "recall_at_top1%_daily": 0.11320754716981132,
+      "recall_at_top1%_daily_ci90_low": 0.08858490566037736,
+      "recall_at_top1%_daily_ci90_high": 0.1339622641509434,
+      "brier_score": 4.9290731276759915e-05,
+      "roc_auc_temporada": 0.8176671138375737,
+      "roc_auc_dentro_del_dia": 0.7710605745975807,
+      "horizon_days": 2,
+      "model_version": "egif-lightgbm-egif-2d-48-v1-t2-v1"
+    },
+    {
+      "n_rows": 10804365,
+      "n_positives": 530,
+      "prevalence": 4.905424798218127e-05,
+      "pr_auc": 0.000663696986899776,
+      "lift_vs_azar": 13.529857539368676,
+      "roc_auc": 0.8720166346242653,
+      "recall_at_fpr5": 0.4207547169811321,
+      "recall_ci90_low": 0.38292452830188684,
+      "recall_ci90_high": 0.4547169811320755,
+      "threshold_at_fpr": 0.06344009467229525,
+      "fpr_achieved": 0.04999993058020601,
+      "recall_at_top1%_daily": 0.09811320754716982,
+      "recall_at_top1%_daily_ci90_low": 0.07547169811320754,
+      "recall_at_top1%_daily_ci90_high": 0.12075471698113208,
+      "brier_score": 4.925637738909541e-05,
+      "roc_auc_temporada": 0.8239876141732746,
+      "roc_auc_dentro_del_dia": 0.7787846088871309,
+      "horizon_days": 3,
+      "model_version": "egif-lightgbm-egif-2d-48-v1-t3-v1"
+    }
+  ],
+  "paired_comparisons": [
+    {
+      "metrica": "recall@fpr5",
+      "modelo_a": "T+1",
+      "modelo_b": "T+2",
+      "n_incendios": 530,
+      "recall_a": 0.44150943396226416,
+      "recall_b": 0.41132075471698115,
+      "diferencia": 0.030188679245283012,
+      "dif_ci90_low": 0.007547169811320753,
+      "dif_ci90_high": 0.05481132075471694,
+      "concluyente": true,
+      "ambos": 195,
+      "ninguno": 273,
+      "mcnemar_p": 0.05589722669971112,
+      "veredicto": "T+1 mejor",
+      "solo_a": 39,
+      "solo_b": 23
+    },
+    {
+      "metrica": "recall@fpr5",
+      "modelo_a": "T+1",
+      "modelo_b": "T+3",
+      "n_incendios": 530,
+      "recall_a": 0.44150943396226416,
+      "recall_b": 0.4207547169811321,
+      "diferencia": 0.02075471698113207,
+      "dif_ci90_low": -0.0037735849056603765,
+      "dif_ci90_high": 0.047169811320754707,
+      "concluyente": false,
+      "ambos": 194,
+      "ninguno": 267,
+      "mcnemar_p": 0.22840022535329702,
+      "veredicto": "no concluyente",
+      "solo_a": 40,
+      "solo_b": 29
+    },
+    {
+      "metrica": "recall@fpr5",
+      "modelo_a": "T+2",
+      "modelo_b": "T+3",
+      "n_incendios": 530,
+      "recall_a": 0.41132075471698115,
+      "recall_b": 0.4207547169811321,
+      "diferencia": -0.009433962264150941,
+      "dif_ci90_low": -0.03028301886792452,
+      "dif_ci90_high": 0.013207547169811318,
+      "concluyente": false,
+      "ambos": 192,
+      "ninguno": 281,
+      "mcnemar_p": 0.5966417603730826,
+      "veredicto": "no concluyente",
+      "solo_a": 26,
+      "solo_b": 31
+    },
+    {
+      "metrica": "recall@top1%/día",
+      "modelo_a": "T+2",
+      "modelo_b": "T+3",
+      "n_incendios": 530,
+      "recall_a": 0.11320754716981132,
+      "recall_b": 0.09811320754716982,
+      "diferencia": 0.015094339622641506,
+      "dif_ci90_low": -0.007547169811320753,
+      "dif_ci90_high": 0.037735849056603765,
+      "concluyente": false,
+      "ambos": 35,
+      "ninguno": 453,
+      "mcnemar_p": 0.27995623852893914,
+      "veredicto": "no concluyente",
+      "solo_a": 25,
+      "solo_b": 17
+    },
+    {
+      "metrica": "recall@top1%/día",
+      "modelo_a": "T+1",
+      "modelo_b": "T+3",
+      "n_incendios": 530,
+      "recall_a": 0.09622641509433963,
+      "recall_b": 0.09811320754716982,
+      "diferencia": -0.0018867924528301883,
+      "dif_ci90_low": -0.02264150943396226,
+      "dif_ci90_high": 0.016981132075471694,
+      "concluyente": false,
+      "ambos": 31,
+      "ninguno": 458,
+      "mcnemar_p": 1.0,
+      "veredicto": "no concluyente",
+      "solo_a": 20,
+      "solo_b": 21
+    },
+    {
+      "metrica": "recall@top1%/día",
+      "modelo_a": "T+1",
+      "modelo_b": "T+2",
+      "n_incendios": 530,
+      "recall_a": 0.09622641509433963,
+      "recall_b": 0.11320754716981132,
+      "diferencia": -0.016981132075471694,
+      "dif_ci90_low": -0.037735849056603765,
+      "dif_ci90_high": 0.0018867924528301883,
+      "concluyente": false,
+      "ambos": 34,
+      "ninguno": 453,
+      "mcnemar_p": 0.2220528201560228,
+      "veredicto": "no concluyente",
+      "solo_a": 17,
+      "solo_b": 26
+    }
+  ],
+  "baseline_paired_comparisons": [
+    {
+      "metrica": "recall@fpr5",
+      "modelo_a": "T+1",
+      "modelo_b": "FWI CEMS",
+      "n_incendios": 530,
+      "recall_a": 0.44150943396226416,
+      "recall_b": 0.19622641509433963,
+      "diferencia": 0.24528301886792453,
+      "dif_ci90_low": 0.2037735849056604,
+      "dif_ci90_high": 0.2795283018867924,
+      "concluyente": true,
+      "ambos": 69,
+      "ninguno": 261,
+      "mcnemar_p": 2.2139771125184135e-21,
+      "veredicto": "T+1 mejor",
+      "solo_a": 165,
+      "solo_b": 35
+    },
+    {
+      "metrica": "recall@fpr5",
+      "modelo_a": "T+3",
+      "modelo_b": "FWI CEMS",
+      "n_incendios": 530,
+      "recall_a": 0.4207547169811321,
+      "recall_b": 0.19622641509433963,
+      "diferencia": 0.22452830188679246,
+      "dif_ci90_low": 0.17547169811320756,
+      "dif_ci90_high": 0.260566037735849,
+      "concluyente": true,
+      "ambos": 60,
+      "ninguno": 263,
+      "mcnemar_p": 2.8802845337074046e-17,
+      "veredicto": "T+3 mejor",
+      "solo_a": 163,
+      "solo_b": 44
+    },
+    {
+      "metrica": "recall@fpr5",
+      "modelo_a": "T+2",
+      "modelo_b": "FWI CEMS",
+      "n_incendios": 530,
+      "recall_a": 0.41132075471698115,
+      "recall_b": 0.19622641509433963,
+      "diferencia": 0.21509433962264152,
+      "dif_ci90_low": 0.169811320754717,
+      "dif_ci90_high": 0.24537735849056602,
+      "concluyente": true,
+      "ambos": 60,
+      "ninguno": 268,
+      "mcnemar_p": 2.784829782496462e-16,
+      "veredicto": "T+2 mejor",
+      "solo_a": 158,
+      "solo_b": 44
+    },
+    {
+      "metrica": "recall@top1%/día",
+      "modelo_a": "T+2",
+      "modelo_b": "FWI CEMS",
+      "n_incendios": 530,
+      "recall_a": 0.11320754716981132,
+      "recall_b": 0.02830188679245283,
+      "diferencia": 0.0849056603773585,
+      "dif_ci90_low": 0.05849056603773586,
+      "dif_ci90_high": 0.11132075471698114,
+      "concluyente": true,
+      "ambos": 2,
+      "ninguno": 457,
+      "mcnemar_p": 6.26942884485106e-08,
+      "veredicto": "T+2 mejor",
+      "solo_a": 58,
+      "solo_b": 13
+    },
+    {
+      "metrica": "recall@top1%/día",
+      "modelo_a": "T+3",
+      "modelo_b": "FWI CEMS",
+      "n_incendios": 530,
+      "recall_a": 0.09811320754716982,
+      "recall_b": 0.02830188679245283,
+      "diferencia": 0.069811320754717,
+      "dif_ci90_low": 0.048962264150943395,
+      "dif_ci90_high": 0.09254716981132073,
+      "concluyente": true,
+      "ambos": 3,
+      "ninguno": 466,
+      "mcnemar_p": 1.969878418086636e-06,
+      "veredicto": "T+3 mejor",
+      "solo_a": 49,
+      "solo_b": 12
+    },
+    {
+      "metrica": "recall@top1%/día",
+      "modelo_a": "T+1",
+      "modelo_b": "FWI CEMS",
+      "n_incendios": 530,
+      "recall_a": 0.09622641509433963,
+      "recall_b": 0.02830188679245283,
+      "diferencia": 0.0679245283018868,
+      "dif_ci90_low": 0.04339622641509434,
+      "dif_ci90_high": 0.08877358490566035,
+      "concluyente": true,
+      "ambos": 2,
+      "ninguno": 466,
+      "mcnemar_p": 4.8175233992660445e-06,
+      "veredicto": "T+1 mejor",
+      "solo_a": 49,
+      "solo_b": 13
+    }
+  ],
+  "fwi": [
+    {
+      "variante": "FWI oficial CEMS",
+      "n_rows": 10804365,
+      "metrics": {
+        "n_rows": 10804365,
+        "n_positives": 530,
+        "prevalence": 4.905424798218127e-05,
+        "pr_auc": 0.0001544982884578171,
+        "lift_vs_azar": 3.1495394346670627,
+        "roc_auc": 0.7719990503721464,
+        "recall_at_fpr5": 0.19622641509433963,
+        "recall_ci90_low": 0.17160377358490564,
+        "recall_ci90_high": 0.22452830188679246,
+        "threshold_at_fpr": 23.11686134338379,
+        "fpr_achieved": 0.04997336593903924,
+        "recall_at_top1%_daily": 0.02830188679245283,
+        "recall_at_top1%_daily_ci90_low": 0.01688679245283019,
+        "recall_at_top1%_daily_ci90_high": 0.04150943396226415,
+        "brier_score": null
+      },
+      "caveat": "Baseline externo; fire_weather_index no es predictor EGIF-48."
+    },
+    {
+      "variante": "FWI Van Wagner 1 km",
+      "n_rows": 10804365,
+      "metrics": {
+        "n_rows": 10804365,
+        "n_positives": 530,
+        "prevalence": 4.905424798218127e-05,
+        "pr_auc": 0.00016451481945428277,
+        "lift_vs_azar": 3.353732372251268,
+        "roc_auc": 0.7865976957291312,
+        "recall_at_fpr5": 0.19622641509433963,
+        "recall_ci90_low": 0.16981132075471697,
+        "recall_ci90_high": 0.22452830188679246,
+        "threshold_at_fpr": 22.412673950195312,
+        "fpr_achieved": 0.04999993058020601,
+        "recall_at_top1%_daily": 0.01509433962264151,
+        "recall_at_top1%_daily_ci90_low": 0.007547169811320755,
+        "recall_at_top1%_daily_ci90_high": 0.024622641509433933,
+        "brier_score": null
+      },
+      "caveat": "Usa extremos 12-18 h en lugar de mediodía solar; sirve como ordenación comparativa, no como categoría oficial FWI."
+    }
+  ],
+  "spatial_slices": [
+    {
+      "n_rows": 2175765,
+      "n_positives": 326,
+      "prevalence": 0.00014983235781437792,
+      "pr_auc": 0.0009712604082018216,
+      "lift_vs_azar": 6.482314116721584,
+      "roc_auc": 0.8352928776462993,
+      "recall_at_fpr5": 0.3128834355828221,
+      "recall_ci90_low": 0.26380368098159507,
+      "recall_ci90_high": 0.35904907975460115,
+      "threshold_at_fpr": 0.08871168509623377,
+      "fpr_achieved": 0.049999563306532616,
+      "recall_at_top1%_daily": 0.05521472392638037,
+      "recall_at_top1%_daily_ci90_low": 0.03374233128834356,
+      "recall_at_top1%_daily_ci90_high": 0.07668711656441718,
+      "brier_score": null,
+      "horizon_days": 1,
+      "banda_diagonal": 0,
+      "rows": 2175765,
+      "cells_aprox": 5961,
+      "roc_auc_dentro_del_dia": 0.6690084982936455
+    },
+    {
+      "n_rows": 2169195,
+      "n_positives": 157,
+      "prevalence": 7.237707997667337e-05,
+      "pr_auc": 0.0019248477386008347,
+      "lift_vs_azar": 26.59471395117349,
+      "roc_auc": 0.8580978277827978,
+      "recall_at_fpr5": 0.3503184713375796,
+      "recall_ci90_low": 0.28662420382165604,
+      "recall_ci90_high": 0.4140127388535032,
+      "threshold_at_fpr": 0.07700969961471575,
+      "fpr_achieved": 0.04999958506951008,
+      "recall_at_top1%_daily": 0.10828025477707007,
+      "recall_at_top1%_daily_ci90_low": 0.07006369426751592,
+      "recall_at_top1%_daily_ci90_high": 0.1464968152866242,
+      "brier_score": null,
+      "horizon_days": 1,
+      "banda_diagonal": 1,
+      "rows": 2169195,
+      "cells_aprox": 5943,
+      "roc_auc_dentro_del_dia": 0.7196806870265992
+    },
+    {
+      "n_rows": 2145105,
+      "n_positives": 43,
+      "prevalence": 2.0045638791574306e-05,
+      "pr_auc": 8.737021289655264e-05,
+      "lift_vs_azar": 4.358564663615338,
+      "roc_auc": 0.7794353122508542,
+      "recall_at_fpr5": 0.23255813953488372,
+      "recall_ci90_low": 0.13953488372093023,
+      "recall_ci90_high": 0.32558139534883723,
+      "threshold_at_fpr": 0.057124092999983465,
+      "fpr_achieved": 0.049999953381300866,
+      "recall_at_top1%_daily": 0.0,
+      "recall_at_top1%_daily_ci90_low": 0.0,
+      "recall_at_top1%_daily_ci90_high": 0.0,
+      "brier_score": null,
+      "horizon_days": 1,
+      "banda_diagonal": 2,
+      "rows": 2145105,
+      "cells_aprox": 5877,
+      "roc_auc_dentro_del_dia": 0.6973976468388778
+    },
+    {
+      "n_rows": 2153865,
+      "n_positives": 4,
+      "prevalence": 1.8571266072850433e-06,
+      "pr_auc": 1.911362300700386e-05,
+      "lift_vs_azar": 10.292040904495092,
+      "roc_auc": 0.7762913902057746,
+      "recall_at_fpr5": 0.5,
+      "recall_ci90_low": 0.0,
+      "recall_ci90_high": 1.0,
+      "threshold_at_fpr": 0.04800168863263349,
+      "fpr_achieved": 0.0499999767858743,
+      "recall_at_top1%_daily": 0.0,
+      "recall_at_top1%_daily_ci90_low": 0.0,
+      "recall_at_top1%_daily_ci90_high": 0.0,
+      "brier_score": null,
+      "horizon_days": 1,
+      "banda_diagonal": 3,
+      "rows": 2153865,
+      "cells_aprox": 5901,
+      "roc_auc_dentro_del_dia": 0.4527542372881356
+    },
+    {
+      "n_rows": 2160435,
+      "n_positives": 0,
+      "prevalence": 0.0,
+      "pr_auc": null,
+      "lift_vs_azar": null,
+      "roc_auc": null,
+      "recall_at_fpr5": 0.0,
+      "recall_ci90_low": 0.0,
+      "recall_ci90_high": 0.0,
+      "threshold_at_fpr": null,
+      "fpr_achieved": 0.0,
+      "brier_score": null,
+      "recall_at_top1%_daily": 0.0,
+      "recall_at_top1%_daily_ci90_low": 0.0,
+      "recall_at_top1%_daily_ci90_high": 0.0,
+      "horizon_days": 1,
+      "banda_diagonal": 4,
+      "rows": 2160435,
+      "cells_aprox": 5919,
+      "roc_auc_dentro_del_dia": null
+    },
+    {
+      "n_rows": 2175765,
+      "n_positives": 326,
+      "prevalence": 0.00014983235781437792,
+      "pr_auc": 0.0009521158732722834,
+      "lift_vs_azar": 6.354541082853588,
+      "roc_auc": 0.8323577236538142,
+      "recall_at_fpr5": 0.294478527607362,
+      "recall_ci90_low": 0.254601226993865,
+      "recall_ci90_high": 0.3312883435582822,
+      "threshold_at_fpr": 0.0894891140318131,
+      "fpr_achieved": 0.049999563306532616,
+      "recall_at_top1%_daily": 0.05214723926380368,
+      "recall_at_top1%_daily_ci90_low": 0.033588957055214724,
+      "recall_at_top1%_daily_ci90_high": 0.0705521472392638,
+      "brier_score": null,
+      "horizon_days": 2,
+      "banda_diagonal": 0,
+      "rows": 2175765,
+      "cells_aprox": 5961,
+      "roc_auc_dentro_del_dia": 0.6588319852303306
+    },
+    {
+      "n_rows": 2169195,
+      "n_positives": 157,
+      "prevalence": 7.237707997667337e-05,
+      "pr_auc": 0.0009934770715389015,
+      "lift_vs_azar": 13.726404434374698,
+      "roc_auc": 0.8569980270627825,
+      "recall_at_fpr5": 0.34394904458598724,
+      "recall_ci90_low": 0.28662420382165604,
+      "recall_ci90_high": 0.40796178343949036,
+      "threshold_at_fpr": 0.07804576131675034,
+      "fpr_achieved": 0.04999958506951008,
+      "recall_at_top1%_daily": 0.08917197452229299,
+      "recall_at_top1%_daily_ci90_low": 0.05732484076433121,
+      "recall_at_top1%_daily_ci90_high": 0.1337579617834395,
+      "brier_score": null,
+      "horizon_days": 2,
+      "banda_diagonal": 1,
+      "rows": 2169195,
+      "cells_aprox": 5943,
+      "roc_auc_dentro_del_dia": 0.7158302934712121
+    },
+    {
+      "n_rows": 2145105,
+      "n_positives": 43,
+      "prevalence": 2.0045638791574306e-05,
+      "pr_auc": 0.00010123460416306174,
+      "lift_vs_azar": 5.050205943330338,
+      "roc_auc": 0.7813770027528668,
+      "recall_at_fpr5": 0.2558139534883721,
+      "recall_ci90_low": 0.16279069767441862,
+      "recall_ci90_high": 0.3488372093023256,
+      "threshold_at_fpr": 0.05723386796485946,
+      "fpr_achieved": 0.049999953381300866,
+      "recall_at_top1%_daily": 0.046511627906976744,
+      "recall_at_top1%_daily_ci90_low": 0.0,
+      "recall_at_top1%_daily_ci90_high": 0.11627906976744186,
+      "brier_score": null,
+      "horizon_days": 2,
+      "banda_diagonal": 2,
+      "rows": 2145105,
+      "cells_aprox": 5877,
+      "roc_auc_dentro_del_dia": 0.682657506582124
+    },
+    {
+      "n_rows": 2153865,
+      "n_positives": 4,
+      "prevalence": 1.8571266072850433e-06,
+      "pr_auc": 3.4541685380687934e-05,
+      "lift_vs_azar": 18.599531795618855,
+      "roc_auc": 0.7728190212831747,
+      "recall_at_fpr5": 0.25,
+      "recall_ci90_low": 0.0,
+      "recall_ci90_high": 0.5,
+      "threshold_at_fpr": 0.04818972601151232,
+      "fpr_achieved": 0.0499999767858743,
+      "recall_at_top1%_daily": 0.0,
+      "recall_at_top1%_daily_ci90_low": 0.0,
+      "recall_at_top1%_daily_ci90_high": 0.0,
+      "brier_score": null,
+      "horizon_days": 2,
+      "banda_diagonal": 3,
+      "rows": 2153865,
+      "cells_aprox": 5901,
+      "roc_auc_dentro_del_dia": 0.44635593220338987
+    },
+    {
+      "n_rows": 2160435,
+      "n_positives": 0,
+      "prevalence": 0.0,
+      "pr_auc": null,
+      "lift_vs_azar": null,
+      "roc_auc": null,
+      "recall_at_fpr5": 0.0,
+      "recall_ci90_low": 0.0,
+      "recall_ci90_high": 0.0,
+      "threshold_at_fpr": null,
+      "fpr_achieved": 0.0,
+      "brier_score": null,
+      "recall_at_top1%_daily": 0.0,
+      "recall_at_top1%_daily_ci90_low": 0.0,
+      "recall_at_top1%_daily_ci90_high": 0.0,
+      "horizon_days": 2,
+      "banda_diagonal": 4,
+      "rows": 2160435,
+      "cells_aprox": 5919,
+      "roc_auc_dentro_del_dia": null
+    },
+    {
+      "n_rows": 2175765,
+      "n_positives": 326,
+      "prevalence": 0.00014983235781437792,
+      "pr_auc": 0.0010086454911818535,
+      "lift_vs_azar": 6.7318268623352315,
+      "roc_auc": 0.8334054918643782,
+      "recall_at_fpr5": 0.2883435582822086,
+      "recall_ci90_low": 0.24539877300613497,
+      "recall_ci90_high": 0.3222392638036809,
+      "threshold_at_fpr": 0.0910049502759119,
+      "fpr_achieved": 0.049999563306532616,
+      "recall_at_top1%_daily": 0.049079754601226995,
+      "recall_at_top1%_daily_ci90_low": 0.033588957055214724,
+      "recall_at_top1%_daily_ci90_high": 0.06748466257668712,
+      "brier_score": null,
+      "horizon_days": 3,
+      "banda_diagonal": 0,
+      "rows": 2175765,
+      "cells_aprox": 5961,
+      "roc_auc_dentro_del_dia": 0.6657637546572691
+    },
+    {
+      "n_rows": 2169195,
+      "n_positives": 157,
+      "prevalence": 7.237707997667337e-05,
+      "pr_auc": 0.0016253649164723453,
+      "lift_vs_azar": 22.45690095533267,
+      "roc_auc": 0.8616072734536934,
+      "recall_at_fpr5": 0.36942675159235666,
+      "recall_ci90_low": 0.31210191082802546,
+      "recall_ci90_high": 0.42070063694267507,
+      "threshold_at_fpr": 0.07871086764069336,
+      "fpr_achieved": 0.04999958506951008,
+      "recall_at_top1%_daily": 0.10828025477707007,
+      "recall_at_top1%_daily_ci90_low": 0.07006369426751592,
+      "recall_at_top1%_daily_ci90_high": 0.15286624203821655,
+      "brier_score": null,
+      "horizon_days": 3,
+      "banda_diagonal": 1,
+      "rows": 2169195,
+      "cells_aprox": 5943,
+      "roc_auc_dentro_del_dia": 0.7292701762889751
+    },
+    {
+      "n_rows": 2145105,
+      "n_positives": 43,
+      "prevalence": 2.0045638791574306e-05,
+      "pr_auc": 7.578330375448251e-05,
+      "lift_vs_azar": 3.7805382279130044,
+      "roc_auc": 0.7809102736836382,
+      "recall_at_fpr5": 0.2558139534883721,
+      "recall_ci90_low": 0.13953488372093023,
+      "recall_ci90_high": 0.3488372093023256,
+      "threshold_at_fpr": 0.05802585550498389,
+      "fpr_achieved": 0.049999953381300866,
+      "recall_at_top1%_daily": 0.0,
+      "recall_at_top1%_daily_ci90_low": 0.0,
+      "recall_at_top1%_daily_ci90_high": 0.0,
+      "brier_score": null,
+      "horizon_days": 3,
+      "banda_diagonal": 2,
+      "rows": 2145105,
+      "cells_aprox": 5877,
+      "roc_auc_dentro_del_dia": 0.679068649625529
+    },
+    {
+      "n_rows": 2153865,
+      "n_positives": 4,
+      "prevalence": 1.8571266072850433e-06,
+      "pr_auc": 1.2598596562366723e-05,
+      "lift_vs_azar": 6.7839190462005,
+      "roc_auc": 0.7788680420881384,
+      "recall_at_fpr5": 0.5,
+      "recall_ci90_low": 0.0,
+      "recall_ci90_high": 1.0,
+      "threshold_at_fpr": 0.04827651663338953,
+      "fpr_achieved": 0.0499999767858743,
+      "recall_at_top1%_daily": 0.0,
+      "recall_at_top1%_daily_ci90_low": 0.0,
+      "recall_at_top1%_daily_ci90_high": 0.0,
+      "brier_score": null,
+      "horizon_days": 3,
+      "banda_diagonal": 3,
+      "rows": 2153865,
+      "cells_aprox": 5901,
+      "roc_auc_dentro_del_dia": 0.45067796610169497
+    },
+    {
+      "n_rows": 2160435,
+      "n_positives": 0,
+      "prevalence": 0.0,
+      "pr_auc": null,
+      "lift_vs_azar": null,
+      "roc_auc": null,
+      "recall_at_fpr5": 0.0,
+      "recall_ci90_low": 0.0,
+      "recall_ci90_high": 0.0,
+      "threshold_at_fpr": null,
+      "fpr_achieved": 0.0,
+      "brier_score": null,
+      "recall_at_top1%_daily": 0.0,
+      "recall_at_top1%_daily_ci90_low": 0.0,
+      "recall_at_top1%_daily_ci90_high": 0.0,
+      "horizon_days": 3,
+      "banda_diagonal": 4,
+      "rows": 2160435,
+      "cells_aprox": 5919,
+      "roc_auc_dentro_del_dia": null
+    }
+  ],
+  "feature_importance_top15": {
+    "1": [
+      {
+        "feature": "elevation_mean",
+        "importance": 927.0
+      },
+      {
+        "feature": "precipitation_sum_3d",
+        "importance": 837.0
+      },
+      {
+        "feature": "precipitation_sum_30d",
+        "importance": 783.0
+      },
+      {
+        "feature": "precipitation_sum_7d",
+        "importance": 782.0
+      },
+      {
+        "feature": "wind_speed_mean_7d",
+        "importance": 765.0
+      },
+      {
+        "feature": "precipitation_sum_14d",
+        "importance": 747.0
+      },
+      {
+        "feature": "temperature_mean_7d",
+        "importance": 697.0
+      },
+      {
+        "feature": "relative_humidity_mean_14d",
+        "importance": 681.0
+      },
+      {
+        "feature": "aspect_225_270_fraction",
+        "importance": 670.0
+      },
+      {
+        "feature": "aspect_090_135_fraction",
+        "importance": 660.0
+      },
+      {
+        "feature": "aspect_000_045_fraction",
+        "importance": 650.0
+      },
+      {
+        "feature": "road_length_local_km",
+        "importance": 645.0
+      },
+      {
+        "feature": "aspect_180_225_fraction",
+        "importance": 639.0
+      },
+      {
+        "feature": "elevation_std",
+        "importance": 635.0
+      },
+      {
+        "feature": "wind_speed_mean",
+        "importance": 630.0
+      }
+    ],
+    "2": [
+      {
+        "feature": "elevation_mean",
+        "importance": 955.0
+      },
+      {
+        "feature": "precipitation_sum_3d",
+        "importance": 846.0
+      },
+      {
+        "feature": "precipitation_sum_30d",
+        "importance": 810.0
+      },
+      {
+        "feature": "precipitation_sum_14d",
+        "importance": 774.0
+      },
+      {
+        "feature": "wind_speed_mean_7d",
+        "importance": 717.0
+      },
+      {
+        "feature": "temperature_mean_7d",
+        "importance": 717.0
+      },
+      {
+        "feature": "slope_std",
+        "importance": 691.0
+      },
+      {
+        "feature": "precipitation_sum_7d",
+        "importance": 679.0
+      },
+      {
+        "feature": "aspect_225_270_fraction",
+        "importance": 675.0
+      },
+      {
+        "feature": "elevation_std",
+        "importance": 667.0
+      },
+      {
+        "feature": "road_length_local_km",
+        "importance": 660.0
+      },
+      {
+        "feature": "aspect_180_225_fraction",
+        "importance": 649.0
+      },
+      {
+        "feature": "aspect_315_360_fraction",
+        "importance": 648.0
+      },
+      {
+        "feature": "relative_humidity_mean_7d",
+        "importance": 627.0
+      },
+      {
+        "feature": "road_length_km",
+        "importance": 626.0
+      }
+    ],
+    "3": [
+      {
+        "feature": "elevation_mean",
+        "importance": 909.0
+      },
+      {
+        "feature": "precipitation_sum_3d",
+        "importance": 835.0
+      },
+      {
+        "feature": "precipitation_sum_14d",
+        "importance": 783.0
+      },
+      {
+        "feature": "precipitation_sum_30d",
+        "importance": 780.0
+      },
+      {
+        "feature": "temperature_mean_7d",
+        "importance": 693.0
+      },
+      {
+        "feature": "wind_speed_mean_7d",
+        "importance": 676.0
+      },
+      {
+        "feature": "aspect_225_270_fraction",
+        "importance": 676.0
+      },
+      {
+        "feature": "aspect_180_225_fraction",
+        "importance": 672.0
+      },
+      {
+        "feature": "road_length_local_km",
+        "importance": 667.0
+      },
+      {
+        "feature": "aspect_090_135_fraction",
+        "importance": 662.0
+      },
+      {
+        "feature": "relative_humidity_mean",
+        "importance": 653.0
+      },
+      {
+        "feature": "slope_std",
+        "importance": 649.0
+      },
+      {
+        "feature": "relative_humidity_mean_14d",
+        "importance": 647.0
+      },
+      {
+        "feature": "precipitation_sum_7d",
+        "importance": 647.0
+      },
+      {
+        "feature": "aspect_045_090_fraction",
+        "importance": 637.0
+      }
+    ]
+  },
+  "reliability": {
+    "1": [
+      {
+        "bin": 0,
+        "pred_media": 1.437823192393859e-07,
+        "obs_frecuencia": 0.0,
+        "n": 900364
+      },
+      {
+        "bin": 1,
+        "pred_media": 4.3466358623451244e-07,
+        "obs_frecuencia": 0.0,
+        "n": 900364
+      },
+      {
+        "bin": 2,
+        "pred_media": 1.1979579571370373e-06,
+        "obs_frecuencia": 1.110663143643175e-06,
+        "n": 900363
+      },
+      {
+        "bin": 3,
+        "pred_media": 3.379742612966963e-06,
+        "obs_frecuencia": 0.0,
+        "n": 900364
+      },
+      {
+        "bin": 4,
+        "pred_media": 8.659795784405047e-06,
+        "obs_frecuencia": 5.553309550359632e-06,
+        "n": 900364
+      },
+      {
+        "bin": 5,
+        "pred_media": 1.861703950661952e-05,
+        "obs_frecuencia": 1.5549284011004452e-05,
+        "n": 900363
+      },
+      {
+        "bin": 6,
+        "pred_media": 3.414698648767987e-05,
+        "obs_frecuencia": 1.9991914381294675e-05,
+        "n": 900364
+      },
+      {
+        "bin": 7,
+        "pred_media": 5.671361724715416e-05,
+        "obs_frecuencia": 2.776654775179816e-05,
+        "n": 900364
+      },
+      {
+        "bin": 8,
+        "pred_media": 8.947200090749711e-05,
+        "obs_frecuencia": 3.220923116565207e-05,
+        "n": 900363
+      },
+      {
+        "bin": 9,
+        "pred_media": 0.0001414861259247838,
+        "obs_frecuencia": 5.997574314388403e-05,
+        "n": 900364
+      },
+      {
+        "bin": 10,
+        "pred_media": 0.00024393191547541956,
+        "obs_frecuencia": 0.00010662354336690494,
+        "n": 900364
+      },
+      {
+        "bin": 11,
+        "pred_media": 0.0007879874643417015,
+        "obs_frecuencia": 0.0003198706301007148,
+        "n": 900364
+      }
+    ],
+    "2": [
+      {
+        "bin": 0,
+        "pred_media": 1.5532816734397785e-07,
+        "obs_frecuencia": 0.0,
+        "n": 900364
+      },
+      {
+        "bin": 1,
+        "pred_media": 4.469613554134911e-07,
+        "obs_frecuencia": 0.0,
+        "n": 900364
+      },
+      {
+        "bin": 2,
+        "pred_media": 1.1931459560279425e-06,
+        "obs_frecuencia": 1.110663143643175e-06,
+        "n": 900363
+      },
+      {
+        "bin": 3,
+        "pred_media": 3.3233404725621697e-06,
+        "obs_frecuencia": 0.0,
+        "n": 900364
+      },
+      {
+        "bin": 4,
+        "pred_media": 8.254143654395814e-06,
+        "obs_frecuencia": 4.442647640287706e-06,
+        "n": 900364
+      },
+      {
+        "bin": 5,
+        "pred_media": 1.7668477311800816e-05,
+        "obs_frecuencia": 1.77706102982908e-05,
+        "n": 900363
+      },
+      {
+        "bin": 6,
+        "pred_media": 3.2704483137791944e-05,
+        "obs_frecuencia": 1.7770590561150825e-05,
+        "n": 900364
+      },
+      {
+        "bin": 7,
+        "pred_media": 5.458353612048349e-05,
+        "obs_frecuencia": 2.8877209661870088e-05,
+        "n": 900364
+      },
+      {
+        "bin": 8,
+        "pred_media": 8.647687341588622e-05,
+        "obs_frecuencia": 4.1094536314797473e-05,
+        "n": 900363
+      },
+      {
+        "bin": 9,
+        "pred_media": 0.0001376012834595653,
+        "obs_frecuencia": 4.886912404316477e-05,
+        "n": 900364
+      },
+      {
+        "bin": 10,
+        "pred_media": 0.00023883789098509334,
+        "obs_frecuencia": 0.0001177301624676242,
+        "n": 900364
+      },
+      {
+        "bin": 11,
+        "pred_media": 0.0008012380974237657,
+        "obs_frecuencia": 0.0003109853348201394,
+        "n": 900364
+      }
+    ],
+    "3": [
+      {
+        "bin": 0,
+        "pred_media": 7.973176217096026e-08,
+        "obs_frecuencia": 0.0,
+        "n": 900364
+      },
+      {
+        "bin": 1,
+        "pred_media": 2.90854855318673e-07,
+        "obs_frecuencia": 0.0,
+        "n": 900364
+      },
+      {
+        "bin": 2,
+        "pred_media": 9.430780241364299e-07,
+        "obs_frecuencia": 1.110663143643175e-06,
+        "n": 900363
+      },
+      {
+        "bin": 3,
+        "pred_media": 3.080341136027706e-06,
+        "obs_frecuencia": 0.0,
+        "n": 900364
+      },
+      {
+        "bin": 4,
+        "pred_media": 8.344753674493532e-06,
+        "obs_frecuencia": 3.3319857302157792e-06,
+        "n": 900364
+      },
+      {
+        "bin": 5,
+        "pred_media": 1.8114136254730422e-05,
+        "obs_frecuencia": 8.8853051491454e-06,
+        "n": 900363
+      },
+      {
+        "bin": 6,
+        "pred_media": 3.3444313824167296e-05,
+        "obs_frecuencia": 2.5545223931654307e-05,
+        "n": 900364
+      },
+      {
+        "bin": 7,
+        "pred_media": 5.590402447881745e-05,
+        "obs_frecuencia": 2.6655885841726234e-05,
+        "n": 900364
+      },
+      {
+        "bin": 8,
+        "pred_media": 8.859191320491072e-05,
+        "obs_frecuencia": 3.776254688386795e-05,
+        "n": 900363
+      },
+      {
+        "bin": 9,
+        "pred_media": 0.0001409372887660471,
+        "obs_frecuencia": 5.7754419323740176e-05,
+        "n": 900364
+      },
+      {
+        "bin": 10,
+        "pred_media": 0.0002442011892699259,
+        "obs_frecuencia": 0.00010773420527697686,
+        "n": 900364
+      },
+      {
+        "bin": 11,
+        "pred_media": 0.000813825651899496,
+        "obs_frecuencia": 0.0003198706301007148,
+        "n": 900364
+      }
+    ]
+  },
+  "risk_levels": {
+    "1": {
+      "thresholds": {
+        "moderado": 0.0002889901951279461,
+        "alto": 0.0008097151451755235,
+        "extremo": 0.0016563082158852901
+      },
+      "levels": [
+        {
+          "nivel": "Bajo",
+          "celdas_dia": 9723928,
+          "porcentaje_territorio": 0.8999999537224076,
+          "igniciones": 218,
+          "incidencia": 2.2418923710665074e-05,
+          "veces_sobre_nivel_bajo": 1.0
+        },
+        {
+          "nivel": "Moderado",
+          "celdas_dia": 864349,
+          "porcentaje_territorio": 0.07999998148896302,
+          "igniciones": 176,
+          "incidencia": 0.00020362145383404158,
+          "veces_sobre_nivel_bajo": 9.08257044191534
+        },
+        {
+          "nivel": "Alto",
+          "celdas_dia": 162066,
+          "porcentaje_territorio": 0.015000048591472057,
+          "igniciones": 77,
+          "incidencia": 0.00047511507657374156,
+          "veces_sobre_nivel_bajo": 21.192590808796098
+        },
+        {
+          "nivel": "Extremo",
+          "celdas_dia": 54022,
+          "porcentaje_territorio": 0.005000016197157352,
+          "igniciones": 59,
+          "incidencia": 0.0010921476435526267,
+          "veces_sobre_nivel_bajo": 48.7154360150248
+        }
+      ]
+    },
+    "2": {
+      "thresholds": {
+        "moderado": 0.000283236021749071,
+        "alto": 0.000810312731865102,
+        "extremo": 0.001677449285494744
+      },
+      "levels": [
+        {
+          "nivel": "Bajo",
+          "celdas_dia": 9723928,
+          "porcentaje_territorio": 0.8999999537224076,
+          "igniciones": 224,
+          "incidencia": 2.3035958308206314e-05,
+          "veces_sobre_nivel_bajo": 1.0
+        },
+        {
+          "nivel": "Moderado",
+          "celdas_dia": 864349,
+          "porcentaje_territorio": 0.07999998148896302,
+          "igniciones": 177,
+          "incidencia": 0.0002047783939126441,
+          "veces_sobre_nivel_bajo": 8.889510528402631
+        },
+        {
+          "nivel": "Alto",
+          "celdas_dia": 162066,
+          "porcentaje_territorio": 0.015000048591472057,
+          "igniciones": 64,
+          "incidencia": 0.0003949008428664865,
+          "veces_sobre_nivel_bajo": 17.14280072845102
+        },
+        {
+          "nivel": "Extremo",
+          "celdas_dia": 54022,
+          "porcentaje_territorio": 0.005000016197157352,
+          "igniciones": 65,
+          "incidencia": 0.001203213505608826,
+          "veces_sobre_nivel_bajo": 52.231970969499194
+        }
+      ]
+    },
+    "3": {
+      "thresholds": {
+        "moderado": 0.000289643395198217,
+        "alto": 0.0008364360906040793,
+        "extremo": 0.0017366169926465926
+      },
+      "levels": [
+        {
+          "nivel": "Bajo",
+          "celdas_dia": 9723928,
+          "porcentaje_territorio": 0.8999999537224076,
+          "igniciones": 227,
+          "incidencia": 2.3344475606976934e-05,
+          "veces_sobre_nivel_bajo": 1.0
+        },
+        {
+          "nivel": "Moderado",
+          "celdas_dia": 864349,
+          "porcentaje_territorio": 0.07999998148896302,
+          "igniciones": 173,
+          "incidencia": 0.00020015063359823406,
+          "veces_sobre_nivel_bajo": 8.573790089267
+        },
+        {
+          "nivel": "Alto",
+          "celdas_dia": 162066,
+          "porcentaje_territorio": 0.015000048591472057,
+          "igniciones": 75,
+          "incidencia": 0.00046277442523416385,
+          "veces_sobre_nivel_bajo": 19.823723309332124
+        },
+        {
+          "nivel": "Extremo",
+          "celdas_dia": 54022,
+          "porcentaje_territorio": 0.005000016197157352,
+          "igniciones": 55,
+          "incidencia": 0.0010181037355151605,
+          "veces_sobre_nivel_bajo": 43.61219128053068
+        }
+      ]
+    }
+  },
+  "errors": {
+    "1": {
+      "threshold_at_fpr": 0.0624678897435751,
+      "detectadas": 234,
+      "perdidas": 296,
+      "por_variable": [
+        {
+          "variable": "temperature_max_12_18h",
+          "media_detectadas": 21.52675437927246,
+          "media_perdidas": 20.74441146850586,
+          "diferencia": 0.7823429107666016
+        },
+        {
+          "variable": "relative_humidity_min_12_18h",
+          "media_detectadas": 43.12615203857422,
+          "media_perdidas": 50.816490173339844,
+          "diferencia": -7.690338134765625
+        },
+        {
+          "variable": "wind_speed_max_12_18h",
+          "media_detectadas": 12.021932601928711,
+          "media_perdidas": 12.408731460571289,
+          "diferencia": -0.3867988586425781
+        },
+        {
+          "variable": "precipitation_sum",
+          "media_detectadas": 0.5371249318122864,
+          "media_perdidas": 1.235088586807251,
+          "diferencia": -0.6979636549949646
+        },
+        {
+          "variable": "consecutive_dry_days",
+          "media_detectadas": 9.08974358974359,
+          "media_perdidas": 5.199324324324325,
+          "diferencia": 3.890419265419265
+        },
+        {
+          "variable": "elevation_mean",
+          "media_detectadas": 536.375244140625,
+          "media_perdidas": 421.3584899902344,
+          "diferencia": 115.01675415039062
+        },
+        {
+          "variable": "scrub",
+          "media_detectadas": 0.24383017420768738,
+          "media_perdidas": 0.26953577995300293,
+          "diferencia": -0.025705605745315552
+        },
+        {
+          "variable": "road_length_km",
+          "media_detectadas": 5.090152263641357,
+          "media_perdidas": 4.593989849090576,
+          "diferencia": 0.49616241455078125
+        },
+        {
+          "variable": "burned_area_ha",
+          "media_detectadas": 3.540897846221924,
+          "media_perdidas": 2.4490880966186523,
+          "diferencia": 1.0918097496032715
+        },
+        {
+          "variable": "large_fire_500ha",
+          "media_detectadas": 0.0,
+          "media_perdidas": 0.0,
+          "diferencia": 0.0
+        },
+        {
+          "variable": "mes",
+          "media_detectadas": 5.6923076923076925,
+          "media_perdidas": 5.837837837837838,
+          "diferencia": -0.1455301455301452
+        }
+      ],
+      "por_mes": [
+        {
+          "mes": 1,
+          "igniciones": 1,
+          "detectadas": 0,
+          "recall": 0.0
+        },
+        {
+          "mes": 2,
+          "igniciones": 102,
+          "detectadas": 56,
+          "recall": 0.5490196078431373
+        },
+        {
+          "mes": 3,
+          "igniciones": 51,
+          "detectadas": 12,
+          "recall": 0.23529411764705882
+        },
+        {
+          "mes": 4,
+          "igniciones": 50,
+          "detectadas": 18,
+          "recall": 0.36
+        },
+        {
+          "mes": 5,
+          "igniciones": 43,
+          "detectadas": 29,
+          "recall": 0.6744186046511628
+        },
+        {
+          "mes": 6,
+          "igniciones": 22,
+          "detectadas": 2,
+          "recall": 0.09090909090909091
+        },
+        {
+          "mes": 7,
+          "igniciones": 59,
+          "detectadas": 21,
+          "recall": 0.3559322033898305
+        },
+        {
+          "mes": 8,
+          "igniciones": 125,
+          "detectadas": 73,
+          "recall": 0.584
+        },
+        {
+          "mes": 9,
+          "igniciones": 29,
+          "detectadas": 6,
+          "recall": 0.20689655172413793
+        },
+        {
+          "mes": 10,
+          "igniciones": 47,
+          "detectadas": 17,
+          "recall": 0.3617021276595745
+        },
+        {
+          "mes": 11,
+          "igniciones": 1,
+          "detectadas": 0,
+          "recall": 0.0
+        }
+      ]
+    },
+    "2": {
+      "threshold_at_fpr": 0.06254928527317212,
+      "detectadas": 218,
+      "perdidas": 312,
+      "por_variable": [
+        {
+          "variable": "temperature_max_12_18h",
+          "media_detectadas": 21.522340774536133,
+          "media_perdidas": 20.787616729736328,
+          "diferencia": 0.7347240447998047
+        },
+        {
+          "variable": "relative_humidity_min_12_18h",
+          "media_detectadas": 43.674537658691406,
+          "media_perdidas": 50.03894805908203,
+          "diferencia": -6.364410400390625
+        },
+        {
+          "variable": "wind_speed_max_12_18h",
+          "media_detectadas": 12.250606536865234,
+          "media_perdidas": 12.22911548614502,
+          "diferencia": 0.021491050720214844
+        },
+        {
+          "variable": "precipitation_sum",
+          "media_detectadas": 0.5308033227920532,
+          "media_perdidas": 1.2037127017974854,
+          "diferencia": -0.6729093790054321
+        },
+        {
+          "variable": "consecutive_dry_days",
+          "media_detectadas": 9.3348623853211,
+          "media_perdidas": 5.227564102564102,
+          "diferencia": 4.107298282756998
+        },
+        {
+          "variable": "elevation_mean",
+          "media_detectadas": 525.3707275390625,
+          "media_perdidas": 434.94580078125,
+          "diferencia": 90.4249267578125
+        },
+        {
+          "variable": "scrub",
+          "media_detectadas": 0.25116363167762756,
+          "media_perdidas": 0.2630935609340668,
+          "diferencia": -0.011929929256439209
+        },
+        {
+          "variable": "road_length_km",
+          "media_detectadas": 5.181097030639648,
+          "media_perdidas": 4.555888652801514,
+          "diferencia": 0.6252083778381348
+        },
+        {
+          "variable": "burned_area_ha",
+          "media_detectadas": 1.9679359197616577,
+          "media_perdidas": 3.6041345596313477,
+          "diferencia": -1.63619863986969
+        },
+        {
+          "variable": "large_fire_500ha",
+          "media_detectadas": 0.0,
+          "media_perdidas": 0.0,
+          "diferencia": 0.0
+        },
+        {
+          "variable": "mes",
+          "media_detectadas": 5.669724770642202,
+          "media_perdidas": 5.846153846153846,
+          "diferencia": -0.17642907551164377
+        }
+      ],
+      "por_mes": [
+        {
+          "mes": 1,
+          "igniciones": 1,
+          "detectadas": 0,
+          "recall": 0.0
+        },
+        {
+          "mes": 2,
+          "igniciones": 102,
+          "detectadas": 57,
+          "recall": 0.5588235294117647
+        },
+        {
+          "mes": 3,
+          "igniciones": 51,
+          "detectadas": 9,
+          "recall": 0.17647058823529413
+        },
+        {
+          "mes": 4,
+          "igniciones": 50,
+          "detectadas": 14,
+          "recall": 0.28
+        },
+        {
+          "mes": 5,
+          "igniciones": 43,
+          "detectadas": 26,
+          "recall": 0.6046511627906976
+        },
+        {
+          "mes": 6,
+          "igniciones": 22,
+          "detectadas": 4,
+          "recall": 0.18181818181818182
+        },
+        {
+          "mes": 7,
+          "igniciones": 59,
+          "detectadas": 18,
+          "recall": 0.3050847457627119
+        },
+        {
+          "mes": 8,
+          "igniciones": 125,
+          "detectadas": 67,
+          "recall": 0.536
+        },
+        {
+          "mes": 9,
+          "igniciones": 29,
+          "detectadas": 7,
+          "recall": 0.2413793103448276
+        },
+        {
+          "mes": 10,
+          "igniciones": 47,
+          "detectadas": 16,
+          "recall": 0.3404255319148936
+        },
+        {
+          "mes": 11,
+          "igniciones": 1,
+          "detectadas": 0,
+          "recall": 0.0
+        }
+      ]
+    },
+    "3": {
+      "threshold_at_fpr": 0.06344009467229525,
+      "detectadas": 223,
+      "perdidas": 307,
+      "por_variable": [
+        {
+          "variable": "temperature_max_12_18h",
+          "media_detectadas": 21.70665740966797,
+          "media_perdidas": 20.641765594482422,
+          "diferencia": 1.0648918151855469
+        },
+        {
+          "variable": "relative_humidity_min_12_18h",
+          "media_detectadas": 44.092525482177734,
+          "media_perdidas": 49.8389892578125,
+          "diferencia": -5.746463775634766
+        },
+        {
+          "variable": "wind_speed_max_12_18h",
+          "media_detectadas": 12.320097923278809,
+          "media_perdidas": 12.178289413452148,
+          "diferencia": 0.14180850982666016
+        },
+        {
+          "variable": "precipitation_sum",
+          "media_detectadas": 0.5289297699928284,
+          "media_perdidas": 1.216032862663269,
+          "diferencia": -0.6871030926704407
+        },
+        {
+          "variable": "consecutive_dry_days",
+          "media_detectadas": 9.394618834080717,
+          "media_perdidas": 5.1172638436482085,
+          "diferencia": 4.277354990432508
+        },
+        {
+          "variable": "elevation_mean",
+          "media_detectadas": 515.9954833984375,
+          "media_perdidas": 440.2831726074219,
+          "diferencia": 75.71231079101562
+        },
+        {
+          "variable": "scrub",
+          "media_detectadas": 0.2473374903202057,
+          "media_perdidas": 0.2660670876502991,
+          "diferencia": -0.018729597330093384
+        },
+        {
+          "variable": "road_length_km",
+          "media_detectadas": 5.394625186920166,
+          "media_perdidas": 4.390602111816406,
+          "diferencia": 1.0040230751037598
+        },
+        {
+          "variable": "burned_area_ha",
+          "media_detectadas": 2.653587818145752,
+          "media_perdidas": 3.1327362060546875,
+          "diferencia": -0.47914838790893555
+        },
+        {
+          "variable": "large_fire_500ha",
+          "media_detectadas": 0.0,
+          "media_perdidas": 0.0,
+          "diferencia": 0.0
+        },
+        {
+          "variable": "mes",
+          "media_detectadas": 5.807174887892376,
+          "media_perdidas": 5.749185667752443,
+          "diferencia": 0.05798922013993302
+        }
+      ],
+      "por_mes": [
+        {
+          "mes": 1,
+          "igniciones": 1,
+          "detectadas": 0,
+          "recall": 0.0
+        },
+        {
+          "mes": 2,
+          "igniciones": 102,
+          "detectadas": 50,
+          "recall": 0.49019607843137253
+        },
+        {
+          "mes": 3,
+          "igniciones": 51,
+          "detectadas": 8,
+          "recall": 0.1568627450980392
+        },
+        {
+          "mes": 4,
+          "igniciones": 50,
+          "detectadas": 20,
+          "recall": 0.4
+        },
+        {
+          "mes": 5,
+          "igniciones": 43,
+          "detectadas": 28,
+          "recall": 0.6511627906976745
+        },
+        {
+          "mes": 6,
+          "igniciones": 22,
+          "detectadas": 4,
+          "recall": 0.18181818181818182
+        },
+        {
+          "mes": 7,
+          "igniciones": 59,
+          "detectadas": 21,
+          "recall": 0.3559322033898305
+        },
+        {
+          "mes": 8,
+          "igniciones": 125,
+          "detectadas": 67,
+          "recall": 0.536
+        },
+        {
+          "mes": 9,
+          "igniciones": 29,
+          "detectadas": 6,
+          "recall": 0.20689655172413793
+        },
+        {
+          "mes": 10,
+          "igniciones": 47,
+          "detectadas": 19,
+          "recall": 0.40425531914893614
+        },
+        {
+          "mes": 11,
+          "igniciones": 1,
+          "detectadas": 0,
+          "recall": 0.0
+        }
+      ]
+    }
+  },
+  "target_sensitivity": {
+    "1": [
+      {
+        "definicion": "todas las igniciones",
+        "igniciones": 530,
+        "n_rows": 10804365,
+        "n_positives": 530,
+        "prevalence": 4.905424798218127e-05,
+        "pr_auc": 0.0007070328718973117,
+        "lift_vs_azar": 14.41328531127698,
+        "roc_auc": 0.8713196181534104,
+        "recall_at_fpr5": 0.44150943396226416,
+        "recall_ci90_low": 0.4036792452830189,
+        "recall_ci90_high": 0.47358490566037736,
+        "threshold_at_fpr": 0.0624678897435751,
+        "fpr_achieved": 0.04999993058020601,
+        "recall_at_top1%_daily": 0.09622641509433963,
+        "recall_at_top1%_daily_ci90_low": 0.07735849056603773,
+        "recall_at_top1%_daily_ci90_high": 0.1169811320754717,
+        "brier_score": 4.915511436881799e-05
+      },
+      {
+        "definicion": "superficie ≥ 1 ha",
+        "igniciones": 93,
+        "n_rows": 10804365,
+        "n_positives": 93,
+        "prevalence": 8.607632193099734e-06,
+        "pr_auc": 7.762608779395874e-05,
+        "lift_vs_azar": 9.018285871483602,
+        "roc_auc": 0.8459217081730682,
+        "recall_at_fpr5": 0.3655913978494624,
+        "recall_ci90_low": 0.27956989247311825,
+        "recall_ci90_high": 0.45161290322580644,
+        "threshold_at_fpr": 0.06248027277215964,
+        "fpr_achieved": 0.04999994446641107,
+        "recall_at_top1%_daily": 0.0967741935483871,
+        "recall_at_top1%_daily_ci90_low": 0.053763440860215055,
+        "recall_at_top1%_daily_ci90_high": 0.15053763440860216,
+        "brier_score": null
+      },
+      {
+        "definicion": "superficie ≥ 10 ha",
+        "igniciones": 22,
+        "n_rows": 10804365,
+        "n_positives": 22,
+        "prevalence": 2.036214067184883e-06,
+        "pr_auc": 1.975039279500293e-05,
+        "lift_vs_azar": 9.699566029571901,
+        "roc_auc": 0.8955800206706439,
+        "recall_at_fpr5": 0.5,
+        "recall_ci90_low": 0.36363636363636365,
+        "recall_ci90_high": 0.6363636363636364,
+        "threshold_at_fpr": 0.06248212486302128,
+        "fpr_achieved": 0.049999986116694,
+        "recall_at_top1%_daily": 0.09090909090909091,
+        "recall_at_top1%_daily_ci90_low": 0.0,
+        "recall_at_top1%_daily_ci90_high": 0.18181818181818182,
+        "brier_score": null
+      }
+    ],
+    "2": [
+      {
+        "definicion": "todas las igniciones",
+        "igniciones": 530,
+        "n_rows": 10804365,
+        "n_positives": 530,
+        "prevalence": 4.905424798218127e-05,
+        "pr_auc": 0.0005551949830675505,
+        "lift_vs_azar": 11.317979704208746,
+        "roc_auc": 0.8694589161914561,
+        "recall_at_fpr5": 0.41132075471698115,
+        "recall_ci90_low": 0.37915094339622646,
+        "recall_ci90_high": 0.4490566037735849,
+        "threshold_at_fpr": 0.06254928527317212,
+        "fpr_achieved": 0.04999993058020601,
+        "recall_at_top1%_daily": 0.11320754716981132,
+        "recall_at_top1%_daily_ci90_low": 0.08858490566037736,
+        "recall_at_top1%_daily_ci90_high": 0.1339622641509434,
+        "brier_score": 4.9290731276759915e-05
+      },
+      {
+        "definicion": "superficie ≥ 1 ha",
+        "igniciones": 93,
+        "n_rows": 10804365,
+        "n_positives": 93,
+        "prevalence": 8.607632193099734e-06,
+        "pr_auc": 7.169726118838928e-05,
+        "lift_vs_azar": 8.329498703007435,
+        "roc_auc": 0.8501857921003004,
+        "recall_at_fpr5": 0.3548387096774194,
+        "recall_ci90_low": 0.27956989247311825,
+        "recall_ci90_high": 0.43010752688172044,
+        "threshold_at_fpr": 0.062560677889396,
+        "fpr_achieved": 0.04999994446641107,
+        "recall_at_top1%_daily": 0.11827956989247312,
+        "recall_at_top1%_daily_ci90_low": 0.06451612903225806,
+        "recall_at_top1%_daily_ci90_high": 0.1827956989247312,
+        "brier_score": null
+      },
+      {
+        "definicion": "superficie ≥ 10 ha",
+        "igniciones": 22,
+        "n_rows": 10804365,
+        "n_positives": 22,
+        "prevalence": 2.036214067184883e-06,
+        "pr_auc": 2.2947150568659343e-05,
+        "lift_vs_azar": 11.269517747897869,
+        "roc_auc": 0.9120774522211703,
+        "recall_at_fpr5": 0.45454545454545453,
+        "recall_ci90_low": 0.2727272727272727,
+        "recall_ci90_high": 0.6386363636363629,
+        "threshold_at_fpr": 0.06256147993135834,
+        "fpr_achieved": 0.049999986116694,
+        "recall_at_top1%_daily": 0.13636363636363635,
+        "recall_at_top1%_daily_ci90_low": 0.045454545454545456,
+        "recall_at_top1%_daily_ci90_high": 0.2727272727272727,
+        "brier_score": null
+      }
+    ],
+    "3": [
+      {
+        "definicion": "todas las igniciones",
+        "igniciones": 530,
+        "n_rows": 10804365,
+        "n_positives": 530,
+        "prevalence": 4.905424798218127e-05,
+        "pr_auc": 0.000663696986899776,
+        "lift_vs_azar": 13.529857539368676,
+        "roc_auc": 0.8720166346242653,
+        "recall_at_fpr5": 0.4207547169811321,
+        "recall_ci90_low": 0.38292452830188684,
+        "recall_ci90_high": 0.4547169811320755,
+        "threshold_at_fpr": 0.06344009467229525,
+        "fpr_achieved": 0.04999993058020601,
+        "recall_at_top1%_daily": 0.09811320754716982,
+        "recall_at_top1%_daily_ci90_low": 0.07547169811320754,
+        "recall_at_top1%_daily_ci90_high": 0.12075471698113208,
+        "brier_score": 4.925637738909541e-05
+      },
+      {
+        "definicion": "superficie ≥ 1 ha",
+        "igniciones": 93,
+        "n_rows": 10804365,
+        "n_positives": 93,
+        "prevalence": 8.607632193099734e-06,
+        "pr_auc": 0.00011722562755833576,
+        "lift_vs_azar": 13.618800725745357,
+        "roc_auc": 0.8552624558416408,
+        "recall_at_fpr5": 0.34408602150537637,
+        "recall_ci90_low": 0.25806451612903225,
+        "recall_ci90_high": 0.4091397849462364,
+        "threshold_at_fpr": 0.06345103337641042,
+        "fpr_achieved": 0.04999994446641107,
+        "recall_at_top1%_daily": 0.12903225806451613,
+        "recall_at_top1%_daily_ci90_low": 0.07473118279569894,
+        "recall_at_top1%_daily_ci90_high": 0.19408602150537616,
+        "brier_score": null
+      },
+      {
+        "definicion": "superficie ≥ 10 ha",
+        "igniciones": 22,
+        "n_rows": 10804365,
+        "n_positives": 22,
+        "prevalence": 2.036214067184883e-06,
+        "pr_auc": 2.7335618608459293e-05,
+        "lift_vs_azar": 13.424727315753922,
+        "roc_auc": 0.8951760543296003,
+        "recall_at_fpr5": 0.45454545454545453,
+        "recall_ci90_low": 0.315909090909091,
+        "recall_ci90_high": 0.6363636363636364,
+        "threshold_at_fpr": 0.063451875605675,
+        "fpr_achieved": 0.049999986116694,
+        "recall_at_top1%_daily": 0.13636363636363635,
+        "recall_at_top1%_daily_ci90_low": 0.045454545454545456,
+        "recall_at_top1%_daily_ci90_high": 0.22954545454545378,
+        "brier_score": null
+      }
+    ]
+  },
+  "limitations": {
+    "target_day_weather": true,
+    "target_day_weather_detail": "El benchmark usa meteorología ERA5 del día objetivo; las memorias sí se recalcularon hasta T-1. No equivale a un forecast meteorológico real.",
+    "spatial_check": "Las bandas son cortes descriptivos con artefactos congelados. La validación leave-one-band-out de pipeline_definitivo requeriría reentrenar cinco modelos.",
+    "seed_stability": "No se reentrena: no se puede estimar dispersión por semilla con artefactos únicos.",
+    "horizon_comparison": "T+1/T+2/T+3 se comparan sobre las mismas fechas objetivo del benchmark; la comparación pareada no demuestra por sí sola ventaja de lead time operacional."
+  },
+  "checks": [
+    {
+      "name": "dataset_operational_contract",
+      "status": "ok",
+      "detail": "egif-operational-tminus1-v1; memorias hasta T-1: ['consecutive_dry_days', 'precipitation_sum_14d', 'precipitation_sum_30d', 'precipitation_sum_3d', 'precipitation_sum_7d', 'relative_humidity_mean_14d', 'relative_humidity_mean_7d', 'temperature_mean_7d', 'wind_speed_mean_7d']"
+    },
+    {
+      "name": "population_complete",
+      "status": "ok",
+      "detail": {
+        "rows_seen": 10804365,
+        "rows_evaluated": 10804365,
+        "rows_dropped_incomplete_or_invalid": 0,
+        "expected_rows_from_metadata": 10804365,
+        "unique_days": 365,
+        "first_date": "2023-01-01",
+        "last_date": "2023-12-31",
+        "cells_per_day_min": 29601,
+        "cells_per_day_max": 29601,
+        "unique_cells": 29601,
+        "full_population": true
+      }
+    },
+    {
+      "name": "artifact_contract_and_temporal_split",
+      "status": "ok",
+      "detail": "Contrato EGIF-48, separación temporal y sidecars auditados."
+    },
+    {
+      "name": "target_day_weather_benchmark",
+      "status": "warning",
+      "detail": "Resultado válido como benchmark ERA5; no es forecast meteorológico real."
+    },
+    {
+      "name": "spatial_leave_one_band_out",
+      "status": "not_run",
+      "detail": "No se reentrenaron modelos fuera de alcance de una auditoría de artefactos."
+    },
+    {
+      "name": "seed_stability",
+      "status": "not_run",
+      "detail": "No se reentrenaron réplicas con otras semillas."
+    }
+  ]
+}
