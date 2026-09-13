@@ -18,6 +18,22 @@
 > resto de particiones. La familia 48 se calibra por horizonte con corrección de prior seguida de
 > Platt; la familia histórica de 50 se conserva como rollback/shadow y no se mezclan ambas.
 
+> **Actualización de evaluación operativa — 13 de septiembre de 2026.** La ejecución de
+> producción ya confirma la descarga y el archivado de forecasts MeteoGalicia WRF 1 km con
+> cobertura completa de la rejilla canónica. Esta comprobación acredita la integridad técnica
+> del flujo, pero `fresh` describe únicamente la actualidad y completitud del forecast; no
+> demuestra todavía su precisión meteorológica ni la calibración de la probabilidad de ignición.
+> Las primeras comparaciones pueden presentarse como casos de estudio cuando exista, para una
+> emisión archivada, una observación posterior real de la fecha válida. La evaluación definitiva
+> requiere acumular ejecuciones, conservar sus predicciones y features, y emparejarlas después
+> con observaciones e igniciones EGIF.
+
+> Para facilitar esta fase se ha incorporado `scripts/evaluate_meteogalicia_forecasts.py`, que
+> genera un informe JSON/CSV de casos cerrados y calcula MAE, RMSE, sesgo y acierto de lluvia/no
+> lluvia por horizonte. Esta herramienta evalúa la calidad meteorológica de entrada y no debe
+> confundirse con la validación end-to-end del riesgo: esta última requiere conservar las
+> predicciones de cada `run_id` y esperar las etiquetas EGIF posteriores.
+
 ---
 
 ## ÍNDICE DE LA MEMORIA
@@ -67,6 +83,59 @@
 > La construcción del sistema impone una asimetría de fuentes meteorológicas: el modelo aprende las relaciones de riesgo a partir del reanálisis histórico ERA5-Land, mientras que en producción infiere a partir de la predicción numérica WRF de MeteoGalicia. La API MeteoSIX v5 ofrece una malla WRF de 1 km, que constituye la fuente preferida, y una malla de 4 km como fallback cuando la primera no está disponible o no supera la validación de cobertura. La rejilla de riesgo continúa siendo de 1 km, pero el manifiesto registra la malla meteorológica efectiva y marca `fresh_fallback` cuando se degrada la resolución. La primera versión archiva el forecast bruto y separa el benchmark ERA5 del rendimiento operativo; no aplica Quantile Mapping sin pares históricos forecast-observación. La cuantificación de la brecha de precisión resultante de este cambio de fuente representa uno de los núcleos de investigación de este trabajo.
 
 > Para evitar una fuga temporal adicional, el datacubo retrospectivo y el dataset de entrenamiento operativo se mantienen como productos distintos. El primero conserva las acumulaciones inclusivas para auditoría; el segundo recalcula las memorias meteorológicas con una frontera `target_date - 1 day`, arrastrando el contexto de 30 días entre particiones anuales. La familia operativa de 48 variables y el control alineado de 50 solo se entrenan sobre esta segunda salida. Así, el benchmark `era5_perfect_benchmark` documenta la arquitectura con meteorología histórica conocida, pero no se presenta como una evaluación del error real de MeteoGalicia.
+
+### 3.4.1 Validación progresiva del forecast y del riesgo operativo
+*(Diferencia entre comprobación técnica, caso de estudio y validación estadística completa)*
+
+> La ausencia inicial de un histórico de predicciones WRF no impide validar progresivamente el
+> sistema, pero sí limita el alcance de las conclusiones. La primera capa de validación es
+> técnica: comprueba que la API responde, que el forecast se archiva antes de transformarse,
+> que la emisión y las fechas válidas están alineadas, que existen las variables requeridas,
+> que se cubren las 29.601 celdas y que el manifest conserva la procedencia, la calidad y los
+> checksums. Esta capa ya se ha comprobado en producción con ejecuciones `fresh` de WRF 1 km.
+
+> La segunda capa es una evaluación preliminar o caso de estudio. Para una emisión $D$ se toma el
+> forecast archivado y, una vez transcurrida la fecha válida, se compara con la observación real
+> posterior de MeteoGalicia EMA o de otra fuente observacional identificada. La comparación se
+> realiza por `cell_id`, fecha, variable y horizonte, utilizando exclusivamente filas marcadas
+> como observadas. No deben utilizarse filas `forecast_proxy`, ni reconstruir retrospectivamente
+> la predicción sustituyendo sus features por valores observados. Para el forecast del 13 de
+> septiembre, por ejemplo, la comparación de T+1, T+2 y T+3 solo puede cerrarse cuando estén
+> disponibles las observaciones de los días objetivo correspondientes. Antes de ese momento la
+> ejecución puede auditarse, pero no puede evaluarse su acierto.
+
+> En esta evaluación preliminar se pueden calcular, como mínimo, el error absoluto medio (MAE),
+> la raíz del error cuadrático medio (RMSE) y el sesgo medio para temperatura, humedad, viento y
+> precipitación. En precipitación conviene añadir el acierto de lluvia/no lluvia y el error de
+> los acumulados, porque muchos ceros hacen que una única métrica continua sea insuficiente. Un
+> caso de estudio con una o varias emisiones sirve para mostrar el procedimiento y detectar
+> problemas de alineación o sesgo, pero no permite generalizar el comportamiento del proveedor
+> a toda la temporada.
+
+> La tercera capa es la validación end-to-end del modelo de riesgo. Cada ejecución debe conservar
+> el forecast usado, las features, las predicciones de los tres horizontes y el manifest bajo un
+> identificador de ejecución inmutable. Una vez disponibles las igniciones EGIF posteriores, se
+> compara la salida emitida en $D$ con las igniciones de $D+1$, $D+2$ y $D+3$, respectivamente.
+> Se calculan PR-AUC, Brier score, curvas de fiabilidad, recall dentro del 1\%, 5\% y 10\% de
+> celdas priorizadas y precisión con un presupuesto espacial fijo. Estas métricas permiten
+> comprobar si el ranking es útil para vigilancia y si las probabilidades absolutas mantienen
+> su significado al sustituir ERA5 por WRF.
+
+> La comparación entre el benchmark `era5_perfect_benchmark` y las ejecuciones WRF debe hacerse
+> con el mismo protocolo, población y horizonte. La diferencia no debe interpretarse como un
+> fallo aislado del modelo de riesgo: incorpora el error del proveedor meteorológico, la
+> interpolación a la rejilla, la construcción de las memorias y cualquier cambio de distribución
+> entre el histórico y la operación. Por ello, el error de MeteoGalicia se registra como una
+> métrica de calidad de entrada, mientras que la calibración, la degradación por horizonte y la
+> utilidad preventiva son métricas del sistema completo.
+
+> En la fecha de cierre de esta versión de la memoria, la conclusión válida es que la integración
+> operativa y la trazabilidad están demostradas, mientras que la precisión meteorológica y el
+> rendimiento forecast → riesgo se encuentran en fase de evaluación online. No se presenta el
+> benchmark ERA5 como rendimiento operativo real. Las primeras comparaciones se podrán incluir
+> como casos de estudio documentados; las conclusiones sobre degradación T+1/T+2/T+3 y calibración
+> solo se emitirán cuando exista un número suficiente de emisiones archivadas y observaciones
+> posteriores.
 
 ### 3.5 Gestión del desbalanceo extremo y calibración de probabilidades
 *(Justificación técnica para el entrenamiento en escenarios de baja prevalencia)*
@@ -388,4 +457,3 @@
 > Frente a las alertas meteorológicas continentales tradicionales (como el FWI europeo de EFFIS o AEMET a escala de $10\text{--}25\text{ km}$), que durante una ola de calor declaran en "alerta roja" a tres provincias enteras sin discriminar dónde se ubican los recursos, este pipeline operativo aporta una ventaja decisiva: **resolución hiperlocal a $1\text{ km} \times 1\text{ km}$ con una tasa de falsas alarmas controlada ($FPR \le 5\%$)**.
 >
 > Al evaluar no solo si hace calor o viento, sino la desecación física real de los combustibles finos (mediante el VPD y la lluvia acumulada de la red rural de MeteoGalicia), el tipo de masa forestal (coníferas y eucaliptales de alta combustibilidad frente a frondosas caducifolias) y la orientación de las laderas (solanas precalentadas frente a umbrías húmedas), el sistema entrega a las 06:00 de la mañana un mapa de intervención quirúrgico. Esto permite a los mandos de extinción preposicionar helicópteros y brigadas (BRIF) en el 1% del territorio con verdadero riesgo crítico antes de que se inicie la jornada laboral y las horas de máxima insolación vespertina, transformando la gestión del fuego de una respuesta reactiva a una prevención predictiva auditable.
-

@@ -4,7 +4,7 @@ SHELL := /bin/bash
 
 .PHONY: help deploy deploy-data deploy-runtime deploy-dataset deploy-all deploy-dry-run \
 	build-operational-dataset train-egif-comparable train-egif-expanded train-egif-50-control \
-	evaluate-model-families promote-egif-48
+	evaluate-model-families evaluate-meteogalicia-forecasts promote-egif-48
 
 PYTHON ?= python
 PYTHONPATH_ENV := PYTHONPATH=.
@@ -24,6 +24,7 @@ help:
 	  '  make train-egif-expanded        Entrenar familia 48 ampliada' \
 	  '  make train-egif-50-control      Entrenar control alineado de 50' \
 	  '  make evaluate-model-families    Comparar familias y FWI' \
+	  '  make evaluate-meteogalicia-forecasts  Evaluar forecast frente a observaciones' \
 	  '' \
 	  'Configuración: copiar deploy/deploy.env.example a deploy/deploy.env.'
 
@@ -78,6 +79,12 @@ evaluate-model-families:
 	$(PYTHONPATH_ENV) $(PYTHON) scripts/evaluate_model_families.py \
 	  --models-root data/models --dataset-dir $(OPERATIONAL_DATASET) \
 	  --legacy-dataset-dir data/processed/tabular/egif --test-years 2023
+
+evaluate-meteogalicia-forecasts:
+	$(PYTHONPATH_ENV) $(PYTHON) scripts/evaluate_meteogalicia_forecasts.py \
+	  --forecast-dir data/raw/meteogalicia \
+	  --state data/processed/state/weather_daily_state.parquet \
+	  --output-dir data/processed/evaluation/meteogalicia
 
 promote-egif-48:
 	$(PYTHONPATH_ENV) $(PYTHON) scripts/promote_model_family.py \

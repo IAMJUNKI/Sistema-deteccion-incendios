@@ -219,6 +219,60 @@ cells=29601
 Si el resultado es `stale`, `degraded` o `unavailable`, no debe presentarse
 como una ejecución normal. El dashboard debe mostrar la advertencia asociada.
 
+### 6. Evaluar el forecast frente a observaciones posteriores
+
+Los Parquet horarios conservados en `data/raw/meteogalicia/` permiten construir
+una evaluación progresiva sin modificar la inferencia ni el estado meteorológico.
+El script `scripts/evaluate_meteogalicia_forecasts.py` agrega cada forecast con
+la misma ventana diaria que usa producción y lo empareja, por `cell_id`, con el
+estado observado cuando ya se ha cerrado la fecha objetivo.
+
+En el servidor se ejecuta así:
+
+```bash
+sudo -u fire-risk bash -lc '
+set -Eeuo pipefail
+cd /srv/fire-risk/app
+PYTHONPATH=/srv/fire-risk \
+/opt/miniconda3/envs/incendios-forestales/bin/python \
+scripts/evaluate_meteogalicia_forecasts.py \
+  --forecast-dir /srv/fire-risk/data/raw/meteogalicia \
+  --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet \
+  --output-dir /srv/fire-risk/data/processed/evaluation/meteogalicia
+'
+```
+
+El informe se guarda en:
+
+```text
+/srv/fire-risk/data/processed/evaluation/meteogalicia/
+├── meteogalicia_forecast_metrics.json
+└── meteogalicia_forecast_metrics.csv
+```
+
+Para inspeccionarlo:
+
+```bash
+sudo jq '{forecast_files_found, comparison_cases, observation_date_range,
+  issue_date_sources, metrics, skipped}' \
+  /srv/fire-risk/data/processed/evaluation/meteogalicia/meteogalicia_forecast_metrics.json
+```
+
+El informe calcula MAE, RMSE y sesgo para `tmax_vc`, `rhmin_vc`, `vmax_vc`
+y `prec_dia`, además del acierto de lluvia/no lluvia con umbral de 1 mm,
+separando T+1, T+2 y T+3. Excluye filas `forecast_proxy` y no usa datos
+posteriores a la fecha de emisión para reconstruir el forecast.
+
+`comparison_cases=0` no significa que el proveedor haya fallado: indica que
+todavía no existe una observación posterior para cerrar ninguna de las fechas
+objetivo. Una o varias comparaciones sirven como caso de estudio preliminar;
+no deben presentarse como validación estadística de toda la temporada.
+
+Este comando evalúa la calidad de la entrada meteorológica. No calcula todavía
+PR-AUC, Brier score ni calibración del modelo de riesgo. Para esas métricas hay
+que conservar cada predicción bajo su `run_id` y esperar las etiquetas EGIF de
+las fechas objetivo.
+
 ## Fallos y recuperación
 
 ### MeteoGalicia no responde
@@ -275,7 +329,9 @@ Queda automatizado:
 
 No queda resuelto por esta automatización:
 
-- un histórico de forecasts MeteoGalicia para medir el error real por horizonte;
+- una serie temporal suficientemente larga de forecasts MeteoGalicia para
+  generalizar el error real por horizonte (el evaluador anterior permite
+  empezar a archivarla y analizar casos cerrados);
 - la corrección estadística forecast-observación;
 - alertas externas por correo, Slack o PagerDuty;
 - copias de seguridad fuera del servidor;
