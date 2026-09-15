@@ -102,6 +102,7 @@ completo sin serlo.
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import pickle
 import sys
@@ -111,22 +112,31 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
+# PowerShell puede redirigir stdout con la página de códigos cp1252. El pipeline
+# imprime nombres y separadores Unicode, por lo que se fuerza UTF-8 tanto en la
+# terminal como en logs para que el entrenamiento no falle antes de empezar.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 from sklearn.metrics import roc_auc_score  # noqa: E402
 
 from src.entrenamiento import (  # noqa: E402
     calibracion,
-    contrato as mod_contrato,
     datos,
     dias_secos,
     metricas,
     modelos,
     seleccion,
 )
+from src.entrenamiento import contrato as mod_contrato  # noqa: E402
 from src.entrenamiento.platt import CalibradorPlatt  # noqa: E402
 
 DIR_MODELOS = RAIZ / "data" / "models"
@@ -177,6 +187,10 @@ class Configuracion:
     # combinaciones y midió que N=100 da un recall indistinguible de N=25 entrenando cuatro
     # veces más rápido; se adopta esa medición.
     modulo_muestreo: int = 100
+    # La puntuación conserva el año completo, pero se recorre en lotes pequeños para que
+    # LightGBM no multiplique la memoria temporal al predecir sobre cientos de miles de filas.
+    # No modifica las filas ni las probabilidades: solo limita el máximo de memoria en uso.
+    filas_puntuacion: int = 100_000
     semilla: int = 42
     semillas_estabilidad: tuple[int, ...] = (42, 7, 123, 2024, 31)
     fpr_objetivo: float = 0.05         # presupuesto: 5 % del territorio en alerta
@@ -243,6 +257,17 @@ class Contexto:
     def clave_diario(self) -> str:
         return f"recall_at_top{self.cfg.top_k_diario:.0%}_daily"
 
+    @staticmethod
+    def liberar_memoria() -> None:
+        """Devuelve a Arrow los buffers ya usados antes de una fase masiva posterior."""
+        gc.collect()
+        try:
+            pa.default_memory_pool().release_unused()
+        except AttributeError:
+            # Algunas compilaciones de Arrow no exponen esta operación; el recolector de
+            # Python sigue siendo suficiente y no debe impedir el entrenamiento.
+            pass
+
     def preparar_datos(self) -> None:
         """Muestrea entrenamiento y parada una sola vez para toda la ejecución."""
         if self.train is not None:
@@ -264,6 +289,7 @@ class Contexto:
 
         self.train, info = self._muestrear(cfg.años_entrenamiento)
         self.parada, _ = self._muestrear([cfg.año_calibracion])
+        self.liberar_memoria()
         self.tasa_negativos = float(info["tasa_negativos"])
         print(f"  entrenamiento: {len(self.train):,} filas · "
               f"{int(self.train.target_ignicion.sum())} igniciones")
@@ -306,27 +332,69 @@ class Contexto:
         )
         return modelo, mejor
 
-    def puntuar(self, modelo, año: int, variables: list[str]) -> pd.DataFrame:
-        """Recorre la población completa de un año y devuelve verdad, puntuación y fecha.
+    def puntuar(
+        self,
+        modelo,
+        año: int,
+        variables: list[str],
+        *,
+        incluir_fecha: bool = True,
+        incluir_cell_id: bool = True,
+    ) -> pd.DataFrame:
+        """Recorre la población completa de un año y devuelve verdad y puntuación.
 
         Se evalúa sin submuestrear: la prevalencia real es la que da sentido a las métricas. El
-        recorrido va por lotes para que la memoria no dependa del tamaño del año, y al terminar
+        `fecha` y `cell_id` se conservan solo en las etapas que los necesitan. El recorrido va
+        por lotes para que la memoria no dependa del tamaño del año, y al terminar
         se comprueba que se cubrió el año entero. Una ejecución que pierda celdas en silencio
         produce métricas *mejores* que las reales, que es el peor fallo posible en un TFM.
         """
-        trozos, filas = [], 0
-        for lote in datos.iter_evaluacion(self.contrato, [año], predictores=None):
-            filas += len(lote)
+        total_esperado = self.contrato.filas([año])
+        fechas = celdas = objetivo = puntuaciones = None
+        filas = 0
+        siguiente_aviso = 1_000_000
+        for lote in datos.iter_evaluacion(
+            self.contrato,
+            [año],
+            predictores=variables,
+            filas_por_lote=self.cfg.filas_puntuacion,
+        ):
+            n_lote = len(lote)
+            fin = filas + n_lote
+            if objetivo is None:
+                # Preasignar evita que `pd.concat` duplique al final los ~11 millones de
+                # filas del año y agote la memoria. Los arrays conservan exactamente las
+                # columnas necesarias para la etapa actual que antes se acumulaban en
+                # `trozos`.
+                if incluir_fecha:
+                    fechas = np.empty(total_esperado, dtype=lote["fecha"].to_numpy().dtype)
+                if incluir_cell_id:
+                    celdas = np.empty(total_esperado, dtype=lote["cell_id"].to_numpy().dtype)
+                objetivo = np.empty(total_esperado, dtype=lote["target_ignicion"].to_numpy().dtype)
+                puntuaciones = np.empty(total_esperado, dtype="float32")
             lote = self.rachas(lote, [año])
-            trozos.append(pd.DataFrame({
-                "fecha": lote["fecha"].to_numpy(),
-                "cell_id": lote["cell_id"].to_numpy(),
-                "y": lote["target_ignicion"].to_numpy(),
-                "score": modelo.predict_proba(lote[variables])[:, 1].astype("float32"),
-            }))
+            if fechas is not None:
+                fechas[filas:fin] = lote["fecha"].to_numpy()
+            if celdas is not None:
+                celdas[filas:fin] = lote["cell_id"].to_numpy()
+            objetivo[filas:fin] = lote["target_ignicion"].to_numpy()
+            puntuaciones[filas:fin] = modelo.predict_proba(lote[variables])[:, 1]
+            filas = fin
             del lote
+            if filas >= siguiente_aviso:
+                self.liberar_memoria()
+                print(f"    puntuación {año}: {filas:,}/{total_esperado:,} filas")
+                siguiente_aviso += 1_000_000
         datos.verificar_cobertura(self.contrato, [año], filas)
-        return pd.concat(trozos, ignore_index=True)
+        self.liberar_memoria()
+        if objetivo is None or puntuaciones is None:
+            raise RuntimeError(f"No se encontraron filas al puntuar el año {año}.")
+        resultado = {"y": objetivo, "score": puntuaciones}
+        if fechas is not None:
+            resultado["fecha"] = fechas
+        if celdas is not None:
+            resultado["cell_id"] = celdas
+        return pd.DataFrame(resultado)
 
     def metricas_de(self, marco: pd.DataFrame, prob=None) -> dict:
         """Cuadro completo sobre un año ya puntuado, con los añadidos del proyecto."""
@@ -1168,12 +1236,34 @@ def ejecutar(cfg: Configuracion, etapas: list[str], rehacer: bool, ruta_fwi: Pat
         print(f"El año {cfg.año_reservado} no se ha abierto en ningún momento.")
 
 
+def configurar_desde_argumentos(args: argparse.Namespace) -> Configuracion:
+    """Construye y valida el protocolo temporal declarado en la línea de comandos."""
+    cfg = Configuracion()
+    if args.train_years:
+        cfg.años_entrenamiento = tuple(args.train_years)
+
+    years = (*cfg.años_entrenamiento, cfg.año_calibracion, cfg.año_validacion, cfg.año_reservado)
+    if len(set(years)) != len(years):
+        raise SystemExit("Los años de entrenamiento, calibración, validación y test deben ser distintos.")
+    if not cfg.años_entrenamiento or max(cfg.años_entrenamiento) >= cfg.año_calibracion:
+        raise SystemExit("Todos los años de entrenamiento deben ser anteriores al año de calibración.")
+    if not (cfg.año_calibracion < cfg.año_validacion < cfg.año_reservado):
+        raise SystemExit("Se requiere calibración < validación < test ciego.")
+    return cfg
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--etapas", default="all",
                    help=f"lista separada por comas. Disponibles: {', '.join(ETAPAS)}")
     p.add_argument("--rehacer", action="store_true",
                    help="recalcula las etapas cuyo resultado ya esté en disco")
+    p.add_argument(
+        "--train-years",
+        nargs="+",
+        type=int,
+        help="años completos de entrenamiento; por defecto: 2016 2017 2018 2019 2020",
+    )
     p.add_argument("--fwi-ruta", type=Path, default=RUTA_FWI,
                    help=f"carpeta donde vive fwi.py (por defecto {RUTA_FWI})")
     p.add_argument("--abrir-test-ciego", action="store_true",
@@ -1198,7 +1288,7 @@ def main() -> None:
             "  python scripts/pipeline_definitivo.py --abrir-test-ciego"
         )
 
-    ejecutar(Configuracion(), etapas, args.rehacer, args.fwi_ruta)
+    ejecutar(configurar_desde_argumentos(args), etapas, args.rehacer, args.fwi_ruta)
 
 
 if __name__ == "__main__":

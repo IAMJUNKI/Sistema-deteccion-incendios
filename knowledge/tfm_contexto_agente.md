@@ -162,14 +162,14 @@ Sistema-deteccion-incendios/
 ├── tests/
 ├── docs/             ← documentación técnica y decisiones
 ├── knowledge/        ← este documento y otros de alcance
-└── .agents/skills/   ← skills de Gemini (6 skills activos)
+└── .agents/skills/   ← guías internas de trabajo
 ```
 
 ---
 
-## Skills de Gemini activos en este proyecto
+## Guías de trabajo disponibles en este proyecto
 
-Los siguientes skills se activan automáticamente cuando son relevantes:
+Las siguientes guías documentan las convenciones y procedimientos del proyecto:
 
 - **`project-conventions`** — Git Flow, commits, CRS, nomenclatura, anti-leakage
 - **`geospatial-processing`** — rejilla, DEM, CORINE, GeoPandas, rasterio
