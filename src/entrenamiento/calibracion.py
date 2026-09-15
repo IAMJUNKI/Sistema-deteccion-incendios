@@ -23,10 +23,8 @@ probabilidades que ya están en la escala correcta.
 """
 
 import logging
-from typing import Optional
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression
 from sklearn.isotonic import IsotonicRegression
 
 logger = logging.getLogger(__name__)
@@ -93,7 +91,7 @@ class ProbabilityCalibrator:
         """
         self.neg_sampling_rate = neg_sampling_rate
         self.max_fit_points = max_fit_points
-        self.isotonic: Optional[IsotonicRegression] = None
+        self.isotonic: IsotonicRegression | None = None
 
     def fit(self, y_val: np.ndarray, p_val: np.ndarray, seed: int = 42) -> "ProbabilityCalibrator":
         """Ajusta la isotónica sobre el conjunto de validación.
@@ -124,7 +122,8 @@ class ProbabilityCalibrator:
                 [np.ones(len(idx_pos)), np.full(len(elegidos), len(idx_neg) / len(elegidos))]
             )
             logger.info(
-                "  isotónica ajustada sobre %s filas (todos los positivos + %s negativos ponderados)",
+                "  isotónica ajustada sobre %s filas "
+                "(todos los positivos + %s negativos ponderados)",
                 f"{len(idx):,}",
                 f"{len(elegidos):,}",
             )
@@ -166,7 +165,8 @@ class PlattProbabilityCalibrator:
     def __init__(self, neg_sampling_rate: float, max_fit_points: int = 2_000_000):
         self.neg_sampling_rate = float(neg_sampling_rate)
         self.max_fit_points = int(max_fit_points)
-        self.platt: LogisticRegression | None = None
+        self.intercepto: float | None = None
+        self.pendiente: float | None = None
 
     @staticmethod
     def _logit(values: np.ndarray) -> np.ndarray:
@@ -189,7 +189,8 @@ class PlattProbabilityCalibrator:
         positives = np.flatnonzero(y == 1)
         negatives = np.flatnonzero(y == 0)
         if len(positives) == 0 or len(negatives) == 0:
-            self.platt = None
+            self.intercepto = None
+            self.pendiente = None
             return self
 
         if len(y) > self.max_fit_points:
@@ -199,29 +200,59 @@ class PlattProbabilityCalibrator:
             selected_negatives = rng.choice(negatives, size=negative_count, replace=False)
             indices = np.concatenate([positives, selected_negatives])
             weights = np.concatenate(
-                [np.ones(len(positives)), np.full(len(selected_negatives), len(negatives) / negative_count)]
+                [
+                    np.ones(len(positives)),
+                    np.full(len(selected_negatives), len(negatives) / negative_count),
+                ]
             )
         else:
             indices = np.arange(len(y))
             weights = np.ones(len(y))
 
-        self.platt = LogisticRegression(
-            solver="lbfgs",
-            random_state=seed,
-            max_iter=200,
-        )
-        self.platt.fit(self._logit(p[indices]).reshape(-1, 1), y[indices], sample_weight=weights)
+        # Es una logística de un único predictor. Resolverla directamente evita el fallo nativo
+        # de L-BFGS/Scipy observado en Windows y conserva el máximo de verosimilitud ponderado.
+        x = self._logit(p[indices])
+        y_fit = y[indices].astype("float64")
+        media = float(np.average(y_fit, weights=weights))
+        media = float(np.clip(media, 1e-9, 1 - 1e-9))
+        intercepto = float(np.log(media / (1.0 - media)))
+        pendiente = 1.0
+        for _ in range(100):
+            prediccion = self._sigmoid(intercepto + pendiente * x)
+            curvatura = weights * prediccion * (1.0 - prediccion)
+            gradiente = np.array([
+                np.sum(weights * (y_fit - prediccion)),
+                np.sum(weights * (y_fit - prediccion) * x),
+            ])
+            h00 = float(np.sum(curvatura) + 1e-10)
+            h01 = float(np.sum(curvatura * x))
+            h11 = float(np.sum(curvatura * x * x) + 1e-10)
+            determinante = h00 * h11 - h01 * h01
+            if determinante <= 1e-20:
+                break
+            paso_intercepto = (h11 * gradiente[0] - h01 * gradiente[1]) / determinante
+            paso_pendiente = (h00 * gradiente[1] - h01 * gradiente[0]) / determinante
+            intercepto += float(paso_intercepto)
+            pendiente += float(paso_pendiente)
+            if max(abs(paso_intercepto), abs(paso_pendiente)) < 1e-8:
+                break
+
+        self.intercepto = intercepto
+        self.pendiente = pendiente
         return self
 
     def transform(self, y_prob: np.ndarray) -> np.ndarray:
         p = prior_correction(y_prob, self.neg_sampling_rate)
-        if self.platt is None:
+        if self.intercepto is None or self.pendiente is None:
             return p
-        return self.platt.predict_proba(self._logit(p).reshape(-1, 1))[:, 1]
+        return self._sigmoid(self.intercepto + self.pendiente * self._logit(p))
 
     def __repr__(self) -> str:
-        state = "ajustado" if self.platt is not None else "solo corrección de prior"
-        return f"PlattProbabilityCalibrator(neg_sampling_rate={self.neg_sampling_rate:.6f}, {state})"
+        state = "ajustado" if self.intercepto is not None else "solo corrección de prior"
+        return (
+            "PlattProbabilityCalibrator("
+            f"neg_sampling_rate={self.neg_sampling_rate:.6f}, {state})"
+        )
 
 
 def risk_levels(

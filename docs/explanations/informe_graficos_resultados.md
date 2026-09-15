@@ -172,16 +172,13 @@ scripts/plot_model_family_horizons.py
 Regenerar la importancia de variables:
 
 ```bash
-MPLCONFIGDIR=/tmp/fire-risk-mpl \
-/opt/anaconda3/envs/incendios-forestales/bin/python \
-scripts/plot_egif48_feature_importance.py
+python scripts/plot_egif48_feature_importance.py
 ```
 
 Generar el PDF ilustrado:
 
 ```bash
-/Users/junki/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 \
-scripts/build_figure_report_pdf.py
+python scripts/build_figure_report_pdf.py
 ```
 
 El resultado queda en `output/pdf/informe_graficos_resultados.pdf`.

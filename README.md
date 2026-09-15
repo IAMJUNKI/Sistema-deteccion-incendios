@@ -170,7 +170,7 @@ Sistema-deteccion-incendios/
 │   ├── fases_proyecto_plan_ataque.md
 │   └── justificacion_mvp_comunidad_autonoma.md
 │
-├── 📂 .agents/skills/               # Skills de Gemini para el proyecto
+├── 📂 .agents/skills/               # Guías internas de trabajo
 │   ├── project-conventions/
 │   ├── geospatial-processing/
 │   ├── data-ingestion/

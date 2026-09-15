@@ -29,6 +29,7 @@
     "logistic_regression"
   ],
   "modulo_muestreo": 100,
+  "filas_puntuacion": 100000,
   "semilla": 42,
   "semillas_estabilidad": [
     42,

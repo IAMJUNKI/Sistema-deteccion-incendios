@@ -26,7 +26,6 @@ y después de calibrar, y ranking y probabilidad calibrada pasan a ser la misma 
 from __future__ import annotations
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression
 
 from src.entrenamiento import calibracion
 
@@ -48,25 +47,78 @@ class CalibradorPlatt:
             guardó uno de cada cien).
     """
 
-    def __init__(self, tasa_negativos: float):
+    def __init__(self, tasa_negativos: float, max_puntos_ajuste: int = 1_000_000):
         self.tasa_negativos = float(tasa_negativos)
-        self.logistica: LogisticRegression | None = None
+        self.max_puntos_ajuste = max_puntos_ajuste
+        self.intercepto: float | None = None
+        self.pendiente: float | None = None
 
     @staticmethod
     def _logit(p: np.ndarray) -> np.ndarray:
         p = np.clip(p, 1e-9, 1 - 1e-9)
         return np.log(p / (1 - p))
 
-    def ajustar(self, prob_cruda: np.ndarray, y: np.ndarray) -> "CalibradorPlatt":
-        """Ajusta el calibrador sobre un año no visto."""
-        corregida = calibracion.prior_correction(prob_cruda, self.tasa_negativos)
-        self.logistica = LogisticRegression(C=1e6, solver="lbfgs", max_iter=1000)
-        self.logistica.fit(self._logit(corregida).reshape(-1, 1), y)
+    def ajustar(self, prob_cruda: np.ndarray, y: np.ndarray, semilla: int = 42) -> CalibradorPlatt:
+        """Ajusta Platt sin materializar innecesariamente todo el año de calibración.
+
+        Conserva todas las igniciones y submuestrea únicamente negativos, compensando su
+        selección con pesos. La logística de un predictor se resuelve con Newton-Raphson para
+        evitar el fallo nativo observado con L-BFGS en este entorno de Windows.
+        """
+        prob_cruda = np.asarray(prob_cruda)
+        y = np.asarray(y)
+        idx = np.arange(len(y))
+        pesos = None
+        if len(y) > self.max_puntos_ajuste:
+            positivos = np.flatnonzero(y == 1)
+            negativos = np.flatnonzero(y == 0)
+            conservar_negativos = max(1, self.max_puntos_ajuste - len(positivos))
+            conservar_negativos = min(conservar_negativos, len(negativos))
+            seleccion = np.random.default_rng(semilla).choice(
+                negativos, size=conservar_negativos, replace=False
+            )
+            idx = np.concatenate([positivos, seleccion])
+            pesos = np.ones(len(idx), dtype="float64")
+            pesos[len(positivos):] = len(negativos) / conservar_negativos
+
+        x = self._logit(calibracion.prior_correction(prob_cruda[idx], self.tasa_negativos))
+        y_ajuste = y[idx].astype("float64")
+        if pesos is None:
+            pesos = np.ones(len(idx), dtype="float64")
+
+        media = float(np.average(y_ajuste, weights=pesos))
+        media = float(np.clip(media, 1e-9, 1 - 1e-9))
+        intercepto = float(np.log(media / (1 - media)))
+        pendiente = 1.0
+        for _ in range(100):
+            z = np.clip(intercepto + pendiente * x, -30.0, 30.0)
+            probabilidad = 1.0 / (1.0 + np.exp(-z))
+            curvatura = pesos * probabilidad * (1.0 - probabilidad)
+            gradiente = np.array([
+                np.sum(pesos * (y_ajuste - probabilidad)),
+                np.sum(pesos * (y_ajuste - probabilidad) * x),
+            ])
+            h00 = float(np.sum(curvatura) + 1e-10)
+            h01 = float(np.sum(curvatura * x))
+            h11 = float(np.sum(curvatura * x * x) + 1e-10)
+            determinante = h00 * h11 - h01 * h01
+            if determinante <= 1e-20:
+                break
+            paso_intercepto = (h11 * gradiente[0] - h01 * gradiente[1]) / determinante
+            paso_pendiente = (h00 * gradiente[1] - h01 * gradiente[0]) / determinante
+            intercepto += float(paso_intercepto)
+            pendiente += float(paso_pendiente)
+            if max(abs(paso_intercepto), abs(paso_pendiente)) < 1e-8:
+                break
+
+        self.intercepto = intercepto
+        self.pendiente = pendiente
         return self
 
     def aplicar(self, prob_cruda: np.ndarray) -> np.ndarray:
         """Convierte la puntuación cruda del modelo en probabilidad calibrada."""
         corregida = calibracion.prior_correction(prob_cruda, self.tasa_negativos)
-        if self.logistica is None:
+        if self.intercepto is None or self.pendiente is None:
             return corregida
-        return self.logistica.predict_proba(self._logit(corregida).reshape(-1, 1))[:, 1]
+        z = np.clip(self.intercepto + self.pendiente * self._logit(corregida), -30.0, 30.0)
+        return 1.0 / (1.0 + np.exp(-z))
