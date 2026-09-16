@@ -92,8 +92,9 @@ def main() -> None:
     # ``st.tabs`` solo organiza visualmente el contenido: Streamlit ejecuta el
     # cuerpo de las seis pestañas en cada sesión y en cada rerun. Eso fuerza a
     # construir el mapa, las tablas, TreeSHAP y el simulador aunque el usuario
-    # solo necesite la vista inicial. Un selector horizontal conserva la
-    # navegación compacta y permite renderizar únicamente la sección activa.
+    # solo necesite la vista inicial. ``st.segmented_control`` conserva una
+    # navegación visual de pestañas y permite renderizar únicamente la sección
+    # activa. Se mantiene el fallback para instalaciones antiguas de Streamlit.
     sections = [
         "Centro de Mando Cartográfico",
         "Consulta por Concello",
@@ -102,12 +103,22 @@ def main() -> None:
         "Medidas y Despacho (PLADIGA)",
         "Auditoría del Sistema",
     ]
-    active_section = st.radio(
-        "Sección del dashboard",
-        sections,
-        horizontal=True,
-        label_visibility="collapsed",
-    )
+    if hasattr(st, "segmented_control"):
+        active_section = st.segmented_control(
+            "Sección del dashboard",
+            sections,
+            selection_mode="single",
+            default=sections[0],
+            label_visibility="collapsed",
+            width="stretch",
+        )
+    else:
+        active_section = st.radio(
+            "Sección del dashboard",
+            sections,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
 
     if active_section == sections[0]:
         render_map_tab(
