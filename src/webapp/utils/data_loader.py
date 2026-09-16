@@ -13,7 +13,10 @@ import pandas as pd
 import streamlit as st
 
 from src.models.forecast_risk_model import load_horizon_model
-from src.webapp.utils.geo_helpers import assign_approx_province, assign_comarca_or_distrito
+from src.webapp.utils.geo_helpers import (
+    DISTRITOS_PLADIGA_CENTROIDES,
+    is_wgs84_crs,
+)
 
 DEFAULT_CANONICAL_GRID_PATH = "data/processed/grid/galicia_grid_1km_egif.parquet"
 DEFAULT_PREDICTIONS_OUTPUT_PATH = "data/processed/predicciones_operativas.parquet"
@@ -63,6 +66,63 @@ def _cache_is_fresh(cache_path: Path, source_path: Path) -> bool:
         )
     except OSError:
         return False
+
+
+def _assign_provinces_by_coordinates(
+    latitudes: pd.Series,
+    longitudes: pd.Series,
+) -> np.ndarray:
+    """Replica el fallback territorial por coordenadas sin recorrer fila a fila."""
+    lat = pd.to_numeric(latitudes, errors="coerce").to_numpy(dtype=float)
+    lon = pd.to_numeric(longitudes, errors="coerce").to_numpy(dtype=float)
+    values = np.full(len(lat), "Ourense", dtype=object)
+    valid = np.isfinite(lat) & np.isfinite(lon)
+
+    south = valid & (lat < 42.45)
+    values[south & (lon > -8.15)] = "Ourense"
+    values[south & (lon <= -8.15)] = "Pontevedra"
+
+    north = valid & ~south
+    values[north] = "A Coruña"
+    values[north & (lon > -7.95)] = "Lugo"
+    pontevedra = (
+        north
+        & (lon <= -7.95)
+        & (lat < 42.75)
+        & (lon < -8.0)
+        & (lon > -8.5)
+    )
+    values[pontevedra] = "Pontevedra"
+    return values
+
+
+def _assign_districts_by_coordinates(
+    latitudes: pd.Series,
+    longitudes: pd.Series,
+) -> np.ndarray:
+    """Asigna el distrito PLADIGA más cercano de forma vectorizada."""
+    lat = pd.to_numeric(latitudes, errors="coerce").to_numpy(dtype=float)
+    lon = pd.to_numeric(longitudes, errors="coerce").to_numpy(dtype=float)
+    values = np.full(
+        len(lat),
+        "Distrito XII — Miño - Arnoia",
+        dtype=object,
+    )
+    valid = np.isfinite(lat) & np.isfinite(lon)
+    if not valid.any():
+        return values
+
+    names = np.asarray(tuple(DISTRITOS_PLADIGA_CENTROIDES), dtype=object)
+    references = np.asarray(
+        tuple(DISTRITOS_PLADIGA_CENTROIDES.values()),
+        dtype=float,
+    )
+    cos_lat = np.cos(np.deg2rad(42.6))
+    delta_lat = lat[valid, None] - references[None, :, 0]
+    delta_lon = (lon[valid, None] - references[None, :, 1]) * cos_lat
+    nearest = np.argmin(delta_lat**2 + delta_lon**2, axis=1)
+    values[valid] = names[nearest]
+    return values
 
 
 @st.cache_data(ttl=300)
@@ -174,7 +234,7 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
         elif grid_path.exists():
             try:
                 gdf_tmp = gpd.read_parquet(grid_path)
-                if gdf_tmp.crs is not None and str(gdf_tmp.crs) != "EPSG:4326":
+                if gdf_tmp.crs is not None and not is_wgs84_crs(gdf_tmp.crs):
                     gdf_tmp = gdf_tmp.to_crs("EPSG:4326")
                 if "lat_centroid" not in gdf_tmp.columns and "geometry" in gdf_tmp.columns:
                     gdf_tmp["lat_centroid"] = gdf_tmp.geometry.centroid.y
@@ -235,22 +295,32 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
         # Fallback exacto con polígonos oficiales de Galicia
         if "provincia" not in df.columns or df["provincia"].isna().any():
-            missing_mask = df["provincia"].isna() if "provincia" in df.columns else pd.Series([True] * len(df))
+            missing_mask = (
+                df["provincia"].isna()
+                if "provincia" in df.columns
+                else pd.Series(True, index=df.index)
+            )
             if "lat_centroid" in df.columns and "lon_centroid" in df.columns:
-                df.loc[missing_mask, "provincia"] = [
-                    assign_approx_province(lat, lon) if pd.notna(lat) and pd.notna(lon) else "Ourense"
-                    for lat, lon in zip(df.loc[missing_mask, "lat_centroid"], df.loc[missing_mask, "lon_centroid"])
-                ]
+                missing_rows = df.loc[missing_mask]
+                df.loc[missing_mask, "provincia"] = _assign_provinces_by_coordinates(
+                    missing_rows["lat_centroid"],
+                    missing_rows["lon_centroid"],
+                )
             else:
                 df["provincia"] = "Ourense"
 
         if "distrito_forestal" not in df.columns or df["distrito_forestal"].isna().any():
-            missing_mask = df["distrito_forestal"].isna() if "distrito_forestal" in df.columns else pd.Series([True] * len(df))
+            missing_mask = (
+                df["distrito_forestal"].isna()
+                if "distrito_forestal" in df.columns
+                else pd.Series(True, index=df.index)
+            )
             if "lat_centroid" in df.columns and "lon_centroid" in df.columns:
-                df.loc[missing_mask, "distrito_forestal"] = [
-                    assign_comarca_or_distrito(lat, lon) if pd.notna(lat) and pd.notna(lon) else "Distrito XII — Miño - Arnoia"
-                    for lat, lon in zip(df.loc[missing_mask, "lat_centroid"], df.loc[missing_mask, "lon_centroid"])
-                ]
+                missing_rows = df.loc[missing_mask]
+                df.loc[missing_mask, "distrito_forestal"] = _assign_districts_by_coordinates(
+                    missing_rows["lat_centroid"],
+                    missing_rows["lon_centroid"],
+                )
             else:
                 df["distrito_forestal"] = "Distrito XII — Miño - Arnoia"
 
@@ -426,7 +496,7 @@ def load_grid_geometries() -> pd.DataFrame:
 
     try:
         grid = gpd.read_parquet(grid_path)
-        if grid.crs is not None and str(grid.crs) != "EPSG:4326":
+        if grid.crs is not None and not is_wgs84_crs(grid.crs):
             grid = grid.to_crs("EPSG:4326")
 
         # Asegurar lat_centroid y lon_centroid si faltan

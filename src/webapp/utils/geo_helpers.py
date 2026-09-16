@@ -16,6 +16,16 @@ from shapely.ops import unary_union
 # Directorio de recursos vectoriales integrados en el paquete webapp
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
+
+def is_wgs84_crs(crs: object) -> bool:
+    """Indica si un CRS representa WGS84 sin depender de su representación textual."""
+    if crs is None:
+        return False
+    try:
+        return crs.to_epsg() == 4326
+    except Exception:
+        return str(crs) == "EPSG:4326"
+
 # Presets de navegación territorial en Galicia
 ZOOM_PRESETS = {
     "Galicia Completa": {
@@ -171,7 +181,7 @@ def load_galicia_focus_layers() -> tuple[dict | None, dict | None]:
         return None, None
     try:
         gdf = gpd.read_file(boundary_path)
-        if gdf.crs is not None and str(gdf.crs) != "EPSG:4326":
+        if gdf.crs is not None and not is_wgs84_crs(gdf.crs):
             gdf = gdf.to_crs("EPSG:4326")
         if hasattr(gdf.geometry, "union_all"):
             galicia_geom = gdf.geometry.union_all()
