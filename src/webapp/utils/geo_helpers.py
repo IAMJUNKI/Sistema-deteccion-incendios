@@ -22,7 +22,10 @@ def is_wgs84_crs(crs: object) -> bool:
     if crs is None:
         return False
     try:
-        return crs.to_epsg() == 4326
+        # ``to_epsg()`` puede consultar la base de datos PROJ. En instalaciones
+        # mínimas del servidor esa base no está disponible, aunque el CRS
+        # almacenado en el Parquet sea inequívocamente WGS84.
+        return crs.to_string().upper() in {"EPSG:4326", "OGC:CRS84"}
     except Exception:
         return str(crs) == "EPSG:4326"
 
