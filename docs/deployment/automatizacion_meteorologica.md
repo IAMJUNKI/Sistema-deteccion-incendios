@@ -25,7 +25,7 @@ cada 6 horas
 
 05:15 y 10:15
     └─ refresco MeteoGalicia D-1 (guardia) → forecast WRF → features →
-       modelos T+1/T+2/T+3 → predicciones + manifest
+       modelos T+1/T+2/T+3 → predicciones + manifest → caché del dashboard
 
 06:00
     └─ climatología diaria AEMET publicada con retraso → reconciliación histórica

@@ -11,6 +11,10 @@ WorkingDirectory=/srv/fire-risk/app
 EnvironmentFile=/srv/fire-risk/config/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/srv/fire-risk/app
+# Materializa el artefacto enriquecido antes de aceptar usuarios. Si todavía
+# no existe una inferencia publicada, el dashboard arranca y muestra su estado
+# de datos no disponible; no bloqueamos el servicio por ese motivo.
+ExecStartPre=-/opt/miniconda3/envs/incendios-forestales/bin/python scripts/prepare_dashboard_cache.py
 ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/streamlit run app.py --server.address=127.0.0.1 --server.port=8501 --server.headless=true --server.enableXsrfProtection=true
 Restart=always
 RestartSec=5

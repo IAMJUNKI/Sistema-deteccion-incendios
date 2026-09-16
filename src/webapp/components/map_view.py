@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import textwrap
+from collections import OrderedDict
+from copy import deepcopy
 
 import pandas as pd
 import streamlit as st
@@ -24,6 +26,14 @@ from src.webapp.utils.geo_helpers import (
     load_galicia_focus_layers,
     load_galicia_sectors_geojson,
 )
+
+# Folium genera cientos de objetos Python y serializa hasta 250 popups por
+# mapa. El resultado se comparte entre sesiones del mismo proceso de
+# Streamlit para que un segundo usuario no tenga que reconstruirlo. Se limita
+# el número de variantes para evitar que cambiar filtros/sectores consuma
+# memoria indefinidamente.
+_MAP_CACHE: OrderedDict[tuple[object, ...], object] = OrderedDict()
+_MAP_CACHE_MAX_ENTRIES = 24
 
 
 def get_color_gradient(prob: float, pct: float, mode: str) -> str:
@@ -187,6 +197,55 @@ def render_map_tab(
             placeholder="Ej. 6818",
             help="Introduce el ID de una cuadrícula para marcarla en el mapa.",
         )
+
+    # La caché de datos de Streamlit ya evita releer el parquet, pero el mapa
+    # Folium se construye fuera de esa caché. Este fingerprint solo usa campos
+    # que pueden cambiar con una nueva emisión y evita incluir geometrías
+    # Shapely en la clave.
+    fingerprint_columns = [
+        column
+        for column in [
+            "dashboard_cache_version",
+            "fecha",
+            "issue_time",
+            "horizon_days",
+            "cell_id",
+            "prob_riesgo",
+            "percentil_riesgo",
+            "lat_centroid",
+            "lon_centroid",
+            "recommended_action",
+            "combustible_clase",
+        ]
+        if column in df_ready.columns
+    ]
+    try:
+        data_fingerprint = int(
+            pd.util.hash_pandas_object(
+                df_ready[fingerprint_columns], index=True
+            ).sum()
+        )
+    except (TypeError, ValueError):
+        data_fingerprint = (len(df_ready), tuple(df_ready.columns))
+    map_cache_key = (
+        data_fingerprint,
+        preset_name,
+        active_map_style,
+        color_mode,
+        filter_risk,
+        search_cell.strip(),
+    )
+    cached_map = _MAP_CACHE.get(map_cache_key)
+    if cached_map is not None:
+        _MAP_CACHE.move_to_end(map_cache_key)
+        st_folium(
+            deepcopy(cached_map),
+            use_container_width=True,
+            height=620,
+            returned_objects=[],
+            key=f"tactical_map_{preset_name}_{active_map_style}",
+        )
+        return
 
     # Orientación táctica contextual si se combina filtro estrecho con modo percentil
     if ("Top 0.5%" in filter_risk or "Top 1.0%" in filter_risk) and ("Percentil" in color_mode or "Relativa" in color_mode):
@@ -496,6 +555,11 @@ def render_map_tab(
     # Leyenda flotante dinámica adaptada al modo de simbología seleccionado
     leyenda_html = build_map_legend_html(color_mode)
     m.get_root().html.add_child(folium.Element(leyenda_html))
+
+    _MAP_CACHE[map_cache_key] = m
+    _MAP_CACHE.move_to_end(map_cache_key)
+    while len(_MAP_CACHE) > _MAP_CACHE_MAX_ENTRIES:
+        _MAP_CACHE.popitem(last=False)
 
     st_folium(
         m,

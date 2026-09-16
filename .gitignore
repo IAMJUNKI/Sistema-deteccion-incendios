@@ -134,6 +134,7 @@ data/models/*
 
 # ─── Outputs y artefactos temporales ─────────────────────────────────────────
 outputs/
+output/
 figures/
 reports/
 *.html

@@ -17,6 +17,10 @@ Environment=PYTHONPATH=/srv/fire-risk/app
 # si el timer de ingesta no se ejecutó tras un reinicio.
 ExecStartPre=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/ingest_meteogalicia_observations.py --auto-fill-gap --grid /srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet --observations /srv/fire-risk/data/processed/observations/weather_daily_meteogalicia.parquet --state /srv/fire-risk/data/processed/state/weather_daily_state.parquet --raw-dir /srv/fire-risk/data/raw/meteogalicia/observations --lock /srv/fire-risk/data/processed/.weather_state_ingest.lock
 ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/run_daily_inference.py
+# Actualiza el Parquet preparado para Streamlit tras publicar output, features
+# y manifest. Un fallo aquí no invalida la inferencia: el dashboard conserva un
+# fallback que puede enriquecer el output directamente.
+ExecStartPost=-/opt/miniconda3/envs/incendios-forestales/bin/python scripts/prepare_dashboard_cache.py
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

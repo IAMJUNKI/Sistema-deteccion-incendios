@@ -186,6 +186,37 @@ def test_enrich_dataset_canonical_egif_48():
     assert enriched.loc[1, "combustible_clase"] == "Matorral / Brezal"
 
 
+def test_prepare_dashboard_cache_reuses_enriched_artifact(tmp_path, monkeypatch):
+    from scripts.prepare_dashboard_cache import prepare_dashboard_cache
+    from src.webapp.utils.data_loader import load_operational_predictions
+
+    source_path = tmp_path / "predicciones_operativas.parquet"
+    cache_path = tmp_path / "predicciones_operativas.dashboard.parquet"
+    source = pd.DataFrame(
+        {
+            "cell_id": [1, 2],
+            "lat_centroid": [42.0, 42.5],
+            "lon_centroid": [-7.5, -8.5],
+            "prob_risk": [0.15, 0.03],
+            "tmax_vc": [35.0, 22.0],
+            "rhmin_vc": [20.0, 60.0],
+            "vmax_vc": [35.0, 10.0],
+        }
+    )
+    source.to_parquet(source_path, index=False)
+    monkeypatch.setenv("PREDICTIONS_OUTPUT_PATH", str(source_path))
+    monkeypatch.setenv("PREDICTIONS_DASHBOARD_CACHE_PATH", str(cache_path))
+
+    assert prepare_dashboard_cache(source_path, cache_path) is True
+    cached = pd.read_parquet(cache_path)
+    assert cached["dashboard_cache_version"].eq(1).all()
+    assert "recommended_action" in cached.columns
+    assert prepare_dashboard_cache(source_path, cache_path) is False
+
+    loaded = load_operational_predictions()
+    assert loaded["dashboard_cache_version"].eq(1).all()
+
+
 def test_get_color_gradient_modes():
     from src.webapp.components.map_view import get_color_gradient
 
@@ -431,8 +462,6 @@ def test_webapp_assets_exist_and_load_without_external_data():
 
     provinces = _load_province_polygons()
     assert provinces is not None and len(provinces) == 4
-
-
 
 
 

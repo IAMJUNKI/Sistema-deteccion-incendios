@@ -55,12 +55,15 @@ recuperación y seguridad.
 El diseño recomendado para el MVP utiliza dos procesos independientes:
 
 ~~~text
-systemd timer ──> inferencia diaria ──> Parquet, JSON y manifest
+systemd timer ──> inferencia diaria ──> Parquet, JSON, manifest y caché del dashboard
 nginx/TLS ──> Streamlit ──> lectura del último artefacto publicado
 ~~~
 
-El dashboard no debe ejecutar inferencia al abrirse. La inferencia es un proceso
-batch separado y el dashboard solo lee el último resultado válido.
+El dashboard no debe ejecutar inferencia ni enriquecer miles de filas al abrirse.
+La inferencia es un proceso batch separado y, tras publicar el resultado, ejecuta
+`scripts/prepare_dashboard_cache.py`. Streamlit solo lee el último resultado
+operativo ya preparado; si el caché falta o no está actualizado, conserva un
+fallback seguro que procesa el Parquet original.
 
 El procedimiento reproducible de actualización de código y transferencia de
 artefactos pesados está en
@@ -353,6 +356,7 @@ INFERENCE_LOCK_PATH=/srv/fire-risk/data/processed/.daily_inference.lock
 INFERENCE_MANIFEST_PATH=/srv/fire-risk/data/processed/predicciones_operativas.manifest.json
 PREDICTIONS_OUTPUT_PATH=/srv/fire-risk/data/processed/predicciones_operativas.parquet
 PREDICTIONS_MANIFEST_PATH=/srv/fire-risk/data/processed/predicciones_operativas.manifest.json
+PREDICTIONS_DASHBOARD_CACHE_PATH=/srv/fire-risk/data/processed/predicciones_operativas.dashboard.parquet
 GRID_PATH=/srv/fire-risk/data/processed/grid/galicia_grid_1km_egif.parquet
 MODEL_DIR=/srv/fire-risk/data/models
 FORECAST_MODEL_FAMILY=egif_48
@@ -657,6 +661,9 @@ Group=fire-risk
 WorkingDirectory=/srv/fire-risk/app
 EnvironmentFile=/srv/fire-risk/app/.env
 ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/run_daily_inference.py
+# Prepara las columnas auxiliares que consume Streamlit después de publicar el
+# resultado. Un fallo del enriquecimiento no invalida el output operativo.
+ExecStartPost=-/opt/miniconda3/envs/incendios-forestales/bin/python scripts/prepare_dashboard_cache.py
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
@@ -790,6 +797,9 @@ User=fire-risk
 Group=fire-risk
 WorkingDirectory=/srv/fire-risk/app
 EnvironmentFile=/srv/fire-risk/app/.env
+# Si el resultado existe, se prepara antes de aceptar la primera sesión web.
+# El prefijo '-' permite arrancar aunque todavía no exista un output inicial.
+ExecStartPre=-/opt/miniconda3/envs/incendios-forestales/bin/python scripts/prepare_dashboard_cache.py
 ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/streamlit run app.py --server.address 127.0.0.1 --server.port 8501 --server.headless true --server.fileWatcherType none --browser.gatherUsageStats false
 Restart=on-failure
 RestartSec=10
@@ -813,7 +823,9 @@ curl --fail http://127.0.0.1:8501/_stcore/health
 ~~~
 
 El dashboard debe leer modelos, rejilla y resultados, pero no escribirlos. Si
-necesita cachés, se debe definir una ruta concreta con permisos limitados.
+necesita cachés, se debe definir una ruta concreta con permisos limitados. El
+Parquet `predicciones_operativas.dashboard.parquet` es un artefacto derivado de
+lectura, no sustituye al output operativo ni al manifest.
 
 ## 15. Nginx y TLS
 

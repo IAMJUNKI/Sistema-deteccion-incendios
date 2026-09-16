@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -15,10 +16,53 @@ from src.models.forecast_risk_model import load_horizon_model
 from src.webapp.utils.geo_helpers import assign_approx_province, assign_comarca_or_distrito
 
 DEFAULT_CANONICAL_GRID_PATH = "data/processed/grid/galicia_grid_1km_egif.parquet"
+DEFAULT_PREDICTIONS_OUTPUT_PATH = "data/processed/predicciones_operativas.parquet"
+DEFAULT_DASHBOARD_CACHE_SUFFIX = ".dashboard.parquet"
+DASHBOARD_CACHE_VERSION = 1
 LEGACY_GRID_PATHS = (
     "data/processed/grid/galicia_grid_1km_2018.parquet",
     "data/processed/grid/galicia_grid_1km_2012.parquet",
 )
+
+
+def _configured_predictions_output_path() -> Path:
+    """Devuelve la ruta del artefacto operativo publicado."""
+    return Path(
+        os.getenv("PREDICTIONS_OUTPUT_PATH", DEFAULT_PREDICTIONS_OUTPUT_PATH)
+    )
+
+
+def _resolve_inference_dataset(selected_file: str | None = None) -> Path | None:
+    """Resuelve una ruta de inferencia sin hacer trabajo de enriquecimiento."""
+    if selected_file and Path(selected_file).exists():
+        return Path(selected_file)
+
+    primary_path = _configured_predictions_output_path()
+    if primary_path.exists():
+        return primary_path
+
+    candidates = sorted(glob.glob("data/processed/inferencia_*.parquet"), reverse=True)
+    return Path(candidates[0]) if candidates else None
+
+
+def _dashboard_cache_path(source_path: Path) -> Path:
+    """Devuelve la ruta del Parquet preparado para el dashboard."""
+    configured = os.getenv("PREDICTIONS_DASHBOARD_CACHE_PATH", "").strip()
+    primary_path = _configured_predictions_output_path()
+    if configured and source_path == primary_path:
+        return Path(configured)
+    return source_path.with_name(f"{source_path.stem}{DEFAULT_DASHBOARD_CACHE_SUFFIX}")
+
+
+def _cache_is_fresh(cache_path: Path, source_path: Path) -> bool:
+    """Comprueba que el artefacto enriquecido procede del Parquet publicado actual."""
+    try:
+        return (
+            cache_path.exists()
+            and cache_path.stat().st_mtime_ns >= source_path.stat().st_mtime_ns
+        )
+    except OSError:
+        return False
 
 
 @st.cache_data(ttl=300)
@@ -28,7 +72,7 @@ def list_available_inference_datasets() -> dict[str, str]:
 
     # Archivo operativo primario
     primary_path = Path(
-        os.getenv("PREDICTIONS_OUTPUT_PATH", "data/processed/predicciones_operativas.parquet")
+        os.getenv("PREDICTIONS_OUTPUT_PATH", DEFAULT_PREDICTIONS_OUTPUT_PATH)
     )
     if primary_path.exists():
         files_map["Predicción Operativa Actual (Producción)"] = str(primary_path)
@@ -43,27 +87,60 @@ def list_available_inference_datasets() -> dict[str, str]:
 
 
 @st.cache_data(ttl=300)
-def load_operational_predictions(selected_file: str | None = None) -> pd.DataFrame:
-    """Carga el conjunto de predicciones operativo o el dataset seleccionado."""
-    if selected_file and Path(selected_file).exists():
-        path = Path(selected_file)
-    else:
-        path = Path(
-            os.getenv("PREDICTIONS_OUTPUT_PATH", "data/processed/predicciones_operativas.parquet")
-        )
-        if not path.exists():
-            # Fallback automático al parquet más reciente disponible
-            candidates = sorted(glob.glob("data/processed/inferencia_*.parquet"), reverse=True)
-            if candidates:
-                path = Path(candidates[0])
-            else:
-                return pd.DataFrame()
-
+def _load_operational_predictions_from_path(
+    source_path: str,
+    dashboard_cache_path: str,
+    source_mtime_ns: int,
+    dashboard_cache_mtime_ns: int,
+) -> pd.DataFrame:
+    """Carga una fuente de predicciones, reutilizando su versión preparada."""
+    source = Path(source_path)
+    dashboard_cache = Path(dashboard_cache_path)
     try:
-        df = pd.read_parquet(path)
+        read_path = source
+        use_dashboard_cache = _cache_is_fresh(dashboard_cache, source)
+        if use_dashboard_cache:
+            cached_df = pd.read_parquet(dashboard_cache)
+            if (
+                "dashboard_cache_version" in cached_df.columns
+                and not cached_df.empty
+                and cached_df["dashboard_cache_version"].eq(DASHBOARD_CACHE_VERSION).all()
+            ):
+                return cached_df
+
+        df = pd.read_parquet(read_path)
         return enrich_dataset_metadata(df)
     except Exception:
         return pd.DataFrame()
+
+
+def load_operational_predictions(selected_file: str | None = None) -> pd.DataFrame:
+    """Carga las predicciones usando un artefacto de dashboard precalculado cuando existe.
+
+    La ruta se normaliza antes de entrar en ``st.cache_data``. Así, la llamada
+    preliminar con ``None`` y la llamada posterior con el archivo seleccionado
+    comparten la misma entrada de caché y no vuelven a enriquecer el Parquet.
+    """
+    path = _resolve_inference_dataset(selected_file)
+    if path is None:
+        return pd.DataFrame()
+
+    cache_path = _dashboard_cache_path(path)
+    try:
+        source_mtime_ns = path.stat().st_mtime_ns
+    except OSError:
+        return pd.DataFrame()
+    try:
+        dashboard_cache_mtime_ns = cache_path.stat().st_mtime_ns
+    except OSError:
+        dashboard_cache_mtime_ns = 0
+
+    return _load_operational_predictions_from_path(
+        str(path),
+        str(cache_path),
+        source_mtime_ns,
+        dashboard_cache_mtime_ns,
+    )
 
 
 def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
@@ -224,28 +301,32 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
             df["combustible_pct_forestal"] = pd.to_numeric(df["combustible_pct_forestal"], errors="coerce").fillna(0.0)
 
     if "combustible_clase" not in df.columns:
-        def _infer_fuel_class(row: pd.Series) -> str:
-            bf = float(row.get("broadleaf_forest", 0.0) or 0.0)
-            cf = float(row.get("coniferous_forest", 0.0) or 0.0)
-            mf = float(row.get("mixed_forest", 0.0) or 0.0)
-            sc = float(row.get("scrub", 0.0) or 0.0)
-            ag = float(row.get("agriculture", 0.0) or 0.0)
-            max_val = max(bf, cf, mf, sc, ag)
-            if max_val <= 0.05:
-                return "Matorral / Monte Bajo"
-            if max_val == sc:
-                return "Matorral / Brezal"
-            if max_val == cf:
-                return "Pinar / Coníferas"
-            if max_val == bf:
-                return "Frondosas Caducifolias"
-            if max_val == mf:
-                return "Bosque Mixto"
-            if max_val == ag:
-                return "Agrícola / Mosaico"
-            return "Matorral / Monte Bajo"
-
-        df["combustible_clase"] = df.apply(_infer_fuel_class, axis=1)
+        # El orden conserva la prioridad de desempate de la implementación
+        # original: matorral, coníferas, frondosas, mixto y agrícola.
+        fuel_columns = [
+            "scrub",
+            "coniferous_forest",
+            "broadleaf_forest",
+            "mixed_forest",
+            "agriculture",
+        ]
+        fuel_values = (
+            df.reindex(columns=fuel_columns, fill_value=0.0)
+            .apply(pd.to_numeric, errors="coerce")
+            .fillna(0.0)
+        )
+        max_fuel = fuel_values.max(axis=1)
+        dominant_fuel = fuel_values.idxmax(axis=1).map(
+            {
+                "scrub": "Matorral / Brezal",
+                "coniferous_forest": "Pinar / Coníferas",
+                "broadleaf_forest": "Frondosas Caducifolias",
+                "mixed_forest": "Bosque Mixto",
+                "agriculture": "Agrícola / Mosaico",
+            }
+        )
+        df["combustible_clase"] = dominant_fuel.fillna("Matorral / Monte Bajo")
+        df.loc[max_fuel <= 0.05, "combustible_clase"] = "Matorral / Monte Bajo"
 
     # Calcular indicador de la Regla Crítica 30-30-30. El contrato EGIF usa
     # nombres canónicos; los aliases legacy se conservan para rollback.
@@ -279,15 +360,20 @@ def enrich_dataset_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
     # Acción recomendada
     if "recommended_action" not in df.columns:
-        def _get_action(pct):
-            if pct >= 0.995:
-                return "preposicion_helitransportada"
-            elif pct >= 0.95:
-                return "vigilancia_aerea_reforzada"
-            elif pct >= 0.80:
-                return "patrullaje_terrestre_preventivo"
-            return "monitoreo_rutinario"
-        df["recommended_action"] = df["percentil_riesgo"].apply(_get_action)
+        percentiles = pd.to_numeric(df["percentil_riesgo"], errors="coerce").fillna(0.0)
+        df["recommended_action"] = np.select(
+            [
+                percentiles >= 0.995,
+                percentiles >= 0.95,
+                percentiles >= 0.80,
+            ],
+            [
+                "preposicion_helitransportada",
+                "vigilancia_aerea_reforzada",
+                "patrullaje_terrestre_preventivo",
+            ],
+            default="monitoreo_rutinario",
+        )
 
     return df
 

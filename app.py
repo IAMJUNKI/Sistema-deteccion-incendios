@@ -87,19 +87,29 @@ def main() -> None:
     # 6. Renderizar Cabecera de Mando y Resumen Ejecutivo Matinal
     render_header_and_kpis(df_data, manifest, selected_horizon, target_date)
 
-    # 7. Renderizar las Pestañas de Navegación Operativa
-    tab_map, tab_concello, tab_analytics, tab_shap, tab_protocols, tab_status = st.tabs(
-        [
-            "Centro de Mando Cartográfico",
-            "Consulta por Concello",
-            "Situación Territorial y Rankings",
-            "Diagnóstico y Simulador",
-            "Medidas y Despacho (PLADIGA)",
-            "Auditoría del Sistema",
-        ]
+    # 7. Navegación operativa con renderizado diferido.
+    #
+    # ``st.tabs`` solo organiza visualmente el contenido: Streamlit ejecuta el
+    # cuerpo de las seis pestañas en cada sesión y en cada rerun. Eso fuerza a
+    # construir el mapa, las tablas, TreeSHAP y el simulador aunque el usuario
+    # solo necesite la vista inicial. Un selector horizontal conserva la
+    # navegación compacta y permite renderizar únicamente la sección activa.
+    sections = [
+        "Centro de Mando Cartográfico",
+        "Consulta por Concello",
+        "Situación Territorial y Rankings",
+        "Diagnóstico y Simulador",
+        "Medidas y Despacho (PLADIGA)",
+        "Auditoría del Sistema",
+    ]
+    active_section = st.radio(
+        "Sección del dashboard",
+        sections,
+        horizontal=True,
+        label_visibility="collapsed",
     )
 
-    with tab_map:
+    if active_section == sections[0]:
         render_map_tab(
             df_data=df_data,
             selected_horizon=selected_horizon,
@@ -107,35 +117,30 @@ def main() -> None:
             color_mode=color_mode,
             filter_risk=filter_risk,
         )
-
-    with tab_concello:
+    elif active_section == sections[1]:
         render_concello_lookup_tab(
             df_data=df_data,
             target_date=target_date,
         )
-
-    with tab_analytics:
+    elif active_section == sections[2]:
         render_territorial_analytics_tab(
             df_data=df_data,
             all_predictions=predictions,
         )
-
-    with tab_shap:
+    elif active_section == sections[3]:
         render_shap_and_simulator_tab(
             df_data=df_data,
             dashboard_model=dashboard_model,
             selected_horizon=selected_horizon,
         )
-
-    with tab_protocols:
+    elif active_section == sections[4]:
         render_operational_protocols_tab(
             df_data=df_data,
             manifest=manifest,
             selected_horizon=selected_horizon,
             target_date=target_date,
         )
-
-    with tab_status:
+    else:
         render_system_status_tab(
             df_data=df_data,
             manifest=manifest,
