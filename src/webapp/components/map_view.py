@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import textwrap
 from collections import OrderedDict
-from copy import deepcopy
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 try:
     import folium
     from folium import plugins
-    from streamlit_folium import st_folium
 except ImportError:  # pragma: no cover - se prueba en instalaciones sin extras GIS
     folium = None
     plugins = None
-    st_folium = None
 
 from src.webapp.components.sidebar import MAP_STYLES
 from src.webapp.utils.geo_helpers import (
@@ -28,11 +26,11 @@ from src.webapp.utils.geo_helpers import (
 )
 
 # Folium genera cientos de objetos Python y serializa hasta 250 popups por
-# mapa. El resultado se comparte entre sesiones del mismo proceso de
-# Streamlit para que un segundo usuario no tenga que reconstruirlo. Se limita
-# el número de variantes para evitar que cambiar filtros/sectores consuma
-# memoria indefinidamente.
-_MAP_CACHE: OrderedDict[tuple[object, ...], object] = OrderedDict()
+# mapa. El HTML final se comparte entre sesiones del mismo proceso de
+# Streamlit para que un segundo usuario no tenga que reconstruirlo ni volver a
+# serializar Folium. Guardar HTML, en vez del objeto Folium, evita reutilizar
+# los identificadores JavaScript internos de GeoJson/Leaflet entre reruns.
+_MAP_CACHE: OrderedDict[tuple[object, ...], str] = OrderedDict()
 _MAP_CACHE_MAX_ENTRIES = 24
 
 
@@ -126,6 +124,11 @@ def build_map_legend_html(color_mode: str) -> str:
     """
 
 
+def _render_map_html(map_html: str) -> None:
+    """Muestra un mapa Folium en un iframe aislado sin rerenderizar Leaflet."""
+    components.html(map_html, height=620, scrolling=False)
+
+
 def render_map_tab(
     df_data: pd.DataFrame,
     selected_horizon: int,
@@ -149,9 +152,9 @@ def render_map_tab(
     if df_data.empty:
         st.warning("No hay datos para renderizar el mapa.")
         return
-    if folium is None or st_folium is None:
+    if folium is None:
         st.error(
-            "El mapa requiere folium y streamlit-folium. Activa el entorno del proyecto y "
+            "El mapa requiere folium. Activa el entorno del proyecto y "
             "verifica las dependencias de `environment.yml`."
         )
         return
@@ -238,13 +241,7 @@ def render_map_tab(
     cached_map = _MAP_CACHE.get(map_cache_key)
     if cached_map is not None:
         _MAP_CACHE.move_to_end(map_cache_key)
-        st_folium(
-            deepcopy(cached_map),
-            use_container_width=True,
-            height=620,
-            returned_objects=[],
-            key=f"tactical_map_{preset_name}_{active_map_style}",
-        )
+        _render_map_html(cached_map)
         return
 
     # Orientación táctica contextual si se combina filtro estrecho con modo percentil
@@ -556,15 +553,10 @@ def render_map_tab(
     leyenda_html = build_map_legend_html(color_mode)
     m.get_root().html.add_child(folium.Element(leyenda_html))
 
-    _MAP_CACHE[map_cache_key] = m
+    map_html = m.get_root().render()
+    _MAP_CACHE[map_cache_key] = map_html
     _MAP_CACHE.move_to_end(map_cache_key)
     while len(_MAP_CACHE) > _MAP_CACHE_MAX_ENTRIES:
         _MAP_CACHE.popitem(last=False)
 
-    st_folium(
-        m,
-        use_container_width=True,
-        height=620,
-        returned_objects=[],
-        key=f"tactical_map_{preset_name}_{active_map_style}",
-    )
+    _render_map_html(map_html)
