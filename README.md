@@ -284,14 +284,67 @@ pip install -e .
 
 ### 5. Descargar modelos y artefactos preentrenados (Hugging Face Hub)
 
-Para ejecutar el Centro de Mando / Dashboard interactivo o lanzar nuevas predicciones operativas **sin necesidad de descargar 20 GB de datos históricos ni reentrenar modelos**:
+La release operativa se distribuye desde el repositorio público
+[`Junkii/galicia_wildfire_risk`](https://huggingface.co/Junkii/galicia_wildfire_risk).
+Esto permite arrancar una instalación nueva sin descargar los datos históricos
+ni reentrenar los modelos. Al ser público, no hace falta configurar
+`HF_TOKEN` para descargarlo.
+
+#### Opción recomendada: descarga ligera para el Dashboard
 
 ```bash
-# Descarga completa (~170 MB: modelos calibrados + rejilla 1 km + estado meteorológico + predicción):
-python scripts/download_artifacts.py --repo-id tu-usuario/galicia-wildfire-risk
+python scripts/download_artifacts.py \
+  --repo-id Junkii/galicia_wildfire_risk \
+  --only-dashboard
+python -m streamlit run app.py
+```
 
-# Modo ligero solo para explorar el Dashboard (~25 MB):
-python scripts/download_artifacts.py --repo-id tu-usuario/galicia-wildfire-risk --only-dashboard
+Esta opción descarga los modelos, la rejilla, las predicciones y los metadatos
+del Dashboard. La descarga completa añade el estado meteorológico acumulado de
+30 días y es necesaria si se quieren ejecutar inferencias locales:
+
+```bash
+python scripts/download_artifacts.py \
+  --repo-id Junkii/galicia_wildfire_risk
+```
+
+#### Descarga automática al iniciar Streamlit
+
+Como alternativa, después de crear `.env` se puede activar la sincronización
+automática una vez por proceso de Streamlit:
+
+```dotenv
+HF_REPO_ID=Junkii/galicia_wildfire_risk
+HF_AUTO_DOWNLOAD=true
+HF_DOWNLOAD_MODE=dashboard
+HF_TARGET_DIR=.
+```
+
+Con `HF_DOWNLOAD_MODE=full` también se descarga el estado meteorológico móvil
+de 30 días. El Dashboard sigue leyendo los archivos locales después de la
+sincronización; Hugging Face no se consulta en cada visita de cada usuario.
+
+En producción, `HF_AUTO_DOWNLOAD` debe permanecer en `false`: el servidor usa
+su copia local como fuente operativa.
+
+#### Actualización automática desde producción
+
+Después de cada inferencia correcta, el servicio `fire-risk-inference` publica
+automáticamente en Hugging Face un snapshot con:
+
+- `predicciones_operativas.parquet` y su manifiesto;
+- `weather_daily_state.parquet`, con la ventana meteorológica acumulada.
+
+Los modelos y la rejilla se publican únicamente con la carga inicial completa
+(`scripts/publish_to_huggingface.py --all`) o cuando se promociona una nueva
+versión de modelos. Si se cambia un modelo, ejecutar en producción:
+
+```bash
+sudo -u fire-risk -H bash -lc '
+cd /srv/fire-risk/app &&
+/opt/miniconda3/envs/incendios-forestales/bin/python \
+scripts/publish_to_huggingface.py --all
+'
 ```
 
 ### 6. Iniciar el Centro de Mando Táctico (Dashboard Streamlit)
