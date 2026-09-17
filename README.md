@@ -1,607 +1,460 @@
-# Datacubo de riesgo de incendio en Galicia
+# Sistema de estimación del peligro diario de incendio forestal en Galicia
 
-TFM para construir un datacubo diario de 1 km × 1 km sobre Galicia. El target
-es la ignición oficial de EGIF-MITECO; las fuentes explicativas son Copernicus
-DEM GLO-30, CORINE Land Cover 2018, ERA5-Land y el baseline físico FWI de
-CEMS/EFFIS.
+Estima, para cada celda de 1 km² de Galicia y cada día, la probabilidad de que se inicie un
+incendio. Se entrena con el registro oficial de incendios del Ministerio (EGIF) y con
+meteorología, topografía, cobertura del suelo y actividad humana, y se compara contra el índice
+FWI que publican hoy AEMET y el servicio europeo de emergencias.
 
-## Contrato del dataset
+El sistema está desplegado: cada madrugada publica cuatro mapas de peligro para toda Galicia —el
+del día en curso y los de los tres siguientes— en un panel accesible por navegador.
 
-- Área: Galicia, rejilla regular de 1 km, `EPSG:3035`.
-- Periodo: se elige por años completos al ejecutar el workflow. La primera y
-  última ignición del XML no determinan la cobertura temporal.
-- Contexto meteorológico: desde el primer día del mes anterior al año inicial,
-  para poder calcular acumulados de hasta 30 días.
-- Target: `target_ignicion` de EGIF. Un cero significa ausencia de ignición.
-- Temporalidad: las variables meteorológicas y sus acumulados describen el
-  mismo día `T`; este producto es un **nowcast/análisis diario**, no una
-  previsión a 24 horas.
-
-Consulta [las variables](docs/variables.md) y la guía para
-[ejecutar el pipeline](docs/ejecutar_pipeline.md).
-
-Para entrenamiento operativo se genera además una exportación alineada en
-`data/processed/tabular/egif_operational/`. Esta copia recalcula las memorias
-meteorológicas hasta el día anterior y no sustituye al datacubo histórico.
-Consulta la [documentación de alineación y modelos operativos](docs/explanations/implementacion_alineacion_operativa.md).
-
-Para desplegar el código por releases y transferir datasets/modelos pesados sin
-subirlos a GitHub, consulta
-[despliegue de código y datos](docs/deployment/despliegue_codigo_y_datos.md).
-
-## Estructura
-
-```text
-src/geospatial/   rejilla, DEM y CORINE
-src/ingestion/    ERA5-Land, FWI (CEMS) y EGIF
-src/features/     calendario y exportación tabular
-src/modeling/     carga, selección y evaluación temporal de modelos
-src/workflow.py   orquestación completa
-data/raw/         fuentes originales locales
-data/processed/   productos generados (ignorados por Git)
-archive/          código FIRMS/Mikel histórico, fuera de la ruta operativa
-# 🔥 Sistema Predictivo de Anticipación de Incendios Forestales
-
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)
-![Conda](https://img.shields.io/badge/Conda-24.x-44A833?style=flat-square&logo=anaconda&logoColor=white)
-![Estado](https://img.shields.io/badge/Estado-En%20Desarrollo-orange?style=flat-square)
-![TFM](https://img.shields.io/badge/TFM-Máster%20en%20Big%20Data%20e%20IA-blue?style=flat-square)
-![MVP](https://img.shields.io/badge/MVP%20Region-Galicia-green?style=flat-square)
-
-> **TFM** — Sistema de alerta temprana que estima el riesgo de incendio forestal por zona geográfica a partir de datos meteorológicos, satelitales, geoespaciales y ambientales. El objetivo es anticipar qué zonas presentan mayor probabilidad de incendio en las próximas **24 / 72 horas**.
+Trabajo Fin de Máster · Máster en Big Data, Data Science e Inteligencia Artificial · Universidad
+Complutense de Madrid · Curso 2025-2026.
 
 ---
 
-## 📋 Tabla de Contenidos
+## Índice
 
-- [Objetivo del Proyecto](#objetivo-del-proyecto)
-- [Arquitectura del Sistema](#arquitectura-del-sistema)
-- [Estructura del Repositorio](#estructura-del-repositorio)
-- [MVP: Galicia como Región Piloto](#mvp-galicia-como-región-piloto)
-- [Fuentes de Datos](#fuentes-de-datos)
-- [Stack Tecnológico](#stack-tecnológico)
-- [Instalación y Configuración](#instalación-y-configuración)
-- [Fases del Proyecto](#fases-del-proyecto)
-- [Metodología](#metodología)
-- [Documentación operativa detallada](#documentación-operativa-detallada)
-- [Despliegue en servidor](#despliegue-en-servidor)
-- [Convenciones y Guía de Contribución](#convenciones-y-guía-de-contribución)
-- [Roadmap](#roadmap)
+- [Qué hace y qué no hace](#qué-hace-y-qué-no-hace)
+- [Resultados](#resultados)
+- [Estado del proyecto](#estado-del-proyecto)
+- [Empezar](#empezar)
+- [El conjunto de datos](#el-conjunto-de-datos)
+- [Fuentes de datos](#fuentes-de-datos)
+- [Cómo está organizado el repositorio](#cómo-está-organizado-el-repositorio)
+- [Ejecutar el sistema](#ejecutar-el-sistema)
+- [Pruebas](#pruebas)
+- [Trabajar en este repositorio](#trabajar-en-este-repositorio)
+- [Documentación](#documentación)
 - [Equipo](#equipo)
 
 ---
 
-## 🎯 Objetivo del Proyecto
+## Qué hace y qué no hace
 
-Construir un sistema **actualizable diariamente** que, para cada celda de 1 km × 1 km del territorio de Galicia, genere:
+**Hace:** ordena el territorio por peligro de ignición. Responde a la pregunta operativa de un
+servicio de prevención —«si hoy puedo vigilar de forma reforzada el 5 % de Galicia, dónde la
+coloco»— con una resolución de 1 km², frente a las casillas de 10 a 27,5 km del índice oficial.
 
-- Una **probabilidad estimada de incendio** para las próximas 24/72 horas.
-- Un **nivel de riesgo calibrado**: Bajo · Moderado · Alto · Extremo.
-- Un **mapa interactivo de riesgo** y un **ranking de zonas más vulnerables**.
-- Una **explicación de las variables** que justifican cada predicción (interpretabilidad via SHAP).
+**No hace:**
 
-La aplicación práctica es clara: apoyar la prevención, priorizar recursos, anticipar zonas críticas y facilitar la toma de decisiones en gestión forestal y protección civil.
-
----
-
-## 🏗️ Arquitectura del Sistema
-
-```mermaid
-flowchart TD
-    subgraph DATOS_ESTATICOS["📦 Datos Estáticos (Fase 1 — Una sola vez)"]
-        DEM["🏔️ Copernicus DEM\nAltitud · Pendiente · Orientación"]
-        CLC["🌿 CORINE Land Cover\nTipo de vegetación y suelo"]
-        IGN["📐 CNIG/IGN\nLímites administrativos"]
-    end
-
-    subgraph DATOS_HISTORICOS["📅 Datos Históricos (Fases 2-3 — Entrenamiento)"]
-        FIRMS["🛰️ NASA FIRMS\nFocos de calor históricos"]
-        ERA5["🌡️ ERA5-Land (Copernicus)\nMeteorología horaria histórica"]
-        OSM["🗺️ OpenStreetMap\nCarreteras y núcleos urbanos"]
-    end
-
-    subgraph PIPELINE_DATOS["⚙️ Pipeline de Datos"]
-        REJILLA["🔲 Rejilla 1km×1km\n~30.000 celdas (Galicia)"]
-        TARGET["🎯 Target Construction\nClustering espacio-temporal DBSCAN\nPositivos + Negativos difíciles"]
-        FEATURES["🔧 Feature Engineering\nAcumulados meteo · Ventana 12-18h\nHistorial incendios · Anti-leakage"]
-    end
-
-    subgraph MODELO["🤖 Modelado (Fase 4)"]
-        BASELINE["📊 Regresión Logística\nBaseline interpretable"]
-        TREE["🌲 XGBoost / LightGBM\nModelo principal"]
-        CALIBRACION["🎚️ Calibración Isotónica\nUmbrales de riesgo con datos reales"]
-    end
-
-    subgraph PRODUCCION["🚀 Producción (Fase 5)"]
-        METEOGALICIA["☁️ MeteoGalicia / AEMET\nProveedor configurable"]
-        INFERENCIA["⚡ Pipeline Inferencia Diaria\nWRF 1km → 04km → AEMET"]
-        WEBAPP["🖥️ Dashboard Streamlit\nMapas · Filtros · SHAP"]
-    end
-
-    DATOS_ESTATICOS --> REJILLA
-    DATOS_HISTORICOS --> TARGET
-    REJILLA --> TARGET
-    TARGET --> FEATURES
-    FEATURES --> BASELINE
-    FEATURES --> TREE
-    TREE --> CALIBRACION
-    CALIBRACION --> INFERENCIA
-    METEOGALICIA --> INFERENCIA
-    INFERENCIA --> WEBAPP
-```
+- **No predice el tamaño de un incendio**, solo dónde empieza. El tamaño final depende del viento
+  y del tiempo de respuesta de los medios, y nada de eso está en el conjunto de datos.
+- **No captura las igniciones que no dependen del tiempo.** El modelo ordena por severidad
+  meteorológica, así que falla de forma sistemática en marzo y junio, cuando predominan las quemas
+  agrícolas descontroladas.
+- **No está validado fuera de Galicia.** Sobre territorio no visto en el entrenamiento, su
+  capacidad de discriminar cae de 0,743 a 0,628 de ROC-AUC. Llevarlo a otra comunidad exigiría
+  reentrenarlo con su propio historial.
 
 ---
 
-## 📁 Estructura del Repositorio
+## Resultados
 
-```
-Sistema-deteccion-incendios/
-│
-├── 📂 src/                          # Código fuente principal (paquete modular)
-│   ├── __init__.py
-│   ├── 📂 geospatial/               # Fase 1: Rejilla, DEM, CORINE
-│   │   ├── __init__.py
-│   │   └── README.md
-│   ├── 📂 ingestion/                # Fase 2: NASA FIRMS, ERA5-Land, target
-│   │   ├── __init__.py
-│   │   └── README.md
-│   ├── 📂 features/                 # Fase 3: Feature engineering, anti-leakage
-│   │   ├── __init__.py
-│   │   └── README.md
-│   ├── 📂 models/                   # Fase 4: Entrenamiento y calibración
-│   │   ├── __init__.py
-│   │   └── README.md
-│   └── 📂 webapp/                   # Fase 5: Dashboard Streamlit
-│       ├── __init__.py
-│       └── README.md
-│
-├── 📂 data/                         # ⚠️ NO incluir en git (ver .gitignore)
-│   ├── raw/                         # Datos descargados sin procesar
-│   ├── processed/                   # Datos transformados y limpios
-│   └── models/                      # Modelos serializados (.pkl, .json)
-│
-├── 📂 notebooks/                    # Exploración, EDA y prototipado
-├── 📂 tests/                        # Tests unitarios e integración
-├── 📂 docs/                         # Documentación adicional y memoria TFM
-├── 📂 configs/                      # Configuración de hiperparámetros y pipelines
-│
-├── 📂 knowledge/                    # Documentación del alcance del proyecto
-│   ├── Project Plan - Predicción incendios forestales.md
-│   ├── fases_proyecto_plan_ataque.md
-│   └── justificacion_mvp_comunidad_autonoma.md
-│
-├── 📂 .agents/skills/               # Guías internas de trabajo
-│   ├── project-conventions/
-│   ├── geospatial-processing/
-│   ├── data-ingestion/
-│   ├── feature-engineering/
-│   ├── model-training/
-│   └── webapp-dashboard/
-│
-├── .gitignore
-├── .env.example                     # Template de variables de entorno
-├── environment.yml                  # Entorno Conda reproducible
-└── README.md
-```
+Medidos sobre **2023**, el año que se reservó desde el principio y se abrió una sola vez con los
+modelos ya serializados, sin reentrenarlos. Población completa: 10.804.365 celdas-día y 530
+igniciones.
 
-> **Nota sobre los datos:** Los archivos de datos (NetCDF, Parquet, Shapefiles, modelos .pkl) **no se suben al repositorio** por su tamaño. Ver la sección [Fuentes de Datos](#fuentes-de-datos) para saber cómo descargarlos.
-
----
-
-## 🗺️ MVP: Galicia como Región Piloto
-
-El MVP se centra en **Galicia** por tres razones:
-
-| Criterio | Detalle |
-|---|---|
-| **Alta densidad de incendios** | Galicia concentra el mayor número de incendios forestales de España, garantizando suficientes casos positivos para el entrenamiento |
-| **Manejabilidad computacional** | ~30.000 celdas de 1km² frente a ~500.000 celdas en toda España (reducción del 94%) |
-| **Ecosistema específico** | Minifundio forestal, clima oceánico y alta proporción de eucalipto/pino: dinámicas de incendio diferenciadas y bien documentadas |
-
-Una vez validado el modelo en Galicia (AUC-ROC > 0.85, PR-AUC satisfactorio), el código está diseñado para **escalar a nivel nacional** simplemente cambiando el archivo de frontera geométrica de entrada.
-
----
-
-## 📊 Fuentes de Datos
-
-### Datasets Prioritarios
-
-| # | Fuente | Uso | Fase |
-|---|---|---|---|
-| 1 | [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/download/) | Variable objetivo (focos de incendio) | 2 |
-| 2 | [ERA5-Land (Copernicus CDS)](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land) | Meteorología horaria histórica | 2-3 |
-| 3 | [CORINE Land Cover](https://land.copernicus.eu/en/products/corine-land-cover) | Tipo de vegetación y cobertura del suelo | 1 |
-| 4 | [Copernicus DEM GLO-30](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM) | Altitud, pendiente y orientación del terreno | 1 |
-| 5 | [CNIG/IGN](https://centrodedescargas.cnig.es/CentroDescargas/index.jsp) | Límites administrativos para agregación espacial | 1 |
-| 6 | [MeteoGalicia MeteoSIX v5](https://www.meteogalicia.gal/datosred/infoweb/meteo/proxectos/meteosix/API_MeteoSIX_v5_es.pdf) | Forecast horario WRF 1 km con fallback 04 km para la inferencia operativa | 5 |
-
-### Datasets Complementarios
-
-| Fuente | Uso | Recomendación |
+| Vigilando el 5 % del territorio | Igniciones detectadas (de 530) | Recall |
 |---|---|---|
-| [EGIF-MITECO](https://www.miteco.gob.es/es/biodiversidad/temas/incendios-forestales/estadisticas-incendios.html) | Estadística oficial española de incendios | Validación y contexto, no target principal |
-| [AEMET OpenData](https://opendata.aemet.es/dist/index.html) | Proveedor municipal alternativo para pruebas mientras no exista la clave MeteoGalicia | `FORECAST_PROVIDER=aemet` o `auto` |
-| [OpenStreetMap/Geofabrik](https://download.geofabrik.de/europe/spain.html) | Proximidad a carreteras y núcleos urbanos | Factor humano, prioridad secundaria |
+| **Este sistema** | **234** | **44,15 %** |
+| FWI oficial del CEMS | 104 | 19,62 % |
+
+Estrechando la vigilancia al 1 % de celdas más críticas de cada día, que es el escenario realista
+cuando hay que repartir un número fijo de patrullas, el sistema alcanza el 9,62 % de las
+igniciones frente al 2,83 % del índice oficial: **multiplica por 3,4 el estándar publicado en la
+métrica más exigente del estudio.**
+
+La progresión del ROC-AUC mide cuánto del acierto es mera estacionalidad y cuánto es discriminar
+celdas dentro de un mismo día, que es la aportación real (validación 2022):
+
+| Sistema | ROC global | ROC en temporada | ROC dentro del día |
+|---|---|---|---|
+| Este sistema | 0,866 | 0,805 | **0,743** |
+| FWI Van Wagner a 1 km | 0,810 | 0,736 | 0,615 |
+| FWI oficial del CEMS | 0,807 | 0,739 | 0,602 |
+
+### Dos salvedades que conviene leer antes de citar las cifras
+
+**Estas cifras se obtuvieron con meteorología de reanálisis, es decir, con una entrada
+meteorológica perfecta.** Miden la arquitectura del sistema, no el servicio. En producción el
+sistema se alimenta de previsión numérica, que incorpora su propio error, y esa degradación
+**todavía no está cuantificada**. La validación de extremo a extremo —emparejar las predicciones
+emitidas cada día con las igniciones oficiales posteriores— está en curso.
+
+**Un 44 % de recall significa que 56 de cada 100 igniciones no se detectan.** El resultado es
+bueno en términos comparativos, no absolutos.
 
 ---
 
-## 🛠️ Stack Tecnológico
+## Estado del proyecto
 
-| Categoría | Tecnologías |
-|---|---|
-| **Lenguaje** | Python 3.11 |
-| **Entorno** | Conda (Miniconda) |
-| **Geoespacial** | GeoPandas · Rasterio · Rioxarray · Shapely · GDAL · H3 |
-| **Datos temporales** | Xarray · NetCDF4 · cdsapi |
-| **ML** | Scikit-learn · XGBoost · LightGBM · imbalanced-learn |
-| **Explicabilidad** | SHAP |
-| **Visualización** | Matplotlib · Seaborn · Plotly · Folium · PyDeck |
-| **WebApp** | Streamlit |
-| **Calidad de código** | Ruff · pre-commit · pytest |
-| **Notebooks** | JupyterLab |
+| Fase | Contenido | Estado |
+|---|---|---|
+| 1 | Rejilla de 1 km², Copernicus DEM y CORINE Land Cover | Completada |
+| 2 | Ingesta de EGIF y ERA5-Land, construcción del target | Completada |
+| 3 | Ingeniería de características y datacubo de 86,5 M de filas | Completada |
+| 4 | Entrenamiento, calibración y evaluación sobre el test ciego | Completada |
+| 5 | Panel Streamlit y pipeline de inferencia diaria | Desplegada |
+
+Pendiente: cuantificar la degradación al pasar de meteorología observada a previsión numérica, y
+cerrar la validación de extremo a extremo del sistema desplegado.
 
 ---
 
-## ⚙️ Instalación y Configuración
+## Empezar
 
-### Prerrequisitos
-
-- [Miniconda](https://docs.conda.io/en/latest/miniconda.html) o [Anaconda](https://www.anaconda.com/) instalado.
-- Git instalado.
-
-### 1. Clonar el repositorio
+Hay tres caminos según lo que quieras hacer. Todos parten del entorno Conda.
 
 ```bash
-git clone https://github.com/tu-usuario/Sistema-deteccion-incendios.git
+git clone https://github.com/IAMJUNKI/Sistema-deteccion-incendios.git
 cd Sistema-deteccion-incendios
-```
-
-### 2. Crear el entorno Conda
-
-```bash
 conda env create -f environment.yml
 conda activate incendios-forestales
-```
-
-### 3. Configurar variables de entorno
-
-```bash
-cp .env.example .env
-```
-
-Editar `.env` y completar las claves de API necesarias:
-
-- **NASA FIRMS MAP KEY** → [Registrarse aquí](https://firms.modaps.eosdis.nasa.gov/api/area/)
-- **Copernicus CDS API KEY** → [Registrarse aquí](https://cds.climate.copernicus.eu/user/register)
-- **MeteoGalicia API KEY** → completar `METEOGALICIA_API_KEY` en `.env` *(fuente preferida)*
-- **AEMET API KEY** → completar `AEMET_API_KEY` en `.env` *(alternativa para pruebas/contingencia)*
-
-### 4. Instalar el paquete en modo desarrollo
-
-```bash
 pip install -e .
 ```
 
-### 5. Descargar modelos y artefactos preentrenados (Hugging Face Hub)
+### A · Solo ver el panel (lo más rápido)
 
-La release operativa se distribuye desde el repositorio público
-[`Junkii/galicia_wildfire_risk`](https://huggingface.co/Junkii/galicia_wildfire_risk).
-Esto permite arrancar una instalación nueva sin descargar los datos históricos
-ni reentrenar los modelos. Al ser público, no hace falta configurar
-`HF_TOKEN` para descargarlo.
-
-#### Opción recomendada: descarga ligera para el Dashboard
+No hace falta descargar datos históricos ni reentrenar nada. Los artefactos operativos se
+distribuyen desde el repositorio público
+[`Junkii/galicia_wildfire_risk`](https://huggingface.co/Junkii/galicia_wildfire_risk) en Hugging
+Face, y al ser público no necesitas `HF_TOKEN`.
 
 ```bash
 python scripts/download_artifacts.py \
   --repo-id Junkii/galicia_wildfire_risk \
   --only-dashboard
+
 python -m streamlit run app.py
 ```
 
-Esta opción descarga los modelos, la rejilla, las predicciones y los metadatos
-del Dashboard. La descarga completa añade el estado meteorológico acumulado de
-30 días y es necesaria si se quieren ejecutar inferencias locales:
+Esto descarga los modelos, la rejilla, las predicciones y los metadatos del panel. Si además
+quieres ejecutar inferencias locales, quita `--only-dashboard` para traer el estado meteorológico
+acumulado de treinta días (unos 145 MB más).
 
-```bash
-python scripts/download_artifacts.py \
-  --repo-id Junkii/galicia_wildfire_risk
-```
-
-#### Descarga automática al iniciar Streamlit
-
-Como alternativa, después de crear `.env` se puede activar la sincronización
-automática una vez por proceso de Streamlit:
+Como alternativa, se puede activar la sincronización automática una vez por proceso de Streamlit
+añadiendo a `.env`:
 
 ```dotenv
 HF_REPO_ID=Junkii/galicia_wildfire_risk
 HF_AUTO_DOWNLOAD=true
-HF_DOWNLOAD_MODE=dashboard
+HF_DOWNLOAD_MODE=dashboard   # o "full" para incluir el estado meteorológico
 HF_TARGET_DIR=.
 ```
 
-Con `HF_DOWNLOAD_MODE=full` también se descarga el estado meteorológico móvil
-de 30 días. El Dashboard sigue leyendo los archivos locales después de la
-sincronización; Hugging Face no se consulta en cada visita de cada usuario.
+El panel lee después los ficheros locales: Hugging Face no se consulta en cada visita.
 
-En producción, `HF_AUTO_DOWNLOAD` debe permanecer en `false`: el servidor usa
-su copia local como fuente operativa.
+> Si `streamlit run app.py` falla con `ModuleNotFoundError: No module named 'folium'`, es que se
+> está ejecutando desde el entorno base. Usa `python -m streamlit run app.py` con el entorno
+> `incendios-forestales` activado.
 
-#### Actualización automática desde producción
+### B · Reproducir el entrenamiento y la evaluación
 
-Después de cada inferencia correcta, el servicio `fire-risk-inference` publica
-automáticamente en Hugging Face un snapshot con:
-
-- `predicciones_operativas.parquet` y su manifiesto;
-- `weather_daily_state.parquet`, con la ventana meteorológica acumulada.
-
-Los modelos y la rejilla se publican únicamente con la carga inicial completa
-(`scripts/publish_to_huggingface.py --all`) o cuando se promociona una nueva
-versión de modelos. Si se cambia un modelo, ejecutar en producción:
+Necesita el datacubo tabular en `data/processed/tabular/`. El pipeline completo que produce todas
+las tablas y figuras de la memoria es un único punto de entrada:
 
 ```bash
-sudo -u fire-risk -H bash -lc '
-cd /srv/fire-risk/app &&
-/opt/miniconda3/envs/incendios-forestales/bin/python \
-scripts/publish_to_huggingface.py --all
-'
+python scripts/pipeline_definitivo.py
 ```
 
-### 6. Iniciar el Centro de Mando Táctico (Dashboard Streamlit)
+Escribe sus resultados en `docs/technical/` (una tabla por etapa) y el modelo serializado en
+`data/models/`. Cada cifra publicada en la memoria sale de uno de esos ficheros.
+
+### C · Reconstruir el datacubo desde las fuentes originales
+
+Es el camino largo: descarga ERA5-Land, recorta CORINE, cruza el DEM y construye el target desde
+el XML de EGIF. Requiere claves de API y varias horas. Está documentado paso a paso en
+[`docs/ejecutar_pipeline.md`](docs/ejecutar_pipeline.md).
+
+### Claves de API
+
+Solo hacen falta para los caminos B y C, o para ejecutar inferencia diaria real:
 
 ```bash
-python -m streamlit run app.py
+cp .env.example .env
 ```
 
-## Validación
+| Variable | Para qué | Dónde obtenerla |
+|---|---|---|
+| `CDSAPI_KEY` | Descargar ERA5-Land | [Copernicus CDS](https://cds.climate.copernicus.eu/user/register) |
+| `METEOGALICIA_API_KEY` | Previsión WRF y observaciones (fuente preferente) | [MeteoSIX](https://www.meteogalicia.gal/web/proxectos/meteosix) |
+| `AEMET_API_KEY` | Climatología validada y contingencia | [AEMET OpenData](https://opendata.aemet.es/dist/index.html) |
 
-```powershell
-& C:\Users\alfon\anaconda3\envs\incendios-forestales\python.exe -m pytest tests -q
+---
+
+## El conjunto de datos
+
+Una rejilla regular divide Galicia en **29.601 celdas de 1 km²** en `EPSG:3035`, un sistema de
+igual área para que ninguna celda quede infrarrepresentada. Cruzando esas celdas con los 2.922
+días del periodo 2016-2023 se obtiene un conjunto de **86.494.122 filas**, de las que 12.699
+corresponden a una ignición: aproximadamente **un caso positivo por cada 6.800 negativos**.
+
+Cada fila describe una celda en un día concreto con 50 variables candidatas, de las que el modelo
+final usa 48.
+
+### Contrato temporal
+
+Es la parte del diseño que más conviene entender antes de tocar nada.
+
+- **El target es `target_ignicion`**, tomado del registro oficial de EGIF. Un cero significa
+  ausencia de ignición registrada, no ausencia de peligro.
+- **El datacubo histórico no aplica desfase:** las variables meteorológicas y sus acumulados
+  describen el mismo día `T` que se evalúa. Es un **nowcast**, de la misma naturaleza que el FWI
+  con el que se compara, no una previsión a 24 horas.
+- **El contexto meteorológico arranca un mes antes** del primer año pedido, para poder calcular
+  acumulados de hasta 30 días sin que el 1 de enero se quede sin historia detrás.
+- **Existe una segunda exportación, alineada para operación**, en
+  `data/processed/tabular/egif_operational/`. Recalcula las memorias meteorológicas cerrándolas en
+  la víspera, de modo que no contienen ningún dato posterior al momento en que se emitiría el
+  aviso. Es la que alimenta a los modelos desplegados, y **no sustituye al datacubo histórico**:
+  las dos se mantienen separadas para no atribuir al sistema en producción un resultado medido
+  sobre la otra. Ver
+  [alineación y modelos operativos](docs/explanations/implementacion_alineacion_operativa.md).
+
+### Partición temporal
+
+Un reparto aleatorio de filas colocaría días consecutivos de la misma ola de calor a ambos lados
+de la partición, y el modelo obtendría métricas excelentes sin haber aprendido nada transferible.
+El reparto es estrictamente temporal:
+
+| Años | Papel | Igniciones |
+|---|---|---|
+| 2016-2020 | Entrenamiento | 9.584 |
+| 2021 | Parada temprana y ajuste del calibrador | 926 |
+| 2022 | Validación: aquí se tomaron todas las decisiones | 1.659 |
+| 2023 | **Test ciego**: se abrió una sola vez, al cerrar el trabajo | 530 |
+
+> **2023 no debe volver a evaluarse.** Su valor como estimación insesgada depende de haberse
+> abierto una sola vez con el sistema congelado. La configuración con la que se abrió está
+> registrada en `docs/technical/egif48_test_2023_audit.json`.
+
+### Decisiones de modelado
+
+| Cuestión | Decisión | Por qué |
+|---|---|---|
+| Desbalance | Todos los positivos y 1 de cada 100 negativos, por hash determinista de celda y fecha | Con esta prevalencia los negativos son masivamente redundantes; el factor 1/100 da un recall indistinguible de 1/25 con la cuarta parte del coste |
+| Sesgo del submuestreo | Corrección de prior de King y Zeng | El submuestreo infla las probabilidades en un factor conocido |
+| Calibración | Regresión de **Platt**, no isotónica | La isotónica es escalonada y, sobre diez millones de filas, genera millones de empates que desplazan cualquier umbral definido por percentiles |
+| Algoritmo | LightGBM | Gana a regresión logística, Random Forest y XGBoost con prueba de McNemar |
+| Variables | 48 de 50; fuera la lluvia del día y los días consecutivos sin lluvia | Ambas contienen la precipitación del propio día `T`, a menudo posterior a la ignición. Excluirlas no tiene coste medible y elimina la objeción |
+| Evaluación | Población completa del año, nunca submuestreada | Un guardián de cobertura aborta la ejecución si no se recorren exactamente las filas que el contrato declara |
+
+**Suelo de ruido.** Repetir cinco veces el mismo entrenamiento cambiando solo la semilla produce
+una oscilación de **1,93 puntos de recall**. Ninguna diferencia inferior se presenta como un
+hallazgo en este proyecto.
+
+---
+
+## Fuentes de datos
+
+| Fuente | Uso |
+|---|---|
+| [EGIF-MITECO](https://www.miteco.gob.es/es/biodiversidad/temas/incendios-forestales/estadisticas-incendios.html) | **Variable objetivo.** Registro oficial, con parte rellenado sobre el terreno por los agentes forestales |
+| [ERA5-Land (Copernicus CDS)](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land) | Meteorología horaria histórica, descendida de escala a 1 km |
+| [Copernicus DEM GLO-30](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM) | Elevación, pendiente, rugosidad y orientación |
+| [CORINE Land Cover 2018](https://land.copernicus.eu/en/products/corine-land-cover) | Fracción de cada tipo de cobertura por celda |
+| [OpenStreetMap](https://download.geofabrik.de/europe/spain.html) | Red viaria y proximidad a núcleos: actividad humana |
+| [CNIG/IGN](https://centrodedescargas.cnig.es/CentroDescargas/index.jsp) | Límites administrativos |
+| [MeteoGalicia MeteoSIX v5](https://www.meteogalicia.gal/web/proxectos/meteosix) | Previsión WRF a 1 km y red de estaciones automáticas, para operación |
+| [AEMET OpenData](https://opendata.aemet.es/dist/index.html) | Climatología diaria validada y contingencia |
+| [CEMS / EFFIS](https://effis.jrc.ec.europa.eu/) | Producto oficial de FWI, usado como baseline de comparación |
+
+**Por qué EGIF y no los focos de calor de satélite.** El proyecto empezó con NASA FIRMS y lo
+descartó por tres motivos: un satélite pasa dos veces al día, así que un incendio que empieza por
+la tarde puede quedar fechado al día siguiente y el modelo aprendería a relacionarlo con el tiempo
+de otro día; FIRMS no da las hectáreas quemadas; y desde el espacio no siempre se ven los fuegos
+pequeños, que son la mayoría. El trabajo con FIRMS se conserva en
+[`archive/firms_mikel/`](archive/) por trazabilidad y no está en la ruta operativa.
+
+**Por qué CORINE de 2018 y no una edición posterior.** CORINE incluye una categoría de «zonas
+quemadas». Una edición posterior a los incendios permitiría al modelo reconocer como quemadas
+precisamente las celdas que ardieron, un conocimiento del que jamás dispondría en un uso real. Con
+la edición de 2018, anterior a los años evaluados, esa contaminación queda descartada por
+construcción.
+
+---
+
+## Cómo está organizado el repositorio
+
+```text
+src/
+  geospatial/      rejilla de 1 km, DEM y CORINE
+  ingestion/       ERA5-Land, EGIF, FWI del CEMS, MeteoGalicia y AEMET
+  features/        calendario, acumulados y exportación tabular
+  entrenamiento/   contrato del dataset, muestreo, calibración y métricas
+  modeling/        carga, selección y evaluación temporal de modelos
+  models/          modelos serializados y familias por horizonte
+  operational/     inferencia diaria y manifiesto de procedencia
+  baselines/       FWI de Van Wagner calculado sobre nuestra propia rejilla
+  webapp/          panel Streamlit: mapas, KPIs, SHAP y analítica territorial
+  workflow.py      orquestación de la construcción del datacubo
+
+scripts/           puntos de entrada ejecutables (ver la sección siguiente)
+configs/           configuración de experimentos e hiperparámetros
+notebooks/         exploración y validación; el 19 unifica la fase de descubrimiento
+tests/             281 pruebas
+docs/              documentación técnica, de despliegue y resultados publicados
+  technical/       una tabla por etapa del pipeline: es la fuente de las cifras
+deploy/            unidades systemd del servicio desplegado
+knowledge/         alcance y plan del proyecto
+archive/           trabajo histórico fuera de la ruta operativa
+data/              NO versionado (ver .gitignore)
+  raw/             fuentes originales
+  processed/       datacubo y exportaciones tabulares
+  models/          modelos entrenados
 ```
 
-Para validar los productos generados sin descargar ni modificar datos, ejecutar:
+Los datos, los modelos y los artefactos pesados **nunca se suben al repositorio**. Se distribuyen
+por Hugging Face (ver [Empezar](#empezar)) o por el procedimiento de
+[despliegue de código y datos](docs/deployment/despliegue_codigo_y_datos.md).
 
-- `notebooks/07_validacion_datacubo.ipynb`: contrato, mapas, consistencia
-  meteorologica y cobertura del target en el NetCDF.
-- `notebooks/08_validacion_dataset_parquet.ipynb`: esquema, particiones,
-  target, meteorologia y preparacion de los Parquet para ML.
-- `notebooks/09_exploracion_y_seleccion_features.ipynb`: exploración reproducible,
-  señal univariante, redundancia y definición de conjuntos de predictores para modelado.
-- `notebooks/10_experimentos_feature_selection.ipynb`: comparación temporal
-  controlada de conjuntos de variables con LightGBM, usando 2022 como validación.
-- `notebooks/11_validacion_robusta_modelo.ipynb`: réplica con varios subconjuntos
-  de negativos y revisión mensual antes de desbloquear el test de 2023.
+---
 
-La fase posterior de selección y evaluación está descrita en
-[modelado](docs/modeling.md). No forma parte del pipeline de construcción de datos.
+## Ejecutar el sistema
+
+### Investigación y evaluación
+
 ```bash
-python -c "import src, folium, streamlit_folium, geopandas; print('✅ Entorno configurado correctamente')"
+# Pipeline completo de la memoria: todas las tablas y figuras
+python scripts/pipeline_definitivo.py
+
+# Entrenar y evaluar variantes sobre el datacubo EGIF
+python scripts/entrenar_egif.py --modelos lightgbm
+
+# Selección de variables y búsqueda de hiperparámetros
+python scripts/seleccionar_variables.py
+python scripts/buscar_hiperparametros.py
+
+# Auditar el test ciego de 2023 sobre los artefactos congelados
+python scripts/audit_egif48_test.py
 ```
 
-Para iniciar el dashboard, usa el mismo entorno Conda con el que se instalaron
-las dependencias:
+### Operación diaria
+
+En el servidor lo lanza un temporizador de systemd a las 05:15. Manualmente:
+
+```bash
+# 1. Cerrar la memoria ambiental de los 30 días anteriores en la víspera
+python scripts/update_weather_state.py
+
+# 2. Ingerir la previsión de las 72 horas siguientes y publicar los cuatro mapas
+python scripts/run_daily_inference.py
+
+# 3. Comprobar que la ejecución fue completa y coherente
+python scripts/check_operational_run.py
+```
+
+La previsión se degrada de forma explícita y nunca silenciosa: intenta WRF a 1 km, cae a la malla
+de 4 km si falta, y solo si ambas fallan reutiliza el último pronóstico archivado. Cada resultado
+se etiqueta como reciente, reciente degradado o caducado, y el manifiesto conserva la malla
+empleada, la ejecución de origen y las firmas criptográficas del modelo y de la salida.
+
+### Publicar artefactos
+
+```bash
+python scripts/publish_to_huggingface.py
+```
+
+Ver [distribución de artefactos](docs/tasks/10_distribucion_artefactos_huggingface.md) y la
+[ficha del modelo](docs/huggingface_model_card.md).
+
+---
+
+## Pruebas
 
 ```bash
 conda activate incendios-forestales
-python -m streamlit run app.py
+python -m pytest tests -q
 ```
 
-Usar `streamlit run app.py` desde el entorno base puede producir
-`ModuleNotFoundError: No module named 'folium'`. En ese caso, comprueba que
-`which python` y `which streamlit` apuntan a
-`.../envs/incendios-forestales/`, o ejecuta directamente:
+Son **281 pruebas** y deben pasar todas. El conjunto no necesita el datacubo real: `tests/conftest.py`
+escribe un datacubo EGIF en miniatura con la misma estructura que el de verdad, de modo que la
+carga, el muestreo y los guardianes de cobertura se prueban sin depender de los 16 GB de datos.
 
-```bash
-/opt/anaconda3/envs/incendios-forestales/bin/python -m streamlit run app.py
-```
+Las pruebas del pipeline geoespacial importan `geopandas`, `rasterio` y `cdsapi`, que solo están en
+el entorno `incendios-forestales`. Si no están instalados, `conftest.py` las omite en vez de dejar
+que un `ModuleNotFoundError` durante la recolección impida ejecutar el resto.
+
+Para validar los productos generados sin descargar ni modificar datos están los notebooks
+`07_validacion_datacubo`, `08_validacion_dataset_parquet` y `18_validacion_fwi_cems`. El notebook
+`19_descubrimiento_unificado` reúne la fase de descubrimiento completa y carga sus cifras desde los
+CSV de `docs/technical/`, no las tiene escritas a mano.
 
 ---
 
-## 🏃 Ejecución y Uso (Fase 1)
+## Trabajar en este repositorio
 
-Una vez completada la instalación, puedes generar y visualizar los grids geoespaciales base del proyecto.
+### Ramas
 
-### 1. Preprocesar y Recortar CORINE Land Cover (CLC)
-Si has descargado los archivos de CORINE España del CNIG (en formato `.gpkg`), guárdalos en `data/raw/corine/clc_espana_2018.gpkg` (o `clc_espana_2012.gpkg`) y ejecuta el recorte para generar los rasters de Galicia:
+El trabajo se integra **directamente en `main`**, que es lo que el equipo hace en la práctica: de
+133 commits solo 6 son merges, y la rama `Develop` del remoto está sin uso. Para cambios que
+puedan romper algo, lo habitual ha sido una rama local corta y un merge cuando pasan las pruebas.
 
-```bash
-# Recortar y rasterizar versión 2012
-python -m src.geospatial.preprocesar_corine --gpkg data/raw/corine/clc_espana_2012.gpkg --output data/raw/corine/clc_galicia_2012.tif
-
-# Recortar y rasterizar versión 2018
-python -m src.geospatial.preprocesar_corine --gpkg data/raw/corine/clc_espana_2018.gpkg --output data/raw/corine/clc_galicia.tif
-```
-
-### 2. Ejecutar el Pipeline Geoespacial
-Genera los archivos Parquet definitivos de la rejilla de 1 km² de Galicia cruzados con Copernicus DEM y CORINE:
+Antes de empezar a trabajar, trae lo que haya:
 
 ```bash
-# Generar rejilla 2012 (entrenamiento 2013-2018)
-AWS_NO_SIGN_REQUEST=YES AWS_PROFILE="" python -m src.geospatial.pipeline --corine data/raw/corine/clc_galicia_2012.tif --output data/processed/grid/galicia_grid_1km_2012.parquet
-
-# Generar rejilla 2018 (entrenamiento 2019-2024)
-AWS_NO_SIGN_REQUEST=YES AWS_PROFILE="" python -m src.geospatial.pipeline --corine data/raw/corine/clc_galicia.tif --output data/processed/grid/galicia_grid_1km_2018.parquet
+git pull --ff-only
 ```
 
-### 3. Visualizar e Inspeccionar los Grids Generados
-Puedes inspeccionar rápidamente estadísticas, tipos de datos y mapear los grids espaciales por pantalla:
+Con seis personas tocando el repositorio a diario, esto evita la mayoría de los conflictos.
 
-```bash
-# Ver estadísticas de la rejilla 2018 por consola
-python -m src.geospatial.visualizar_grid --input data/processed/grid/galicia_grid_1km_2018.parquet
+### Commits
 
-# Abrir el mapa visual interactivo de combustibles de 2012
-python -m src.geospatial.visualizar_grid --input data/processed/grid/galicia_grid_1km_2012.parquet --plot
-```
-
----
-
-## 🗺️ Fases del Proyecto
-
-El proyecto se estructura en **5 fases secuenciales**:
-
-### Fase 1 — Infraestructura Geoespacial
-> Construir el tablero de juego: rejilla de 1km×1km sobre Galicia, datos topográficos (DEM) y cobertura del suelo (CORINE).
-
-**Entregable:** DataFrame estático con `cell_id`, coordenadas, altitud, pendiente, orientación y tipo de combustible.
-
-### Fase 2 — Ingesta Histórica y Construcción del Target
-> Descargar incendios reales (NASA FIRMS), aplicar clustering espacio-temporal (DBSCAN) para identificar eventos únicos, y generar negativos difíciles estratificados.
-
-**Entregable:** Dataset de entrenamiento con positivos (Y=1, inicio de incendio) y negativos difíciles (Y=0).
-
-### Fase 3 — Ingeniería de Características
-> Enriquecer el dataset con variables meteorológicas acumuladas (ventana 12h-18h), historial de incendios, variables de proximidad humana, y auditoría estricta anti-data-leakage.
-
-**Entregable:** Dataset Maestro en formato `.parquet` listo para ML.
-
-### Fase 4 — Modelado y Calibración
-> Entrenar modelos (Regresión Logística → XGBoost/LightGBM) con validación temporal por años completos. Calibrar umbrales de riesgo con la tasa real de incidencia.
-
-**Entregable:** Modelo serializado + tabla de umbrales calibrados (Bajo / Moderado / Alto / Extremo).
-
-### Fase 5 — WebApp e Integración Operativa
-> Dashboard interactivo en Streamlit con mapas de riesgo (Folium/PyDeck), filtros por municipio, panel SHAP y pipeline de inferencia diaria alimentado por un proveedor meteorológico configurable.
-
-**Entregable:** WebApp desplegada + memoria final del TFM.
-
-La ruta operativa requiere además un estado meteorológico reciente de 30 días
-por celda (`data/processed/state/weather_daily_state.parquet`). Si falta o no
-tiene cobertura, la inferencia falla explícitamente para evitar que una memoria
-de sequedad desconocida se convierta en ceros.
-
----
-
-## 📐 Metodología
-
-### División espaciotemporal
-
-El dataset se construye como una **rejilla de celdas de 1km × 1km**, donde cada fila representa `(celda, día)`. Para cada observación se respeta la causalidad temporal: solo se usan datos disponibles hasta `T-1` para predecir el riesgo del día `T`.
-
-### Estrategia de validación
-
-Se prohíbe el K-Fold aleatorio. La validación es estrictamente temporal:
-
-```
-Entrenamiento:   2019 · 2020 · 2021
-Validación:      2022
-Test (ciego):    2023 · 2024
-```
-
-### Métricas principales
-
-- **AUC-ROC** — Capacidad discriminativa general.
-- **PR-AUC** — Fundamental para clases desbalanceadas (incendios << no-incendios).
-- **F1-Score** — Balance precisión/recall en los umbrales calibrados.
-
-### Limitaciones reconocidas
-
-- Nubosidad puede impedir detección satelital (documentado, no corregible).
-- El modelo de producción usa previsiones meteorológicas (WRF de MeteoGalicia o AEMET municipal durante las pruebas) en lugar de datos ERA5 perfectos: se cuantifica la degradación por proveedor y horizonte.
-- No se predice la propagación del incendio, solo el **inicio**.
-
-## 📚 Documentación operativa detallada
-
-La explicación granular de contratos de datos, zonas horarias, fórmulas,
-anti-leakage, fallback stale, manifiestos, checksums, modelos, pruebas,
-operación diaria y roadmap está en
-[`docs/explanations/pipeline_operativo_detallado.md`](docs/explanations/pipeline_operativo_detallado.md).
-
-Para la previsión meteorológica y la diferencia entre forecast MeteoGalicia y
-reanálisis ERA5-Land, consulta también
-[`docs/explanations/prevision_meteorologica_operativa.md`](docs/explanations/prevision_meteorologica_operativa.md).
-
-## 🖥️ Despliegue en servidor
-
-La guía de instalación en Linux, almacenamiento persistente, secretos,
-systemd timers, Streamlit, Nginx/TLS, backups, rollback, recuperación y
-checklist de aceptación está en
-[`docs/deployment/servidor_produccion.md`](docs/deployment/servidor_produccion.md).
-
-Para ejecutar AEMET en un ordenador personal sin servidor ni `cron`, consulta
-[`docs/deployment/ejecucion_local_aemet.md`](docs/deployment/ejecucion_local_aemet.md).
-
-Para probar el pipeline con un estado AEMET simulado cuando el colector horario
-no estuvo activo, consulta
-[`docs/deployment/simulacion_local_estado_aemet.md`](docs/deployment/simulacion_local_estado_aemet.md).
-
----
-
-## 🌿 Convenciones y Guía de Contribución
-
-### Estrategia de ramas (Git Flow simplificado)
-
-```
-main          ← código estable, releases del TFM
-  └── develop ← rama de integración activa
-        └── feature/fase-X-descripcion-corta   ← trabajo individual
-```
-
-**Flujo de trabajo:**
-
-```bash
-# 1. Crear rama desde develop
-git checkout develop
-git pull origin develop
-git checkout -b feature/fase2-descarga-firms
-
-# 2. Trabajar y hacer commits descriptivos
-git add .
-git commit -m "feat(ingestion): descarga histórico NASA FIRMS Galicia 2019-2024"
-
-# 3. Abrir Pull Request hacia develop (no directamente a main)
-```
-
-### Convenciones de commits
-
-Usamos [Conventional Commits](https://www.conventionalcommits.org/):
+Se usan [Conventional Commits](https://www.conventionalcommits.org/), con el módulo entre
+paréntesis:
 
 | Prefijo | Uso |
 |---|---|
 | `feat(módulo):` | Nueva funcionalidad |
-| `fix(módulo):` | Corrección de bug |
+| `fix(módulo):` | Corrección de un fallo |
 | `data(módulo):` | Cambios en scripts de datos |
+| `test:` | Pruebas |
 | `docs:` | Documentación |
-| `refactor(módulo):` | Refactoring sin cambio de funcionalidad |
-| `test(módulo):` | Tests |
-| `chore:` | Mantenimiento (deps, config) |
+| `refactor(módulo):` | Refactor sin cambio de comportamiento |
+| `chore:` | Mantenimiento: dependencias, configuración |
 
-### Módulos disponibles
+Módulos: `geospatial` · `ingestion` · `features` · `entrenamiento` · `modeling` · `models` ·
+`operational` · `webapp`.
 
-`geospatial` · `ingestion` · `features` · `models` · `webapp`
+### Dos reglas que no se negocian
 
-### Gestión de datos
+1. **Los datos no entran en Git.** Ni datasets, ni modelos, ni estados meteorológicos. Están en
+   `.gitignore` y así deben quedarse.
+2. **2023 no se reevalúa.** Es el test ciego y ya se abrió. Reabrirlo con un pipeline distinto
+   invalida la única estimación insesgada del trabajo.
 
-- Los datos **nunca** se suben al repositorio. Ver `.gitignore`.
-- Documentar la fuente, versión y proceso de descarga de cada dataset en `docs/`.
-- Usar `data/raw/` para datos originales sin procesar y `data/processed/` para datos transformados.
+### Reproducibilidad
 
----
-
-## 🗓️ Roadmap
-
-- [x] Configuración inicial del repositorio
-- [x] Documentación del alcance (knowledge/)
-- [x] **Fase 1** — Rejilla geoespacial + DEM + CORINE
-- [ ] **Fase 2** — Ingesta NASA FIRMS + ERA5 + construcción del target
-- [ ] **Fase 3** — Feature engineering + dataset maestro
-- [ ] **Fase 4** — Entrenamiento XGBoost/LightGBM + calibración
-- [ ] **Fase 5** — Dashboard Streamlit + pipeline inferencia diaria
-- [ ] Memoria final del TFM
-- [ ] Escalado a nivel nacional (post-TFM)
+Las cifras publicadas en `docs/technical/` dependen de la versión del código con la que se
+generaron. Si cambias el pipeline de entrenamiento, **regenera todas las etapas**, no solo la que
+te interesa: una tabla actualizada junto a otras antiguas es peor que ninguna. El ejecutable fija
+`deterministic: true` y `force_row_wise: true` en LightGBM para que dos ejecuciones idénticas
+coincidan.
 
 ---
 
-## 👥 Equipo
+## Documentación
 
-Trabajo Fin de Máster — Máster en Big Data e Inteligencia Artificial.
+| Documento | Contenido |
+|---|---|
+| [`docs/variables.md`](docs/variables.md) | Las 50 variables, una por una, con su procedencia |
+| [`docs/ejecutar_pipeline.md`](docs/ejecutar_pipeline.md) | Reconstruir el datacubo desde las fuentes originales |
+| [`docs/modeling.md`](docs/modeling.md) | Selección de variables y evaluación temporal |
+| [`docs/explanations/implementacion_alineacion_operativa.md`](docs/explanations/implementacion_alineacion_operativa.md) | Por qué hay dos exportaciones y en qué se diferencian |
+| [`docs/deployment/servidor_produccion.md`](docs/deployment/servidor_produccion.md) | Servidor, systemd, Nginx, TLS, copias y rollback |
+| [`docs/deployment/despliegue_codigo_y_datos.md`](docs/deployment/despliegue_codigo_y_datos.md) | Releases y transferencia de datos pesados |
+| [`docs/deployment/automatizacion_meteorologica.md`](docs/deployment/automatizacion_meteorologica.md) | Cierre de la brecha observacional de D-4 a D-1 |
+| [`docs/huggingface_model_card.md`](docs/huggingface_model_card.md) | Ficha del modelo operativo |
+| [`docs/technical/`](docs/technical/) | Resultados publicados: una tabla por etapa |
+| [`docs/propuesta_reorganizacion.md`](docs/propuesta_reorganizacion.md) | Limpieza pendiente del repositorio, con su justificación |
+| [`archive/vecindad/README.md`](archive/vecindad/) | Variables de contexto espacial: medidas, no adoptadas, y por qué |
 
-Diego Junquera
-Miquel Jimenez
-Alfonso García
-Raúl Utrilla
-Enrique Bravo
-Santiago Mateos
 ---
 
-*Para dudas sobre el proyecto, abre un issue en el repositorio o consulta la documentación en `knowledge/`.*
+## Equipo
+
+Trabajo Fin de Máster — Máster en Big Data, Data Science e Inteligencia Artificial, Universidad
+Complutense de Madrid.
+
+Miquel Jiménez · Enrique Bravo · Alfonso García · Raúl Utrilla · Santi · Diego Junquera
