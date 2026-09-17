@@ -102,7 +102,7 @@ def main() -> int:
         return 1
 
     try:
-        from huggingface_hub import HfApi
+        from huggingface_hub import CommitOperationAdd, HfApi
     except ImportError:
         logger.error(
             "La librería 'huggingface_hub' no está instalada. "
@@ -132,8 +132,8 @@ def main() -> int:
     else:
         logger.info("Modo DIARIO: Sincronizando estado operativo y predicciones...")
 
-    uploaded_count = 0
     missing_count = 0
+    operations = []
 
     for rel_path in files_to_upload:
         p = Path(rel_path)
@@ -143,22 +143,37 @@ def main() -> int:
             continue
 
         size_mb = p.stat().st_size / (1024 * 1024)
-        logger.info("  ⬆️ Subiendo %s (%.2f MB)...", rel_path, size_mb)
-        try:
-            api.upload_file(
-                path_or_fileobj=str(p),
+        logger.info("  ⬆️ Preparando %s (%.2f MB)...", rel_path, size_mb)
+        operations.append(
+            CommitOperationAdd(
                 path_in_repo=rel_path,
-                repo_id=repo_id,
-                repo_type=args.repo_type,
-                commit_message=f"Sync artefacto: {p.name}",
+                path_or_fileobj=str(p),
             )
-            uploaded_count += 1
-        except Exception as exc:
-            logger.error("  ❌ Error subiendo %s: %s", rel_path, exc)
+        )
+
+    if not operations:
+        logger.error("No hay artefactos disponibles para publicar.")
+        return 1
+
+    try:
+        commit = api.create_commit(
+            repo_id=repo_id,
+            repo_type=args.repo_type,
+            operations=operations,
+            commit_message=(
+                "Sincronización completa de artefactos"
+                if args.all
+                else "Sincronización diaria de estado meteorológico y predicciones"
+            ),
+        )
+    except Exception as exc:
+        logger.error("❌ Error publicando el snapshot en Hugging Face: %s", exc)
+        return 1
 
     logger.info(
-        "✅ Sincronización completada. Archivos subidos: %d, no encontrados: %d.",
-        uploaded_count,
+        "✅ Snapshot publicado en un único commit (%s). Archivos: %d, no encontrados: %d.",
+        getattr(commit, "oid", "sin-hash"),
+        len(operations),
         missing_count,
     )
     return 0

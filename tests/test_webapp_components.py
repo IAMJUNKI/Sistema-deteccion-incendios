@@ -149,6 +149,14 @@ def test_custom_css_structure():
     assert "material-symbols-outlined" in CUSTOM_CSS
 
 
+def test_huggingface_auto_download_disabled_by_default(monkeypatch):
+    from src.webapp.utils.data_loader import ensure_huggingface_artifacts
+
+    monkeypatch.delenv("HF_AUTO_DOWNLOAD", raising=False)
+    ensure_huggingface_artifacts.clear()
+    assert ensure_huggingface_artifacts() is False
+
+
 def test_enrich_dataset_canonical_egif_48():
     raw_df = pd.DataFrame(
         {
@@ -462,6 +470,5 @@ def test_webapp_assets_exist_and_load_without_external_data():
 
     provinces = _load_province_polygons()
     assert provinces is not None and len(provinces) == 4
-
 
 

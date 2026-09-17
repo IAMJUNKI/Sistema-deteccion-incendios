@@ -26,6 +26,7 @@ cada 6 horas
 05:15 y 10:15
     └─ refresco MeteoGalicia D-1 (guardia) → forecast WRF → features →
        modelos T+1/T+2/T+3 → predicciones + manifest → caché del dashboard
+       → snapshot coherente en Hugging Face Hub
 
 06:00
     └─ climatología diaria AEMET publicada con retraso → reconciliación histórica
@@ -132,11 +133,27 @@ WEATHER_STATE_PATH=/srv/fire-risk/data/processed/state/weather_daily_state.parqu
 METEOGALICIA_OBSERVATIONS_PATH=/srv/fire-risk/data/processed/observations/weather_daily_meteogalicia.parquet
 METEOGALICIA_OBSERVATIONS_RAW_DIR=/srv/fire-risk/data/raw/meteogalicia/observations
 WEATHER_STATE_INGEST_LOCK_PATH=/srv/fire-risk/data/processed/.weather_state_ingest.lock
+HF_REPO_ID=tu_usuario/galicia-wildfire-risk
+HF_TOKEN=hf_token_con_permiso_write
 ```
 
 La unidad systemd pasa las rutas críticas explícitamente para que una variable
 mal escrita no redirija accidentalmente la escritura a otro directorio. La
 variable común del lock se mantiene documentada para las ejecuciones manuales.
+`HF_TOKEN` solo debe existir en la configuración privada del servidor y nunca
+en GitHub. La unidad de inferencia publica el estado meteorológico acumulado,
+el Parquet de predicciones y su manifiesto en un único commit; si Hugging Face
+no está disponible, la inferencia local y el dashboard continúan funcionando.
+
+Hugging Face no se consulta desde cada visita al dashboard. Producción conserva
+la copia local como fuente operativa: `auto-fill-gap` descarga de MeteoGalicia
+solo los días que faltan hasta D-1 y mantiene la ventana móvil. El repositorio
+remoto actúa como distribución, respaldo y punto de arranque para una nueva
+instalación. En un servidor nuevo se puede recuperar el último estado con:
+
+```bash
+python scripts/download_artifacts.py --repo-id tu_usuario/galicia-wildfire-risk
+```
 
 ## Comprobación tras el despliegue
 

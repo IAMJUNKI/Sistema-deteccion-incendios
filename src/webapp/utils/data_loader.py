@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -22,10 +23,77 @@ DEFAULT_CANONICAL_GRID_PATH = "data/processed/grid/galicia_grid_1km_egif.parquet
 DEFAULT_PREDICTIONS_OUTPUT_PATH = "data/processed/predicciones_operativas.parquet"
 DEFAULT_DASHBOARD_CACHE_SUFFIX = ".dashboard.parquet"
 DASHBOARD_CACHE_VERSION = 1
+LOGGER = logging.getLogger(__name__)
 LEGACY_GRID_PATHS = (
     "data/processed/grid/galicia_grid_1km_2018.parquet",
     "data/processed/grid/galicia_grid_1km_2012.parquet",
 )
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    """Lee una variable booleana de entorno con valores humanos habituales."""
+    return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
+@st.cache_resource(show_spinner=False)
+def ensure_huggingface_artifacts() -> bool:
+    """Aprovisiona una copia local del snapshot de Hugging Face una vez por proceso.
+
+    Esta opción está pensada para entornos locales o de evaluación. Producción
+    mantiene el valor desactivado y usa su estado meteorológico local como
+    fuente operativa; Hugging Face se utiliza allí como distribución y respaldo.
+
+    Returns:
+        ``True`` si se solicitó y completó la sincronización, ``False`` si está
+        desactivada o no se pudo ejecutar.
+    """
+    if not _env_flag("HF_AUTO_DOWNLOAD"):
+        return False
+
+    repo_id = os.getenv("HF_REPO_ID", "").strip()
+    if not repo_id:
+        LOGGER.warning("HF_AUTO_DOWNLOAD está activo pero falta HF_REPO_ID.")
+        return False
+
+    target_dir = Path(os.getenv("HF_TARGET_DIR", ".")).resolve()
+    repo_type = os.getenv("HF_REPO_TYPE", "model").strip() or "model"
+    download_mode = os.getenv("HF_DOWNLOAD_MODE", "full").strip().lower()
+    if download_mode not in {"full", "dashboard"}:
+        LOGGER.warning("HF_DOWNLOAD_MODE inválido (%s); se usará full.", download_mode)
+        download_mode = "full"
+
+    allow_patterns = [
+        "data/models/*",
+        "data/processed/grid/*",
+        "data/processed/predicciones_operativas.parquet",
+        "data/processed/predicciones_operativas.manifest.json",
+    ]
+    if download_mode == "full":
+        allow_patterns.append("data/processed/state/*")
+
+    try:
+        from huggingface_hub import snapshot_download
+
+        snapshot_download(
+            repo_id=repo_id,
+            repo_type=repo_type,
+            token=os.getenv("HF_TOKEN") or None,
+            local_dir=str(target_dir),
+            allow_patterns=allow_patterns,
+        )
+        LOGGER.info(
+            "Artefactos Hugging Face sincronizados en %s (modo %s).",
+            target_dir,
+            download_mode,
+        )
+        return True
+    except Exception as exc:  # pragma: no cover - depende de red/repositorio externo
+        LOGGER.warning(
+            "No se pudieron sincronizar los artefactos Hugging Face (%s): %s",
+            type(exc).__name__,
+            exc,
+        )
+        return False
 
 
 def _configured_predictions_output_path() -> Path:

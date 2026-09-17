@@ -21,6 +21,7 @@ from src.webapp.components.system_status import render_system_status_tab
 from src.webapp.components.territorial_analytics import render_territorial_analytics_tab
 from src.webapp.styles import apply_custom_styles
 from src.webapp.utils.data_loader import (
+    ensure_huggingface_artifacts,
     load_dashboard_model,
     load_operational_data_for_horizon,
     load_operational_manifest,
@@ -41,6 +42,10 @@ apply_custom_styles()
 
 def main() -> None:
     load_dotenv()
+    # En local/evaluación puede aprovisionar el snapshot publicado en HF una
+    # sola vez por proceso. En producción queda desactivado: el servidor usa
+    # sus artefactos locales y publica una copia remota tras la inferencia.
+    ensure_huggingface_artifacts()
     # 3. Carga preliminar de datos para inicializar el sidebar
     predictions_raw = load_operational_predictions()
 

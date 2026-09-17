@@ -21,6 +21,10 @@ ExecStart=/opt/miniconda3/envs/incendios-forestales/bin/python scripts/run_daily
 # y manifest. Un fallo aquí no invalida la inferencia: el dashboard conserva un
 # fallback que puede enriquecer el output directamente.
 ExecStartPost=-/opt/miniconda3/envs/incendios-forestales/bin/python scripts/prepare_dashboard_cache.py
+# Replica el snapshot operativo tras una inferencia correcta. El prefijo '-'
+# hace que una caída o falta de configuración de Hugging Face no invalide la
+# inferencia ni deje el dashboard sin la predicción local recién generada.
+ExecStartPost=-/opt/miniconda3/envs/incendios-forestales/bin/python scripts/publish_to_huggingface.py
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

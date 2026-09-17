@@ -27,7 +27,8 @@
   - *Artefactos estáticos (inmutables):* Modelos `forecast_risk_egif_48_t{1,2,3}.joblib`, metadatos y rejilla base de 29.601 celdas. Se versionan y suben de manera puntual tras reentrenamientos.
   - *Artefactos dinámicos (ventana deslizante):* `predicciones_operativas.parquet` y `weather_daily_state.parquet`. Se actualizan en producción cada mañana tras la corrida del modelo.
 - **Integración con Hugging Face Hub:**
-  - Uso de `HfApi.upload_file` para transferencias atómicas archivo a archivo con mensajes de commit descriptivos.
+  - Uso de `HfApi.create_commit` con varias `CommitOperationAdd` para publicar el
+    estado, las predicciones y el manifiesto en un único snapshot coherente.
   - Uso de `snapshot_download` filtrado mediante `allow_patterns` para descargar únicamente los archivos pertinentes de forma resumable y paralelizada.
 - **Cadena de producción en servidor:**
   - Al concluir la inferencia diaria matinal en el servidor Linux, el pipeline invoca `publish_to_huggingface.py`, manteniendo el repositorio de Hugging Face actualizado para cualquier cliente externo.
