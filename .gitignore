@@ -166,3 +166,12 @@ tmp/
 # Detalle por corrida: reproducible relanzando el experimento.
 # Lo que se versiona es docs/technical/resultados.csv, la bitacora acumulativa.
 docs/technical/corridas/
+
+# Artefactos de entrenamiento de CatBoost: los escribe la libreria en cada ejecucion.
+catboost_info/
+
+# Lockfile de npm. Este proyecto no tiene dependencias de Node; aparecio por error.
+package-lock.json
+
+# Notas de trabajo y texto extraido de papers: no son entregables.
+iberfire_text.txt
