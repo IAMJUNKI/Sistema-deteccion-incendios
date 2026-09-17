@@ -48,6 +48,11 @@ DYNAMIC_ARTIFACTS = [
     "data/processed/state/weather_daily_state.parquet",
 ]
 
+# La tarjeta se publica como README.md en la raíz del repositorio de Hugging
+# Face. Se mantiene en el repositorio de código para versionarla junto con la
+# definición de los artefactos y las instrucciones de uso.
+MODEL_CARD_SOURCE = "docs/huggingface_model_card.md"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -134,6 +139,20 @@ def main() -> int:
 
     missing_count = 0
     operations = []
+
+    if args.all:
+        model_card = Path(MODEL_CARD_SOURCE)
+        if model_card.exists():
+            logger.info("  ⬆️ Preparando Model Card: %s", model_card)
+            operations.append(
+                CommitOperationAdd(
+                    path_in_repo="README.md",
+                    path_or_fileobj=str(model_card),
+                )
+            )
+        else:
+            logger.warning("  ⚠️ Model Card no encontrada, omitiendo: %s", model_card)
+            missing_count += 1
 
     for rel_path in files_to_upload:
         p = Path(rel_path)
